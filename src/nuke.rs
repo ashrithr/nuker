@@ -39,6 +39,8 @@ impl Nuke {
         }
 
         for client in clients {
+            info!("REGION: {}", Cyan.paint(client.region.name()));
+
             client.print_usage()?;
             let resources = client.locate_resources()?;
             client.cleanup_resources(&resources)?;

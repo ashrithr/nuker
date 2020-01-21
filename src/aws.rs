@@ -20,6 +20,7 @@ use {
 type Result<T, E = AwsError> = std::result::Result<T, E>;
 
 pub struct AwsClient {
+    pub region: Region,
     clients: Vec<Box<dyn NukeService>>,
     pricing_client: PriceClient,
     ce_client: Option<CeClient>,
@@ -62,6 +63,7 @@ impl AwsClient {
         let pricing_client = PriceClient::new(&profile_name)?;
 
         Ok(AwsClient {
+            region,
             profile_name,
             pricing_client,
             ce_client,

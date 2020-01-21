@@ -30,45 +30,23 @@ impl CwClient {
         })
     }
 
-    fn get_instance_metrics(&self, instance_id: &String) -> Result<GetMetricStatisticsOutput> {
+    fn get_metric_statistics_maximum(
+        &self,
+        dimension_name: String,
+        dimension_value: String,
+        namespace: String,
+        metric_name: String,
+    ) -> Result<GetMetricStatisticsOutput> {
         let end_time = Utc::now();
         let idle_rules = self.idle_rules.clone();
 
         let req = GetMetricStatisticsInput {
             dimensions: Some(vec![Dimension {
-                name: "InstanceId".to_owned(),
-                value: instance_id.to_owned(),
+                name: dimension_name,
+                value: dimension_value,
             }]),
-            namespace: "AWS/EC2".to_owned(),
-            metric_name: "CPUUtilization".to_owned(),
-            start_time: self.get_start_time_from_duration(end_time, idle_rules.min_duration),
-            end_time: end_time.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-            period: idle_rules.granularity.as_secs() as i64,
-            statistics: Some(vec!["Maximum".to_owned()]),
-            ..Default::default()
-        };
-
-        trace!("Sending 'get-metric-statistics' request {:?}", req);
-
-        self.client
-            .get_metric_statistics(req)
-            .sync()
-            .map_err(|err| AwsError::CloudWatchError {
-                error: err.to_string(),
-            })
-    }
-
-    fn get_db_instance_metrics(&self, instance_name: &String) -> Result<GetMetricStatisticsOutput> {
-        let end_time = Utc::now();
-        let idle_rules = self.idle_rules.clone();
-
-        let req = GetMetricStatisticsInput {
-            dimensions: Some(vec![Dimension {
-                name: "DBInstanceIdentifier".to_owned(),
-                value: instance_name.to_owned(),
-            }]),
-            namespace: "AWS/RDS".to_owned(),
-            metric_name: "CPUUtilization".to_owned(),
+            namespace: namespace,
+            metric_name: metric_name,
             start_time: self.get_start_time_from_duration(end_time, idle_rules.min_duration),
             end_time: end_time.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
             period: idle_rules.granularity.as_secs() as i64,
@@ -88,7 +66,12 @@ impl CwClient {
 
     pub fn filter_instance_by_utilization(&self, instance_id: &String) -> Result<bool> {
         let metrics = self
-            .get_instance_metrics(instance_id)?
+            .get_metric_statistics_maximum(
+                "InstanceId".to_string(),
+                instance_id.to_string(),
+                "AWS/EC2".to_string(),
+                "CPUUtilization".to_string(),
+            )?
             .datapoints
             .unwrap_or_default();
 
@@ -101,7 +84,12 @@ impl CwClient {
 
     pub fn filter_db_instance_by_utilization(&self, instance_name: &String) -> Result<bool> {
         let metrics = self
-            .get_db_instance_metrics(instance_name)?
+            .get_metric_statistics_maximum(
+                "DBInstanceIdentifier".to_string(),
+                instance_name.to_string(),
+                "AWS/RDS".to_string(),
+                "CPUUtilization".to_string(),
+            )?
             .datapoints
             .unwrap_or_default();
 
@@ -109,6 +97,25 @@ impl CwClient {
 
         Ok(metrics.iter().any(|metric| {
             metric.maximum.unwrap_or_default() > self.idle_rules.min_utilization as f64
+        }))
+    }
+
+    pub fn filter_db_instance_by_connections(&self, instance_name: &String) -> Result<bool> {
+        let metrics = self
+            .get_metric_statistics_maximum(
+                "DBInstanceIdentifier".to_string(),
+                instance_name.to_string(),
+                "AWS/RDS".to_string(),
+                "DatabaseConnections".to_string(),
+            )?
+            .datapoints
+            .unwrap_or_default();
+
+        trace!("Datapoints used for comparison: {:?}", metrics);
+
+        Ok(metrics.iter().any(|metric| {
+            metric.maximum.unwrap_or_default()
+                > self.idle_rules.connections.unwrap_or_default() as f64
         }))
     }
 

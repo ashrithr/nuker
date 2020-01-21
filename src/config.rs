@@ -35,6 +35,7 @@ pub struct IdleRules {
     pub min_duration: Duration,
     #[serde(with = "humantime_serde")]
     pub granularity: Duration,
+    pub connections: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

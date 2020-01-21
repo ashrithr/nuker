@@ -192,12 +192,17 @@ impl RdsNukeClient {
                             &instance.db_instance_identifier.as_ref().unwrap(),
                         )
                         .unwrap()
+                    && !self
+                        .cwclient
+                        .filter_db_instance_by_connections(
+                            &instance.db_instance_identifier.as_ref().unwrap(),
+                        )
+                        .unwrap()
             })
             .cloned()
             .collect()
     }
 
-    // TODO: instance_id has to be instance identifier
     fn disable_termination_protection(&self, instance_id: &str) -> Result<()> {
         let resp = self
             .client
@@ -287,6 +292,7 @@ impl NukeService for RdsNukeClient {
         let instances = self.get_instances(Vec::new())?;
         let mut filtered_instances: Vec<&DBInstance> = Vec::new();
 
+        // https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.DBInstance.Status.html
         let running_instances: Vec<&DBInstance> = instances
             .iter()
             .filter(|i| i.db_instance_status == Some("available".to_string()))
