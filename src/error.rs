@@ -10,8 +10,8 @@ use {
     },
     rusoto_pricing::{DescribeServicesError, GetProductsError},
     rusoto_rds::{
-        DeleteDBInstanceError, DescribeDBInstancesError, ListTagsForResourceError,
-        ModifyDBInstanceError, StopDBInstanceError,
+        DeleteDBInstanceError, DescribeDBClustersError, DescribeDBInstancesError,
+        ListTagsForResourceError, ModifyDBInstanceError, StopDBInstanceError,
     },
 };
 
@@ -28,6 +28,10 @@ pub enum Error {
     #[fail(display = "Issue describing DB Instances: {}", error)]
     DBInstanceDescribe {
         error: RusotoError<DescribeDBInstancesError>,
+    },
+    #[fail(display = "Issue describing DB Clusters: {}", error)]
+    DBClusterDescribe {
+        error: RusotoError<DescribeDBClustersError>,
     },
     #[fail(display = "Issue listing tags for resource: {}", error)]
     ListTagsForResource {

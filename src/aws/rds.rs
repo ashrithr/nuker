@@ -8,9 +8,9 @@ use {
     rusoto_core::{HttpClient, Region},
     rusoto_credential::ProfileProvider,
     rusoto_rds::{
-        DBInstance, DeleteDBInstanceMessage, DescribeDBClustersMessage, DescribeDBInstancesMessage,
-        Filter, ListTagsForResourceMessage, ModifyDBInstanceMessage, Rds, RdsClient,
-        StopDBInstanceMessage, Tag,
+        DBInstance, DeleteDBInstanceMessage, DescribeDBInstancesMessage, Filter,
+        ListTagsForResourceMessage, ModifyDBInstanceMessage, Rds, RdsClient, StopDBInstanceMessage,
+        Tag,
     },
 };
 
