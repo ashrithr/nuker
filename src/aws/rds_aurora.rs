@@ -8,8 +8,8 @@ use {
     rusoto_core::{HttpClient, Region},
     rusoto_credential::ProfileProvider,
     rusoto_rds::{
-        DBCluster, DescribeDBClustersMessage, Filter, ListTagsForResourceMessage, Rds, RdsClient,
-        Tag,
+        DBCluster, DescribeDBClustersMessage, DescribeDBInstancesMessage, Filter,
+        ListTagsForResourceMessage, Rds, RdsClient, Tag,
     },
 };
 
@@ -121,6 +121,91 @@ impl RdsAuroraNukeClient {
             })
             .sync()?;
         Ok(result.tag_list)
+    }
+
+    fn filter_by_tags<'a>(&self, clusters: &Vec<&'a DBCluster>) -> Vec<&'a DBCluster> {
+        debug!(
+            "Total # of db clusters before applying Filter by required tags - {:?}: {}.",
+            &self.config.required_tags,
+            clusters.len()
+        );
+
+        clusters
+            .iter()
+            .filter(|cluster| {
+                !self.check_tags(
+                    &self
+                        .list_tags(cluster.db_cluster_arn.clone())
+                        .unwrap_or_default(),
+                    &self.config.required_tags,
+                )
+            })
+            .cloned()
+            .collect()
+    }
+
+    fn check_tags(&self, tags: &Option<Vec<Tag>>, required_tags: &Vec<String>) -> bool {
+        let tags: Vec<String> = tags
+            .clone()
+            .unwrap_or_default()
+            .iter()
+            .map(|t| t.key.clone().unwrap())
+            .collect();
+        required_tags.iter().all(|rt| tags.contains(rt))
+    }
+
+    fn filter_by_types<'a>(&self, clusters: &Vec<&'a DBCluster>) -> Vec<&'a DBCluster> {
+        let mut filtered_clusters: Vec<&DBCluster> = Vec::new();
+
+        debug!(
+            "Total # of clusters before applying Filter by Instance type - {:?}: {}",
+            self.config.allowed_instance_types,
+            clusters.len()
+        );
+
+        for cluster in clusters {
+            if let Ok(instance_types) = self.get_instance_types(cluster) {}
+            // if let Some(db_instances) = &cluster.db_cluster_members {
+            //     for db_instance in db_instances {
+            //         if self.config.allowed_instance_types.iter().any(|it| Some(it) == )
+            //     }
+            // }
+        }
+
+        // filtered_clusters
+
+        unimplemented!()
+    }
+
+    /// Fetch the instance types of each DBInstance which are part of the DBCluster
+    fn get_instance_types(&self, db_cluster_identifier: &DBCluster) -> Result<Vec<String>> {
+        let mut instance_types: Vec<String> = Vec::new();
+
+        if let Some(db_cluster_members) = &db_cluster_identifier.db_cluster_members {
+            for db_member in db_cluster_members {
+                let result = self
+                    .client
+                    .describe_db_instances(DescribeDBInstancesMessage {
+                        db_instance_identifier: db_member.db_instance_identifier.clone(),
+                        ..Default::default()
+                    })
+                    .sync()?;
+
+                if let Some(instance) = result.db_instances {
+                    instance_types.push(
+                        instance
+                            .first()
+                            .unwrap()
+                            .db_instance_class
+                            .as_ref()
+                            .unwrap()
+                            .to_string(),
+                    );
+                }
+            }
+        }
+
+        Ok(instance_types)
     }
 }
 
