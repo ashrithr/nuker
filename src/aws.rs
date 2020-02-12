@@ -1,9 +1,9 @@
+mod aurora;
 mod ce;
 mod cloudwatch;
 mod ec2;
 mod pricing;
 mod rds;
-mod rds_aurora;
 
 use {
     crate::config::Config,
