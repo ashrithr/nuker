@@ -19,6 +19,7 @@ pub struct Config {
     pub usage_days: i64,
     pub ec2: Ec2Config,
     pub rds: RdsConfig,
+    pub aurora: AuroraConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -62,6 +63,16 @@ pub struct Ec2Config {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct RdsConfig {
+    pub enabled: bool,
+    pub target_state: TargetState,
+    pub required_tags: Vec<String>,
+    pub allowed_instance_types: Vec<String>,
+    pub idle_rules: IdleRules,
+    pub termination_protection: TerminationProtection,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct AuroraConfig {
     pub enabled: bool,
     pub target_state: TargetState,
     pub required_tags: Vec<String>,

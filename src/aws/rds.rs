@@ -318,13 +318,13 @@ impl NukeService for RdsNukeClient {
         let mut idle_instances = self.filter_by_idle_rules(&instances_filtered_by_types);
 
         info!(
-            "Instance Summary: \n\
-             \tTotal Instances: {} \n\
-             \tRunning Instances: {} \n\
-             \tStopped Instances: {} \n\
-             \tInstances that do not have required tags: {} \n\
-             \tInstances that are not using the allowed instance-types: {} \n\
-             \tInstances that are idle: {}",
+            "RDS Summary: \n\
+             \tTotal RDS Instances: {} \n\
+             \tRunning RDS Instances: {} \n\
+             \tStopped RDS Instances: {} \n\
+             \tRDS Instances that do not have required tags: {} \n\
+             \tRDS Instances that are not using the allowed instance-types: {} \n\
+             \tRDS Instances that are idle: {}",
             instances.len(),
             running_instances.len(),
             stopped_instances.len(),

@@ -6,6 +6,7 @@ type Result<T, E = crate::error::Error> = std::result::Result<T, E>;
 pub enum ResourceType {
     EC2,
     RDS,
+    Aurora,
 }
 
 impl ResourceType {
@@ -19,6 +20,13 @@ impl ResourceType {
     pub fn is_rds(&self) -> bool {
         match *self {
             ResourceType::RDS => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_aurora(&self) -> bool {
+        match *self {
+            ResourceType::Aurora => true,
             _ => false,
         }
     }

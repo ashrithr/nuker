@@ -1,6 +1,6 @@
 use {
     crate::aws::cloudwatch::CwClient,
-    crate::config::RdsConfig,
+    crate::config::AuroraConfig,
     crate::config::TargetState,
     crate::error::Error as AwsError,
     crate::service::{NTag, NukeService, Resource, ResourceType},
@@ -8,33 +8,32 @@ use {
     rusoto_core::{HttpClient, Region},
     rusoto_credential::ProfileProvider,
     rusoto_rds::{
-        DBCluster, DescribeDBClustersMessage, DescribeDBInstancesMessage, Filter,
-        ListTagsForResourceMessage, Rds, RdsClient, Tag, DeleteDBClusterMessage,
-        StopDBClusterMessage, ModifyDBClusterMessage
+        DBCluster, DeleteDBClusterMessage, DescribeDBClustersMessage, DescribeDBInstancesMessage,
+        Filter, ListTagsForResourceMessage, ModifyDBClusterMessage, Rds, RdsClient,
+        StopDBClusterMessage, Tag,
     },
-    std::collections::HashSet,
 };
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
 
-pub struct RdsAuroraNukeClient {
+pub struct AuroraNukeClient {
     pub client: RdsClient,
     pub cwclient: CwClient,
-    pub config: RdsConfig,
+    pub config: AuroraConfig,
     pub dry_run: bool,
 }
 
-impl RdsAuroraNukeClient {
+impl AuroraNukeClient {
     pub fn new(
         profile_name: &String,
         region: Region,
-        config: RdsConfig,
+        config: AuroraConfig,
         dry_run: bool,
     ) -> Result<Self> {
         let mut pp = ProfileProvider::new()?;
         pp.set_profile(profile_name);
 
-        Ok(RdsAuroraNukeClient {
+        Ok(AuroraNukeClient {
             client: RdsClient::new_with(HttpClient::new()?, pp, region.clone()),
             cwclient: CwClient::new(profile_name, region, config.clone().idle_rules)?,
             config: config,
@@ -68,7 +67,7 @@ impl RdsAuroraNukeClient {
             } else {
                 resources.push(Resource {
                     id: cluster_id,
-                    resource_type: ResourceType::RDS,
+                    resource_type: ResourceType::Aurora,
                     profile_name: profile_name.to_owned(),
                     tags: self
                         .package_tags_as_ntags(self.list_tags(cluster.db_cluster_arn.clone())?),
@@ -168,14 +167,24 @@ impl RdsAuroraNukeClient {
         for cluster in clusters {
             if let Ok(instance_types) = self.get_instance_types(cluster) {
                 for instance in instance_types {
-                    if self.config.allowed_instance_types.iter().any(|it| Some(it) == Some(&instance)) {
-                        filtered_clusters.push(cluster)
+                    if self
+                        .config
+                        .allowed_instance_types
+                        .iter()
+                        .any(|it| Some(it) == Some(&instance))
+                    {
+                        // Insert only if the element is not already present
+                        if filtered_clusters
+                            .iter()
+                            .find(|c| c.db_cluster_identifier == cluster.db_cluster_identifier)
+                            .is_none()
+                        {
+                            filtered_clusters.push(cluster)
+                        }
                     }
                 }
             }
         }
-
-        // TODO: remove duplicates from filtered_clusters
 
         filtered_clusters
     }
@@ -211,6 +220,34 @@ impl RdsAuroraNukeClient {
         Ok(instance_types)
     }
 
+    fn filter_by_idle_rules<'a>(&self, clusters: &Vec<&'a DBCluster>) -> Vec<&'a DBCluster> {
+        debug!(
+            "Total # of clusters before applying Filter by CPU Utilization - {:?}: {}",
+            self.config.idle_rules,
+            clusters.len()
+        );
+
+        clusters
+            .iter()
+            .filter(|cluster| {
+                cluster.status == Some("available".to_string())
+                    && !self
+                        .cwclient
+                        .filter_db_cluster_by_utilization(
+                            &cluster.db_cluster_identifier.as_ref().unwrap(),
+                        )
+                        .unwrap()
+                    && !self
+                        .cwclient
+                        .filter_db_cluster_by_connections(
+                            &cluster.db_cluster_identifier.as_ref().unwrap(),
+                        )
+                        .unwrap()
+            })
+            .cloned()
+            .collect()
+    }
+
     fn disable_termination_protection(&self, cluster_id: &str) -> Result<()> {
         let resp = self
             .client
@@ -219,32 +256,33 @@ impl RdsAuroraNukeClient {
                 ..Default::default()
             })
             .sync()?;
-        
-            if resp.db_clusters.is_some() {
-                if resp
-                    .db_clusters
-                    .unwrap()
-                    .first()
-                    .unwrap()
-                    .deletion_protection == Some(true)
-                {
-                    debug!(
-                        "Termination protection is enabled for: {}. Trying to disable it.",
-                        cluster_id
-                    );
 
-                    if !self.dry_run {
-                        self.client
-                            .modify_db_cluster(ModifyDBClusterMessage {
-                                db_cluster_identifier: cluster_id.to_owned(),
-                                deletion_protection: Some(false),
-                                apply_immediately: Some(true),
-                                ..Default::default()
-                            })
-                            .sync()?;
-                    }
+        if resp.db_clusters.is_some() {
+            if resp
+                .db_clusters
+                .unwrap()
+                .first()
+                .unwrap()
+                .deletion_protection
+                == Some(true)
+            {
+                debug!(
+                    "Termination protection is enabled for: {}. Trying to disable it.",
+                    cluster_id
+                );
+
+                if !self.dry_run {
+                    self.client
+                        .modify_db_cluster(ModifyDBClusterMessage {
+                            db_cluster_identifier: cluster_id.to_owned(),
+                            deletion_protection: Some(false),
+                            apply_immediately: Some(true),
+                            ..Default::default()
+                        })
+                        .sync()?;
                 }
             }
+        }
 
         Ok(())
     }
@@ -293,7 +331,7 @@ impl RdsAuroraNukeClient {
     }
 }
 
-impl NukeService for RdsAuroraNukeClient {
+impl NukeService for AuroraNukeClient {
     fn scan(&self, profile_name: &String) -> Result<Vec<Resource>> {
         let mut filtered_clusters: Vec<&DBCluster> = Vec::new();
         let clusters: Vec<DBCluster> = self.get_clusters(Vec::new())?;
@@ -308,8 +346,27 @@ impl NukeService for RdsAuroraNukeClient {
             .collect();
         let mut clusters_filtered_by_tags = self.filter_by_tags(&running_clusters);
         let mut clusters_filtered_by_types = self.filter_by_types(&clusters_filtered_by_tags);
+        let mut idle_clusters = self.filter_by_idle_rules(&clusters_filtered_by_types);
+
+        info!(
+            "Aurora Summary: \n\
+             \tTotal Aurora Clusters: {} \n\
+             \tRunning Aurora Clusters: {} \n\
+             \tStopped Aurora Clusters: {} \n\
+             \tAurora Clusters that do not have required tags: {} \n\
+             \tAurora Clusters that are not using the allowed instance-types: {} \n\
+             \tAurora Clusters that are idle: {}",
+            clusters.len(),
+            running_clusters.len(),
+            stopped_clusters.len(),
+            clusters_filtered_by_tags.len(),
+            clusters_filtered_by_types.len(),
+            idle_clusters.len()
+        );
 
         filtered_clusters.append(&mut clusters_filtered_by_tags);
+        filtered_clusters.append(&mut clusters_filtered_by_types);
+        filtered_clusters.append(&mut idle_clusters);
 
         Ok(self.package_clusters_as_resources(profile_name, filtered_clusters)?)
     }

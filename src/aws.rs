@@ -8,7 +8,8 @@ mod rds;
 use {
     crate::config::Config,
     crate::error::Error as AwsError,
-    crate::service::{NukeService, Resource, ResourceType},
+    crate::service::{NukeService, Resource},
+    aurora::AuroraNukeClient,
     ce::CeClient,
     ec2::Ec2NukeClient,
     log::{error, info},
@@ -53,6 +54,15 @@ impl AwsClient {
                 config.rds.clone(),
                 config.dry_run,
             )?));
+        }
+
+        if config.aurora.enabled {
+            clients.push(Box::new(AuroraNukeClient::new(
+                &profile_name,
+                region.clone(),
+                config.aurora.clone(),
+                config.dry_run,
+            )?))
         }
 
         let ce_client = if config.print_usage {
@@ -105,6 +115,10 @@ impl AwsClient {
             .iter()
             .filter(|r| r.resource_type.is_rds())
             .collect();
+        let aurora_resources: Vec<&Resource> = resources
+            .iter()
+            .filter(|r| r.resource_type.is_aurora())
+            .collect();
 
         for client in &self.clients {
             let ref_client = client.as_any();
@@ -115,13 +129,16 @@ impl AwsClient {
             } else if ref_client.is::<RdsNukeClient>() {
                 info!("Triggering cleanup of resources: {:?}", rds_resources);
                 client.cleanup(rds_resources.to_owned())?;
+            } else if ref_client.is::<AuroraNukeClient>() {
+                info!("Triggering cleanup of resources: {:?}", aurora_resources);
+                client.cleanup(aurora_resources.to_owned())?;
             }
         }
 
         Ok(())
     }
 
-    pub fn print_savings(&self, resources: &Vec<Resource>) -> Result<()> {
+    pub fn print_savings(&self, _resources: &Vec<Resource>) -> Result<()> {
         self.pricing_client.get_ec2_pricing()?;
 
         Ok(())
@@ -135,6 +152,7 @@ impl AwsClient {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn get_name_tag(tags: Option<Vec<Tag>>) -> Option<String> {
         match tags {
             Some(tags) => match tags.iter().find(|tag| tag.key.as_ref().unwrap() == "Name") {

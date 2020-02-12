@@ -119,6 +119,43 @@ impl CwClient {
         }))
     }
 
+    pub fn filter_db_cluster_by_utilization(&self, cluster_identifier: &String) -> Result<bool> {
+        let metrics = self
+            .get_metric_statistics_maximum(
+                "DBClusterIdentifier".to_string(),
+                cluster_identifier.to_string(),
+                "AWS/RDS".to_string(),
+                "CPUUtilization".to_string(),
+            )?
+            .datapoints
+            .unwrap_or_default();
+
+        trace!("Datapoints used for comparison: {:?}", metrics);
+
+        Ok(metrics.iter().any(|metric| {
+            metric.maximum.unwrap_or_default() > self.idle_rules.min_utilization as f64
+        }))
+    }
+
+    pub fn filter_db_cluster_by_connections(&self, cluster_identifier: &String) -> Result<bool> {
+        let metrics = self
+            .get_metric_statistics_maximum(
+                "DBClusterIdentifier".to_string(),
+                cluster_identifier.to_string(),
+                "AWS/RDS".to_string(),
+                "DatabaseConnections".to_string(),
+            )?
+            .datapoints
+            .unwrap_or_default();
+
+        trace!("Datapoints used for comparison: {:?}", metrics);
+
+        Ok(metrics.iter().any(|metric| {
+            metric.maximum.unwrap_or_default()
+                > self.idle_rules.connections.unwrap_or_default() as f64
+        }))
+    }
+
     fn get_start_time_from_duration(
         &self,
         end_time: DateTime<Utc>,

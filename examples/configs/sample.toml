@@ -76,6 +76,36 @@ allowed_instance_types = []
     [rds.termination_protection]
     ignore = true
 
+[aurora]
+# Specifies whether RDS enforcement is enabled or not
+enabled = true
+# State to enfoce, if any of the following conditions are not met. Possible
+# states are: 'Stopped' and 'Terminated'
+target_state = "Stopped"
+# Defines required tags on each instance.
+required_tags = ["Name", "Email", "Purpose"]
+# Defines which instance types are allowed, empty means allow any types
+allowed_instance_types = []
+
+    # Defines CPU utilization rules, the default is if the average CPU
+    # utilization for 1 day, each data point aggeregated over 1 hour window,
+    # is less than 0.5% then the instance will be enforced to its defined
+    # target state
+    # Note: 'metric_granularity' max value is 86400 seconds and 'cpu_duration'
+    # max value is 2 weeks without CloudWatch detailed monitoring enabled
+    [aurora.idle_rules]
+    enabled = true
+    min_utilization = 10
+    min_duration = "1 day"
+    granularity = "1 hour"
+    connections = 50
+
+    # Defines whether to acknowledge the teraminate protection, if 'acknowledge'
+    # is set to 'true' then the utility would not try to terminate the instances
+    # which has termination protection enabled.
+    [aurora.termination_protection]
+    ignore = true
+
 # [security-groups]
 # enabled = false
 # target_state = "Delete"

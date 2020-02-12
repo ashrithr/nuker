@@ -6,3 +6,4 @@ Cleans up AWS resources based on configurable Rules. This project is a WIP.
 
 * EC2
 * RDS
+* RDS Aurora
