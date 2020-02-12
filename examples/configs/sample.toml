@@ -3,7 +3,7 @@ profile = "default"
 
 # Which regions to enfoce the rules in. If its empty, the rules will be enforced
 # in all regions
-regions = ["us-east-1", "us-west-1", "us-west-2"]
+regions = ["us-east-1"]
 
 # Whether to enable dry-mode, which would not terminate/delete any resources
 # rather it would just print it out
@@ -15,7 +15,7 @@ usage_days = 1
 
 [ec2]
 # Specifies whether EC2 enforcement is enabled or not
-enabled = true
+enabled = false
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Terminated'
 target_state = "Stopped"

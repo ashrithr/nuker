@@ -15,6 +15,8 @@ use {
 };
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
+const AURORA_POSTGRES_ENGINE: &str = "aurora-postgresql";
+const AURORA_MYSQL_ENGINE: &str = "aurora-mysql";
 
 pub struct RdsNukeClient {
     pub client: RdsClient,
@@ -96,7 +98,13 @@ impl RdsNukeClient {
                 .sync()?;
 
             if let Some(db_instances) = result.db_instances {
-                let mut temp_instances: Vec<DBInstance> = db_instances.into_iter().collect();
+                let mut temp_instances: Vec<DBInstance> = db_instances
+                    .into_iter()
+                    .filter(|i| {
+                        i.engine != Some(AURORA_MYSQL_ENGINE.into())
+                            && i.engine != Some(AURORA_POSTGRES_ENGINE.into())
+                    })
+                    .collect();
 
                 instances.append(&mut temp_instances);
             }
@@ -109,6 +117,8 @@ impl RdsNukeClient {
 
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
+
+        trace!("RDS get_instances: {:?}", instances);
 
         Ok(instances)
     }
