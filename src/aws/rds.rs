@@ -214,6 +214,8 @@ impl RdsNukeClient {
     }
 
     fn disable_termination_protection(&self, instance_id: &str) -> Result<()> {
+        // TODO: This call can be saved by saving the termiantion protection state in the
+        // Resource struct, while scanning for isntances.
         let resp = self
             .client
             .describe_db_instances(DescribeDBInstancesMessage {
@@ -232,7 +234,7 @@ impl RdsNukeClient {
                 == Some(true)
             {
                 debug!(
-                    "Terminating protection was enabled for: {}. Trying to disable it.",
+                    "Termination protection is enabled for: {}. Trying to disable it.",
                     instance_id
                 );
 

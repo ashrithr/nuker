@@ -9,8 +9,10 @@ use {
     rusoto_credential::ProfileProvider,
     rusoto_rds::{
         DBCluster, DescribeDBClustersMessage, DescribeDBInstancesMessage, Filter,
-        ListTagsForResourceMessage, Rds, RdsClient, Tag,
+        ListTagsForResourceMessage, Rds, RdsClient, Tag, DeleteDBClusterMessage,
+        StopDBClusterMessage, ModifyDBClusterMessage
     },
+    std::collections::HashSet,
 };
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
@@ -164,17 +166,18 @@ impl RdsAuroraNukeClient {
         );
 
         for cluster in clusters {
-            if let Ok(instance_types) = self.get_instance_types(cluster) {}
-            // if let Some(db_instances) = &cluster.db_cluster_members {
-            //     for db_instance in db_instances {
-            //         if self.config.allowed_instance_types.iter().any(|it| Some(it) == )
-            //     }
-            // }
+            if let Ok(instance_types) = self.get_instance_types(cluster) {
+                for instance in instance_types {
+                    if self.config.allowed_instance_types.iter().any(|it| Some(it) == Some(&instance)) {
+                        filtered_clusters.push(cluster)
+                    }
+                }
+            }
         }
 
-        // filtered_clusters
+        // TODO: remove duplicates from filtered_clusters
 
-        unimplemented!()
+        filtered_clusters
     }
 
     /// Fetch the instance types of each DBInstance which are part of the DBCluster
@@ -207,15 +210,120 @@ impl RdsAuroraNukeClient {
 
         Ok(instance_types)
     }
+
+    fn disable_termination_protection(&self, cluster_id: &str) -> Result<()> {
+        let resp = self
+            .client
+            .describe_db_clusters(DescribeDBClustersMessage {
+                db_cluster_identifier: Some(cluster_id.to_owned()),
+                ..Default::default()
+            })
+            .sync()?;
+        
+            if resp.db_clusters.is_some() {
+                if resp
+                    .db_clusters
+                    .unwrap()
+                    .first()
+                    .unwrap()
+                    .deletion_protection == Some(true)
+                {
+                    debug!(
+                        "Termination protection is enabled for: {}. Trying to disable it.",
+                        cluster_id
+                    );
+
+                    if !self.dry_run {
+                        self.client
+                            .modify_db_cluster(ModifyDBClusterMessage {
+                                db_cluster_identifier: cluster_id.to_owned(),
+                                deletion_protection: Some(false),
+                                apply_immediately: Some(true),
+                                ..Default::default()
+                            })
+                            .sync()?;
+                    }
+                }
+            }
+
+        Ok(())
+    }
+
+    fn stop_clusters(&self, cluster_ids: &Vec<String>) -> Result<()> {
+        debug!("Stopping clusters: {:?}", cluster_ids);
+
+        if !self.dry_run {
+            for cluster_id in cluster_ids {
+                self.client
+                    .stop_db_cluster(StopDBClusterMessage {
+                        db_cluster_identifier: cluster_id.to_owned(),
+                    })
+                    .sync()?;
+
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn terminate_clusters(&self, cluster_ids: &Vec<String>) -> Result<()> {
+        debug!("Terminating instances: {:?}", cluster_ids);
+
+        if self.config.termination_protection.ignore {
+            for cluster_id in cluster_ids {
+                self.disable_termination_protection(cluster_id)?;
+            }
+        }
+
+        if !self.dry_run {
+            for cluster_id in cluster_ids {
+                self.client
+                    .delete_db_cluster(DeleteDBClusterMessage {
+                        db_cluster_identifier: cluster_id.to_owned(),
+                        ..Default::default()
+                    })
+                    .sync()?;
+
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl NukeService for RdsAuroraNukeClient {
     fn scan(&self, profile_name: &String) -> Result<Vec<Resource>> {
-        unimplemented!()
+        let mut filtered_clusters: Vec<&DBCluster> = Vec::new();
+        let clusters: Vec<DBCluster> = self.get_clusters(Vec::new())?;
+
+        let running_clusters: Vec<&DBCluster> = clusters
+            .iter()
+            .filter(|c| c.status == Some("available".to_string()))
+            .collect();
+        let stopped_clusters: Vec<&DBCluster> = clusters
+            .iter()
+            .filter(|c| c.status == Some("stopped".to_string()))
+            .collect();
+        let mut clusters_filtered_by_tags = self.filter_by_tags(&running_clusters);
+        let mut clusters_filtered_by_types = self.filter_by_types(&clusters_filtered_by_tags);
+
+        filtered_clusters.append(&mut clusters_filtered_by_tags);
+
+        Ok(self.package_clusters_as_resources(profile_name, filtered_clusters)?)
     }
 
     fn cleanup(&self, resources: Vec<&Resource>) -> Result<()> {
-        unimplemented!()
+        let cluster_ids = resources
+            .into_iter()
+            .map(|r| r.id.clone())
+            .collect::<Vec<String>>();
+
+        match self.config.target_state {
+            TargetState::Stopped => Ok(self.stop_clusters(&cluster_ids)?),
+            TargetState::Terminated => Ok(self.terminate_clusters(&cluster_ids)?),
+        }
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {

@@ -11,7 +11,8 @@ use {
     rusoto_pricing::{DescribeServicesError, GetProductsError},
     rusoto_rds::{
         DeleteDBInstanceError, DescribeDBClustersError, DescribeDBInstancesError,
-        ListTagsForResourceError, ModifyDBInstanceError, StopDBInstanceError,
+        ListTagsForResourceError, ModifyDBInstanceError, StopDBInstanceError, DeleteDBClusterError,
+        StopDBClusterError, ModifyDBClusterError
     },
 };
 
@@ -64,6 +65,18 @@ pub enum Error {
     #[fail(display = "Failed deleting DB instance: {}", error)]
     DeleteDBInstance {
         error: RusotoError<DeleteDBInstanceError>,
+    },
+    #[fail(display = "Failed modifying DB cluster: {}", error)]
+    ModifyDBCluster {
+        error: RusotoError<ModifyDBClusterError>,
+    },
+    #[fail(display = "Failed stopping DB cluster: {}", error)]
+    StopDBCluster {
+        error: RusotoError<StopDBClusterError>,
+    },
+    #[fail(display = "Failed deleting DB cluster: {}", error)]
+    DeleteDBCluster {
+        error: RusotoError<DeleteDBClusterError>,
     },
     #[fail(display = "Failed parsing the region: {}", error)]
     RegionParseError { error: ParseRegionError },
