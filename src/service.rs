@@ -32,6 +32,7 @@ impl ResourceType {
     }
 }
 
+#[allow(dead_code)]
 pub enum FilterRule {
     /// A filter rule that checks if the required tags are provided
     /// for a given resource

@@ -106,10 +106,14 @@ allowed_instance_types = []
     [aurora.termination_protection]
     ignore = true
 
+#
+# [ebs]
+#
+
 # [security-groups]
 # enabled = false
 # target_state = "Delete"
-
+#
 #     # Delete any security groups that have the following inbound rules
 #     # associated with them
 #     [security-groups.rules]
@@ -120,10 +124,10 @@ allowed_instance_types = []
 # [redshift]
 # enabled = false
 # target_state = "Stopped"
-
+#
 #     [redshift.idle]
 #     enabled = true
-
+#
 #     # The average number of database connections has been less than 1 for the
 #     # last 7 days. The total number of ReadIOPS and WriteIOPS recorded per day
 #     # for the last 7 days has been less than 20 on average.
@@ -136,10 +140,10 @@ allowed_instance_types = []
 # [elasticsearch]
 # enabled = false
 # target_state = "Stopped"
-
+#
 #     [elasticsearch.idle]
 #     enabled = true
-
+#
 #     [elasticsearch.idle.rules]
 #     cpu_min_utilization = 2
 #     cpu_min_duration = "7 days"
