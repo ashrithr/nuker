@@ -123,6 +123,6 @@ pub fn parse_config_file(filename: &str) -> Config {
     parse_config(&buffer)
 }
 
-fn parse_config(buffer: &str) -> Config {
+pub fn parse_config(buffer: &str) -> Config {
     toml::from_str(buffer).expect("could not parse toml configuration")
 }
