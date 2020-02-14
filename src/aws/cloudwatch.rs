@@ -20,14 +20,21 @@ pub struct CwClient {
 }
 
 impl CwClient {
-    pub fn new(profile_name: &String, region: Region, idle_rules: IdleRules) -> Result<Self> {
-        let mut pp = ProfileProvider::new()?;
-        pp.set_profile(profile_name);
+    pub fn new(profile_name: Option<&str>, region: Region, idle_rules: IdleRules) -> Result<Self> {
+        if let Some(profile) = profile_name {
+            let mut pp = ProfileProvider::new()?;
+            pp.set_profile(profile);
 
-        Ok(CwClient {
-            client: CloudWatchClient::new_with(HttpClient::new()?, pp, region),
-            idle_rules,
-        })
+            Ok(CwClient {
+                client: CloudWatchClient::new_with(HttpClient::new()?, pp, region),
+                idle_rules,
+            })
+        } else {
+            Ok(CwClient {
+                client: CloudWatchClient::new(region),
+                idle_rules,
+            })            
+        }
     }
 
     fn get_metric_statistics_maximum(

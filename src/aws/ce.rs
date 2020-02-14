@@ -19,14 +19,21 @@ pub struct CeClient {
 }
 
 impl CeClient {
-    pub fn new(profile_name: &String, dur: i64) -> Result<Self> {
-        let mut pp = ProfileProvider::new()?;
-        pp.set_profile(profile_name);
+    pub fn new(profile_name: Option<&str>, dur: i64) -> Result<Self> {
+        if let Some(profile) = profile_name {
+            let mut pp = ProfileProvider::new()?;
+            pp.set_profile(profile);
 
-        Ok(CeClient {
-            client: CostExplorerClient::new_with(HttpClient::new()?, pp, Region::UsEast1),
-            dur: dur,
-        })
+            Ok(CeClient {
+                client: CostExplorerClient::new_with(HttpClient::new()?, pp, Region::UsEast1),
+                dur: dur,
+            })
+        } else {
+            Ok(CeClient {
+                client: CostExplorerClient::new(Region::UsEast1),
+                dur: dur,
+            })
+        }
     }
 
     pub fn get_usage(&self) -> Result<()> {

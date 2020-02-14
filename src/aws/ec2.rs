@@ -25,20 +25,29 @@ pub struct Ec2NukeClient {
 
 impl Ec2NukeClient {
     pub fn new(
-        profile_name: &String,
+        profile_name: Option<&str>,
         region: Region,
         config: Ec2Config,
         dry_run: bool,
     ) -> Result<Self> {
-        let mut pp = ProfileProvider::new()?;
-        pp.set_profile(profile_name);
+        if let Some(profile) = profile_name {
+            let mut pp = ProfileProvider::new()?;
+            pp.set_profile(profile);
 
-        Ok(Ec2NukeClient {
-            client: Ec2Client::new_with(HttpClient::new()?, pp, region.clone()),
-            cwclient: CwClient::new(profile_name, region, config.clone().idle_rules)?,
-            config: config,
-            dry_run: dry_run,
-        })
+            Ok(Ec2NukeClient {
+                client: Ec2Client::new_with(HttpClient::new()?, pp, region.clone()),
+                cwclient: CwClient::new(profile_name, region, config.clone().idle_rules)?,
+                config: config,
+                dry_run: dry_run,
+            })
+        } else {
+            Ok(Ec2NukeClient {
+                client: Ec2Client::new(region.clone()),
+                cwclient: CwClient::new(profile_name, region, config.clone().idle_rules)?,
+                config: config,
+                dry_run: dry_run,
+            })
+        }
     }
 
     fn package_tags_as_ntags(&self, tags: Option<Vec<Tag>>) -> Option<Vec<NTag>> {
@@ -54,7 +63,6 @@ impl Ec2NukeClient {
 
     fn package_instances_as_resources(
         &self,
-        profile_name: &String,
         instances: Vec<&Instance>,
     ) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
@@ -68,7 +76,6 @@ impl Ec2NukeClient {
                 resources.push(Resource {
                     id: instance_id,
                     resource_type: ResourceType::EC2,
-                    profile_name: profile_name.to_owned(),
                     tags: self.package_tags_as_ntags(instance.tags.clone()),
                     state: instance.state.as_ref().unwrap().name.clone(),
                 });
@@ -255,7 +262,7 @@ impl Ec2NukeClient {
 }
 
 impl NukeService for Ec2NukeClient {
-    fn scan(&self, profile_name: &String) -> Result<Vec<Resource>> {
+    fn scan(&self) -> Result<Vec<Resource>> {
         let instances = self.get_instances(Vec::new())?;
         let mut filtered_instances: Vec<&Instance> = Vec::new();
 
@@ -292,7 +299,7 @@ impl NukeService for Ec2NukeClient {
         filtered_instances.append(&mut instances_filtered_by_types);
         filtered_instances.append(&mut idle_instances);
 
-        Ok(self.package_instances_as_resources(profile_name, filtered_instances)?)
+        Ok(self.package_instances_as_resources(filtered_instances)?)
     }
 
     fn cleanup(&self, resources: Vec<&Resource>) -> Result<()> {

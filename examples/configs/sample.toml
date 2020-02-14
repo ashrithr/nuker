@@ -1,4 +1,9 @@
-# Named Profile to use for authenticating with AWS
+# Named Profile to use for authenticating with AWS. Comment the profile name to
+# use the default credentials provider, whose behavior is to check the sources
+# in the following order:
+# 1. Environment variables: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+# 2. AWS credentials file. Usually located at ~/.aws/credentials.
+# 3. IAM instance profile
 profile = "default"
 
 # Which regions to enfoce the rules in. If its empty, the rules will be enforced

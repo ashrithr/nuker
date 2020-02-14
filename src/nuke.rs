@@ -28,12 +28,12 @@ impl Nuke {
 
         for region in &self.config.regions {
             let profile = &self.config.profile;
-            match AwsClient::new(profile, Region::from_str(region)?, &self.config) {
+            match AwsClient::new(profile.as_deref(), Region::from_str(region)?, &self.config) {
                 Ok(client) => {
                     clients.push(client);
                 }
                 Err(err) => {
-                    error!("initializing AWS Client for profile: {}.\n{}", profile, err);
+                    error!("initializing AWS Client for profile: {:?}.\n{}", profile, err);
                 }
             }
         }

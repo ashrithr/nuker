@@ -27,20 +27,30 @@ pub struct RdsNukeClient {
 
 impl RdsNukeClient {
     pub fn new(
-        profile_name: &String,
+        profile_name: Option<&str>,
         region: Region,
         config: RdsConfig,
         dry_run: bool,
     ) -> Result<Self> {
-        let mut pp = ProfileProvider::new()?;
-        pp.set_profile(profile_name);
+        if let Some(profile) = profile_name {
+            let mut pp = ProfileProvider::new()?;
+            pp.set_profile(profile);
+            Ok(RdsNukeClient {
+                client: RdsClient::new_with(HttpClient::new()?, pp, region.clone()),
+                cwclient: CwClient::new(profile_name, region, config.clone().idle_rules)?,
+                config: config,
+                dry_run: dry_run,
+            })
+        } else {
+            Ok(RdsNukeClient {
+                client: RdsClient::new(region.clone()),
+                cwclient: CwClient::new(profile_name, region, config.clone().idle_rules)?,
+                config: config,
+                dry_run: dry_run,
+            })
+        }
 
-        Ok(RdsNukeClient {
-            client: RdsClient::new_with(HttpClient::new()?, pp, region.clone()),
-            cwclient: CwClient::new(profile_name, region, config.clone().idle_rules)?,
-            config: config,
-            dry_run: dry_run,
-        })
+        
     }
 
     fn package_tags_as_ntags(&self, tags: Option<Vec<Tag>>) -> Option<Vec<NTag>> {
@@ -56,7 +66,6 @@ impl RdsNukeClient {
 
     fn package_instances_as_resources(
         &self,
-        profile_name: &String,
         instances: Vec<&DBInstance>,
     ) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
@@ -70,7 +79,6 @@ impl RdsNukeClient {
                 resources.push(Resource {
                     id: instance_id,
                     resource_type: ResourceType::RDS,
-                    profile_name: profile_name.to_owned(),
                     tags: self
                         .package_tags_as_ntags(self.list_tags(instance.db_instance_arn.clone())?),
                     state: instance.db_instance_status.clone(),
@@ -300,7 +308,7 @@ impl RdsNukeClient {
 }
 
 impl NukeService for RdsNukeClient {
-    fn scan(&self, profile_name: &String) -> Result<Vec<Resource>> {
+    fn scan(&self) -> Result<Vec<Resource>> {
         let instances = self.get_instances(Vec::new())?;
         let mut filtered_instances: Vec<&DBInstance> = Vec::new();
 
@@ -337,7 +345,7 @@ impl NukeService for RdsNukeClient {
         filtered_instances.append(&mut instances_filtered_by_types);
         filtered_instances.append(&mut idle_instances);
 
-        Ok(self.package_instances_as_resources(profile_name, filtered_instances)?)
+        Ok(self.package_instances_as_resources(filtered_instances)?)
     }
 
     fn cleanup(&self, resources: Vec<&Resource>) -> Result<()> {

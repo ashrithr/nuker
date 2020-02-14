@@ -12,7 +12,7 @@ const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 /// This struct is built from reading the configuration file
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub profile: String,
+    pub profile: Option<String>,
     pub regions: Vec<String>,
     pub dry_run: bool,
     pub print_usage: bool,

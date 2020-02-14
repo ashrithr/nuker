@@ -82,13 +82,19 @@ pub struct PriceClient {
 }
 
 impl PriceClient {
-    pub fn new(profile_name: &String) -> Result<Self> {
-        let mut pp = ProfileProvider::new()?;
-        pp.set_profile(profile_name);
+    pub fn new(profile_name: Option<&str>) -> Result<Self> {
+        if let Some(profile) = profile_name {
+            let mut pp = ProfileProvider::new()?;
+            pp.set_profile(profile);
 
-        Ok(PriceClient {
-            client: PricingClient::new_with(HttpClient::new()?, pp, Region::UsEast1),
-        })
+            Ok(PriceClient {
+                client: PricingClient::new_with(HttpClient::new()?, pp, Region::UsEast1),
+            })
+        } else {
+            Ok(PriceClient {
+                client: PricingClient::new(Region::UsEast1),
+            })
+        }
     }
 
     fn get_services(&self) -> Result<Vec<Service>> {

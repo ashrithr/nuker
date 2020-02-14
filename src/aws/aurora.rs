@@ -25,20 +25,29 @@ pub struct AuroraNukeClient {
 
 impl AuroraNukeClient {
     pub fn new(
-        profile_name: &String,
+        profile_name: Option<&str>,
         region: Region,
         config: AuroraConfig,
         dry_run: bool,
     ) -> Result<Self> {
-        let mut pp = ProfileProvider::new()?;
-        pp.set_profile(profile_name);
+        if let Some(profile) = profile_name {
+            let mut pp = ProfileProvider::new()?;
+            pp.set_profile(profile);
 
-        Ok(AuroraNukeClient {
-            client: RdsClient::new_with(HttpClient::new()?, pp, region.clone()),
-            cwclient: CwClient::new(profile_name, region, config.clone().idle_rules)?,
-            config: config,
-            dry_run: dry_run,
-        })
+            Ok(AuroraNukeClient {
+                client: RdsClient::new_with(HttpClient::new()?, pp, region.clone()),
+                cwclient: CwClient::new(profile_name, region, config.clone().idle_rules)?,
+                config: config,
+                dry_run: dry_run,
+            })            
+        } else {
+            Ok(AuroraNukeClient {
+                client: RdsClient::new(region.clone()),
+                cwclient: CwClient::new(profile_name, region, config.clone().idle_rules)?,
+                config: config,
+                dry_run: dry_run,
+            })
+        }
     }
 
     fn package_tags_as_ntags(&self, tags: Option<Vec<Tag>>) -> Option<Vec<NTag>> {
@@ -54,7 +63,6 @@ impl AuroraNukeClient {
 
     fn package_clusters_as_resources(
         &self,
-        profile_name: &String,
         clusters: Vec<&DBCluster>,
     ) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
@@ -68,7 +76,6 @@ impl AuroraNukeClient {
                 resources.push(Resource {
                     id: cluster_id,
                     resource_type: ResourceType::Aurora,
-                    profile_name: profile_name.to_owned(),
                     tags: self
                         .package_tags_as_ntags(self.list_tags(cluster.db_cluster_arn.clone())?),
                     state: cluster.status.clone(),
@@ -332,7 +339,7 @@ impl AuroraNukeClient {
 }
 
 impl NukeService for AuroraNukeClient {
-    fn scan(&self, profile_name: &String) -> Result<Vec<Resource>> {
+    fn scan(&self) -> Result<Vec<Resource>> {
         let mut filtered_clusters: Vec<&DBCluster> = Vec::new();
         let clusters: Vec<DBCluster> = self.get_clusters(Vec::new())?;
 
@@ -368,7 +375,7 @@ impl NukeService for AuroraNukeClient {
         filtered_clusters.append(&mut clusters_filtered_by_types);
         filtered_clusters.append(&mut idle_clusters);
 
-        Ok(self.package_clusters_as_resources(profile_name, filtered_clusters)?)
+        Ok(self.package_clusters_as_resources(filtered_clusters)?)
     }
 
     fn cleanup(&self, resources: Vec<&Resource>) -> Result<()> {

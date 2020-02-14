@@ -26,21 +26,20 @@ pub struct AwsClient {
     clients: Vec<Box<dyn NukeService>>,
     pricing_client: PriceClient,
     ce_client: Option<CeClient>,
-    profile_name: String,
+    profile_name: Option<String>,
 }
 
 impl AwsClient {
-    pub fn new<T: Into<String>>(
-        profile_name: T,
+    pub fn new(
+        profile_name: Option<&str>,
         region: Region,
         config: &Config,
     ) -> Result<AwsClient> {
-        let profile_name: String = profile_name.into();
         let mut clients: Vec<Box<dyn NukeService>> = Vec::new();
 
         if config.ec2.enabled {
             clients.push(Box::new(Ec2NukeClient::new(
-                &profile_name,
+                profile_name,
                 region.clone(),
                 config.ec2.clone(),
                 config.dry_run,
@@ -49,7 +48,7 @@ impl AwsClient {
 
         if config.rds.enabled {
             clients.push(Box::new(RdsNukeClient::new(
-                &profile_name,
+                profile_name,
                 region.clone(),
                 config.rds.clone(),
                 config.dry_run,
@@ -58,7 +57,7 @@ impl AwsClient {
 
         if config.aurora.enabled {
             clients.push(Box::new(AuroraNukeClient::new(
-                &profile_name,
+                profile_name,
                 region.clone(),
                 config.aurora.clone(),
                 config.dry_run,
@@ -66,19 +65,19 @@ impl AwsClient {
         }
 
         let ce_client = if config.print_usage {
-            Some(CeClient::new(&profile_name, config.usage_days)?)
+            Some(CeClient::new(profile_name, config.usage_days)?)
         } else {
             None
         };
 
-        let pricing_client = PriceClient::new(&profile_name)?;
+        let pricing_client = PriceClient::new(profile_name)?;
 
         Ok(AwsClient {
             region,
-            profile_name,
+            clients,
             pricing_client,
             ce_client,
-            clients,
+            profile_name: profile_name.map(|s| s.into())
         })
     }
 
@@ -86,7 +85,7 @@ impl AwsClient {
         let mut resources: Vec<Resource> = Vec::new();
 
         for client in &self.clients {
-            match client.scan(&self.profile_name) {
+            match client.scan() {
                 Ok(rs) => {
                     if !rs.is_empty() {
                         for r in rs {
@@ -96,7 +95,7 @@ impl AwsClient {
                 }
                 Err(err) => {
                     error!(
-                        "Error occurred locating resources in profile: {}. {}",
+                        "Error occurred locating resources in profile: {:?}. {}",
                         self.profile_name, err
                     );
                 }

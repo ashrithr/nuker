@@ -55,14 +55,13 @@ pub struct NTag {
 pub struct Resource {
     pub id: String,
     pub resource_type: ResourceType,
-    pub profile_name: String,
     pub tags: Option<Vec<NTag>>,
     pub state: Option<String>,
 }
 
 pub trait NukeService: ::std::any::Any {
     /// Get all the resources without applying any filters
-    fn scan(&self, profile_name: &String) -> Result<Vec<Resource>>;
+    fn scan(&self) -> Result<Vec<Resource>>;
 
     /// Clean up the resources
     fn cleanup(&self, resources: Vec<&Resource>) -> Result<()>;
