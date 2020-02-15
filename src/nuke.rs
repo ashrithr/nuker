@@ -28,7 +28,8 @@ impl Nuke {
 
         for region in &self.config.regions {
             let profile = &self.config.profile;
-            match AwsClient::new(profile.as_deref(), Region::from_str(region)?, &self.config) {
+            let profile = profile.as_ref().map(|p| &**p);
+            match AwsClient::new(profile, Region::from_str(region)?, &self.config) {
                 Ok(client) => {
                     clients.push(client);
                 }
