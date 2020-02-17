@@ -39,7 +39,7 @@ impl AuroraNukeClient {
                 cwclient: CwClient::new(profile_name, region, config.clone().idle_rules)?,
                 config: config,
                 dry_run: dry_run,
-            })            
+            })
         } else {
             Ok(AuroraNukeClient {
                 client: RdsClient::new(region.clone()),
@@ -61,10 +61,7 @@ impl AuroraNukeClient {
         })
     }
 
-    fn package_clusters_as_resources(
-        &self,
-        clusters: Vec<&DBCluster>,
-    ) -> Result<Vec<Resource>> {
+    fn package_clusters_as_resources(&self, clusters: Vec<&DBCluster>) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
 
         for cluster in clusters {
@@ -352,8 +349,8 @@ impl NukeService for AuroraNukeClient {
             .filter(|c| c.status == Some("stopped".to_string()))
             .collect();
         let mut clusters_filtered_by_tags = self.filter_by_tags(&running_clusters);
-        let mut clusters_filtered_by_types = self.filter_by_types(&clusters_filtered_by_tags);
-        let mut idle_clusters = self.filter_by_idle_rules(&clusters_filtered_by_types);
+        let mut clusters_filtered_by_types = self.filter_by_types(&running_clusters);
+        let mut idle_clusters = self.filter_by_idle_rules(&running_clusters);
 
         info!(
             "Aurora Summary: \n\

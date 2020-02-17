@@ -52,6 +52,19 @@ pub struct TerminationProtection {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct EbsCleanup {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct SecurityGroups {
+    pub enabled: bool,
+    pub source_cidr: Vec<String>,
+    pub from_port: u16,
+    pub to_port: u16,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Ec2Config {
     pub enabled: bool,
     pub target_state: TargetState,
@@ -59,6 +72,8 @@ pub struct Ec2Config {
     pub allowed_instance_types: Vec<String>,
     pub idle_rules: IdleRules,
     pub termination_protection: TerminationProtection,
+    pub ebs_cleanup: EbsCleanup,
+    pub security_groups: SecurityGroups,
 }
 
 #[derive(Debug, Deserialize, Clone)]

@@ -20,7 +20,7 @@ usage_days = 1
 
 [ec2]
 # Specifies whether EC2 enforcement is enabled or not
-enabled = false
+enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Terminated'
 target_state = "Stopped"
@@ -50,6 +50,18 @@ allowed_instance_types = []
     # flag and would terminate the instances anyway.
     [ec2.termination_protection]
     ignore = true
+
+    # Defines if detached EBS volumes have to be cleaned up
+    [ec2.ebs_cleanup]
+    enabled = true
+
+    # Identify resources that are using Security Groups based on the following
+    # rules.
+    [ec2.security_groups]
+    enabled = true
+    from_port = 0
+    to_port = 65535
+    source_cidr = [ "0.0.0.0/0" ]
 
 [rds]
 # Specifies whether RDS enforcement is enabled or not
@@ -82,7 +94,7 @@ allowed_instance_types = []
     ignore = true
 
 [aurora]
-# Specifies whether RDS enforcement is enabled or not
+# Specifies whether RDS-Aurora enforcement is enabled or not
 enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Terminated'
@@ -110,10 +122,6 @@ allowed_instance_types = []
     # which has termination protection enabled.
     [aurora.termination_protection]
     ignore = true
-
-#
-# [ebs]
-#
 
 # [security-groups]
 # enabled = false

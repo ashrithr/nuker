@@ -16,7 +16,6 @@ use {
     pricing::PriceClient,
     rds::RdsNukeClient,
     rusoto_core::Region,
-    rusoto_ec2::Tag,
 };
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
@@ -149,16 +148,5 @@ impl AwsClient {
         }
 
         Ok(())
-    }
-
-    #[allow(dead_code)]
-    fn get_name_tag(tags: Option<Vec<Tag>>) -> Option<String> {
-        match tags {
-            Some(tags) => match tags.iter().find(|tag| tag.key.as_ref().unwrap() == "Name") {
-                Some(name_tag) => name_tag.value.clone(),
-                _ => None,
-            },
-            None => None,
-        }
     }
 }

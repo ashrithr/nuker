@@ -5,14 +5,15 @@ use {
     rusoto_core::RusotoError,
     rusoto_credential::CredentialsError,
     rusoto_ec2::{
-        DescribeInstanceAttributeError, DescribeInstancesError, ModifyInstanceAttributeError,
-        StopInstancesError, TerminateInstancesError,
+        DescribeInstanceAttributeError, DescribeInstancesError, DescribeSecurityGroupsError,
+        DescribeVolumesError, ModifyInstanceAttributeError, StopInstancesError,
+        TerminateInstancesError,
     },
     rusoto_pricing::{DescribeServicesError, GetProductsError},
     rusoto_rds::{
-        DeleteDBInstanceError, DescribeDBClustersError, DescribeDBInstancesError,
-        ListTagsForResourceError, ModifyDBInstanceError, StopDBInstanceError, DeleteDBClusterError,
-        StopDBClusterError, ModifyDBClusterError
+        DeleteDBClusterError, DeleteDBInstanceError, DescribeDBClustersError,
+        DescribeDBInstancesError, ListTagsForResourceError, ModifyDBClusterError,
+        ModifyDBInstanceError, StopDBClusterError, StopDBInstanceError,
     },
 };
 
@@ -25,6 +26,14 @@ pub enum Error {
     #[fail(display = "Issue describing Instances: {}", error)]
     InstanceDescribe {
         error: RusotoError<DescribeInstancesError>,
+    },
+    #[fail(display = "Issue describing Volumes: {}", error)]
+    VolumesDescribe {
+        error: RusotoError<DescribeVolumesError>,
+    },
+    #[fail(display = "Issue describing Security Groups: {}", error)]
+    SecurityGroupsDescribe {
+        error: RusotoError<DescribeSecurityGroupsError>,
     },
     #[fail(display = "Issue describing DB Instances: {}", error)]
     DBInstanceDescribe {

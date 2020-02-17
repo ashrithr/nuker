@@ -49,8 +49,6 @@ impl RdsNukeClient {
                 dry_run: dry_run,
             })
         }
-
-        
     }
 
     fn package_tags_as_ntags(&self, tags: Option<Vec<Tag>>) -> Option<Vec<NTag>> {
@@ -64,10 +62,7 @@ impl RdsNukeClient {
         })
     }
 
-    fn package_instances_as_resources(
-        &self,
-        instances: Vec<&DBInstance>,
-    ) -> Result<Vec<Resource>> {
+    fn package_instances_as_resources(&self, instances: Vec<&DBInstance>) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
 
         for instance in instances {
@@ -322,8 +317,8 @@ impl NukeService for RdsNukeClient {
             .filter(|i| i.db_instance_status == Some("stopped".to_string()))
             .collect();
         let mut instances_filtered_by_tags = self.filter_by_tags(&running_instances);
-        let mut instances_filtered_by_types = self.filter_by_types(&instances_filtered_by_tags);
-        let mut idle_instances = self.filter_by_idle_rules(&instances_filtered_by_types);
+        let mut instances_filtered_by_types = self.filter_by_types(&running_instances);
+        let mut idle_instances = self.filter_by_idle_rules(&running_instances);
 
         info!(
             "RDS Summary: \n\
