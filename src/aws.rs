@@ -17,6 +17,7 @@ use {
     pricing::PriceClient,
     rds::RdsNukeClient,
     rusoto_core::Region,
+    s3::S3NukeClient,
 };
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
@@ -56,6 +57,15 @@ impl AwsClient {
                 profile_name,
                 region.clone(),
                 config.aurora.clone(),
+                config.dry_run,
+            )?))
+        }
+
+        if config.s3.enabled {
+            clients.push(Box::new(S3NukeClient::new(
+                profile_name,
+                region.clone(),
+                config.s3.clone(),
                 config.dry_run,
             )?))
         }
@@ -114,19 +124,29 @@ impl AwsClient {
             .iter()
             .filter(|r| r.resource_type.is_aurora())
             .collect();
+        let s3_resources: Vec<&Resource> = resources
+            .iter()
+            .filter(|r| r.resource_type.is_s3())
+            .collect();
 
         for client in &self.clients {
             let ref_client = client.as_any();
 
             if ref_client.is::<Ec2NukeClient>() {
-                info!("Triggering cleanup of resources: {:?}", ec2_resources);
+                info!("Triggering cleanup of EC2 resources: {:?}", ec2_resources);
                 client.cleanup(ec2_resources.to_owned())?;
             } else if ref_client.is::<RdsNukeClient>() {
-                info!("Triggering cleanup of resources: {:?}", rds_resources);
+                info!("Triggering cleanup of RDS resources: {:?}", rds_resources);
                 client.cleanup(rds_resources.to_owned())?;
             } else if ref_client.is::<AuroraNukeClient>() {
-                info!("Triggering cleanup of resources: {:?}", aurora_resources);
+                info!(
+                    "Triggering cleanup of Aurora resources: {:?}",
+                    aurora_resources
+                );
                 client.cleanup(aurora_resources.to_owned())?;
+            } else if ref_client.is::<S3NukeClient>() {
+                info!("Triggering cleanup of S3 resources: {:?}", s3_resources);
+                client.cleanup(s3_resources.to_owned())?;
             }
         }
 

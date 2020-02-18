@@ -139,6 +139,11 @@ impl Ec2NukeClient {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
+        if !self.config.ignore.is_empty() {
+            debug!("Ignoring instances {:?}", self.config.ignore);
+            instances.retain(|i| !self.config.ignore.contains(&i.instance_id.clone().unwrap()));
+        }
+
         Ok(instances)
     }
 

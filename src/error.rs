@@ -16,8 +16,8 @@ use {
         ModifyDBInstanceError, StopDBClusterError, StopDBInstanceError,
     },
     rusoto_s3::{
-        DeleteBucketError, DeleteObjectsError, ListBucketsError, ListObjectVersionsError,
-        ListObjectsV2Error,
+        DeleteBucketError, DeleteObjectsError, GetBucketTaggingError, ListBucketsError,
+        ListObjectVersionsError, ListObjectsV2Error,
     },
 };
 
@@ -110,6 +110,10 @@ pub enum Error {
     #[fail(display = "Failed deleting S3 bucket: {}", error)]
     DeleteS3Bucket {
         error: RusotoError<DeleteBucketError>,
+    },
+    #[fail(display = "Failed listing S3 bucket tags: {}", error)]
+    GetBucketTags {
+        error: RusotoError<GetBucketTaggingError>,
     },
     #[fail(display = "Failed parsing the region: {}", error)]
     RegionParseError { error: ParseRegionError },

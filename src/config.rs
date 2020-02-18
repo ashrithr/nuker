@@ -20,6 +20,7 @@ pub struct Config {
     pub ec2: Ec2Config,
     pub rds: RdsConfig,
     pub aurora: AuroraConfig,
+    pub s3: S3Config,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -71,6 +72,7 @@ pub struct Ec2Config {
     pub target_state: TargetState,
     pub required_tags: Vec<String>,
     pub allowed_instance_types: Vec<String>,
+    pub ignore: Vec<String>,
     pub idle_rules: IdleRules,
     pub termination_protection: TerminationProtection,
     pub ebs_cleanup: EbsCleanup,

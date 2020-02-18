@@ -28,6 +28,9 @@ target_state = "Stopped"
 required_tags = ["Name", "Email", "Purpose"]
 # Defines which instance types are allowed, empty means allow any types
 allowed_instance_types = []
+# The following resources will be ignored from rule enforcement
+# ignore = ["instance-id1", "instance-id2"]
+ignore = []
 
     # Identify any EC2 instances that appear to be idle based on the following
     # rules.
@@ -124,9 +127,9 @@ allowed_instance_types = []
     ignore = true
 
 [s3]
-enabled = true
+enabled = false
 target_state = "Deleted"
-required_naming_prefix = "cw-${region}"
+required_naming_prefix = "cw-"
 
 # [redshift]
 # enabled = false

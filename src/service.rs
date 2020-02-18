@@ -8,6 +8,7 @@ pub enum ResourceType {
     Volume,
     RDS,
     Aurora,
+    S3,
 }
 
 impl ResourceType {
@@ -42,6 +43,13 @@ impl ResourceType {
     pub fn is_aurora(&self) -> bool {
         match *self {
             ResourceType::Aurora => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_s3(&self) -> bool {
+        match *self {
+            ResourceType::S3 => true,
             _ => false,
         }
     }
