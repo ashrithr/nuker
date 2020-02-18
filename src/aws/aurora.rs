@@ -3,7 +3,6 @@ use {
     crate::aws::Result,
     crate::config::AuroraConfig,
     crate::config::TargetState,
-    crate::error::Error as AwsError,
     crate::service::{NTag, NukeService, Resource, ResourceType},
     log::{debug, info, trace},
     rusoto_core::{HttpClient, Region},
@@ -111,6 +110,16 @@ impl AuroraNukeClient {
             }
 
             std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+
+        if !self.config.ignore.is_empty() {
+            debug!("Ignoring the DB clusters: {:?}", self.config.ignore);
+            clusters.retain(|c| {
+                !self
+                    .config
+                    .ignore
+                    .contains(&c.db_cluster_identifier.clone().unwrap())
+            });
         }
 
         Ok(clusters)

@@ -43,7 +43,14 @@ impl S3NukeClient {
 
     fn get_buckets(&self) -> Result<Vec<Bucket>> {
         let result = self.client.list_buckets().sync()?;
-        Ok(result.buckets.unwrap_or_default())
+        let mut buckets = result.buckets.unwrap_or_default();
+
+        if !self.config.ignore.is_empty() {
+            debug!("Ignoring the S3 buckets: {:?}", self.config.ignore);
+            buckets.retain(|b| !self.config.ignore.contains(&b.name.clone().unwrap()))
+        }
+
+        Ok(buckets)
     }
 
     fn filter_by_name_prefix(&self, buckets: Vec<Bucket>) -> Vec<Bucket> {

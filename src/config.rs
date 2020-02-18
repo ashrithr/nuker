@@ -85,6 +85,7 @@ pub struct RdsConfig {
     pub target_state: TargetState,
     pub required_tags: Vec<String>,
     pub allowed_instance_types: Vec<String>,
+    pub ignore: Vec<String>,
     pub idle_rules: IdleRules,
     pub termination_protection: TerminationProtection,
 }
@@ -95,6 +96,7 @@ pub struct AuroraConfig {
     pub target_state: TargetState,
     pub required_tags: Vec<String>,
     pub allowed_instance_types: Vec<String>,
+    pub ignore: Vec<String>,
     pub idle_rules: IdleRules,
     pub termination_protection: TerminationProtection,
 }
@@ -104,6 +106,7 @@ pub struct S3Config {
     pub enabled: bool,
     pub target_state: TargetState,
     pub required_naming_prefix: String,
+    pub ignore: Vec<String>,
 }
 
 /// Parse the command line arguments for aws-nuke executable

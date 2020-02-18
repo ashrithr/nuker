@@ -76,6 +76,9 @@ target_state = "Stopped"
 required_tags = ["Name", "Email", "Purpose"]
 # Defines which instance types are allowed, empty means allow any types
 allowed_instance_types = []
+# The following resources will be ignored from rule enforcement
+# ignore = ["db_instance_identifier-1", "db_instance_identifier-2"]
+ignore = []
 
     # Defines CPU utilization rules, the default is if the average CPU
     # utilization for 1 day, each data point aggeregated over 1 hour window,
@@ -106,6 +109,9 @@ target_state = "Stopped"
 required_tags = ["Name", "Email", "Purpose"]
 # Defines which instance types are allowed, empty means allow any types
 allowed_instance_types = []
+# The following resources will be ignored from rule enforcement
+# ignore = ["db_cluster_identifier-1", "db_cluster_identifier-2"]
+ignore = []
 
     # Defines CPU utilization rules, the default is if the average CPU
     # utilization for 1 day, each data point aggeregated over 1 hour window,
@@ -130,6 +136,7 @@ allowed_instance_types = []
 enabled = false
 target_state = "Deleted"
 required_naming_prefix = "cw-"
+ignore = []
 
 # [redshift]
 # enabled = false

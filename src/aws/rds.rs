@@ -3,7 +3,6 @@ use {
     crate::aws::Result,
     crate::config::RdsConfig,
     crate::config::TargetState,
-    crate::error::Error as AwsError,
     crate::service::{NTag, NukeService, Resource, ResourceType},
     log::{debug, info, trace},
     rusoto_core::{HttpClient, Region},
@@ -122,6 +121,11 @@ impl RdsNukeClient {
         }
 
         trace!("RDS get_instances: {:?}", instances);
+
+        if !self.config.ignore.is_empty() {
+            debug!("Ignoring RDS instances: {:?}", self.config.ignore);
+            instances.retain(|i| !self.config.ignore.contains(&i.db_instance_identifier.clone().unwrap()));
+        }
 
         Ok(instances)
     }
