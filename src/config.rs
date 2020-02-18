@@ -26,6 +26,7 @@ pub struct Config {
 pub enum TargetState {
     Stopped,
     Terminated,
+    Deleted,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -94,6 +95,13 @@ pub struct AuroraConfig {
     pub allowed_instance_types: Vec<String>,
     pub idle_rules: IdleRules,
     pub termination_protection: TerminationProtection,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct S3Config {
+    pub enabled: bool,
+    pub target_state: TargetState,
+    pub required_naming_prefix: String,
 }
 
 /// Parse the command line arguments for aws-nuke executable

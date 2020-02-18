@@ -15,6 +15,10 @@ use {
         DescribeDBInstancesError, ListTagsForResourceError, ModifyDBClusterError,
         ModifyDBInstanceError, StopDBClusterError, StopDBInstanceError,
     },
+    rusoto_s3::{
+        DeleteBucketError, DeleteObjectsError, ListBucketsError, ListObjectVersionsError,
+        ListObjectsV2Error,
+    },
 };
 
 #[derive(Debug, Fail, From)]
@@ -86,6 +90,26 @@ pub enum Error {
     #[fail(display = "Failed deleting DB cluster: {}", error)]
     DeleteDBCluster {
         error: RusotoError<DeleteDBClusterError>,
+    },
+    #[fail(display = "Issue describing Buckets: {}", error)]
+    DescribeS3Buckets {
+        error: RusotoError<ListBucketsError>,
+    },
+    #[fail(display = "Issue describing Objects: {}", error)]
+    DescribeS3Objects {
+        error: RusotoError<ListObjectsV2Error>,
+    },
+    #[fail(display = "Issue describing Object Versions: {}", error)]
+    DescribeS3ObjectVersions {
+        error: RusotoError<ListObjectVersionsError>,
+    },
+    #[fail(display = "Failed deleting S3 objects: {}", error)]
+    DeleteS3Objects {
+        error: RusotoError<DeleteObjectsError>,
+    },
+    #[fail(display = "Failed deleting S3 bucket: {}", error)]
+    DeleteS3Bucket {
+        error: RusotoError<DeleteBucketError>,
     },
     #[fail(display = "Failed parsing the region: {}", error)]
     RegionParseError { error: ParseRegionError },

@@ -1,5 +1,6 @@
 use {
     crate::aws::cloudwatch::CwClient,
+    crate::aws::Result,
     crate::config::RdsConfig,
     crate::config::TargetState,
     crate::error::Error as AwsError,
@@ -14,7 +15,6 @@ use {
     },
 };
 
-type Result<T, E = AwsError> = std::result::Result<T, E>;
 const AURORA_POSTGRES_ENGINE: &str = "aurora-postgresql";
 const AURORA_MYSQL_ENGINE: &str = "aurora-mysql";
 
@@ -351,7 +351,9 @@ impl NukeService for RdsNukeClient {
 
         match self.config.target_state {
             TargetState::Stopped => Ok(self.stop_instances(&instance_ids)?),
-            TargetState::Terminated => Ok(self.terminate_instances(&instance_ids)?),
+            TargetState::Terminated | TargetState::Deleted => {
+                Ok(self.terminate_instances(&instance_ids)?)
+            }
         }
     }
 

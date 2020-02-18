@@ -1,5 +1,6 @@
 use {
     crate::aws::cloudwatch::CwClient,
+    crate::aws::Result,
     crate::config::Ec2Config,
     crate::config::TargetState,
     crate::error::Error as AwsError,
@@ -14,8 +15,6 @@ use {
         StopInstancesRequest, Tag, TerminateInstancesRequest, Volume,
     },
 };
-
-type Result<T, E = AwsError> = std::result::Result<T, E>;
 
 pub struct Ec2NukeClient {
     pub client: Ec2Client,
@@ -503,7 +502,9 @@ impl NukeService for Ec2NukeClient {
 
         match self.config.target_state {
             TargetState::Stopped => self.stop_instances(&instance_ids)?,
-            TargetState::Terminated => self.terminate_instances(&instance_ids)?,
+            TargetState::Terminated | TargetState::Deleted => {
+                self.terminate_instances(&instance_ids)?
+            }
         }
 
         if self.config.ebs_cleanup.enabled {

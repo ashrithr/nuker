@@ -123,16 +123,10 @@ allowed_instance_types = []
     [aurora.termination_protection]
     ignore = true
 
-# [security-groups]
-# enabled = false
-# target_state = "Delete"
-#
-#     # Delete any security groups that have the following inbound rules
-#     # associated with them
-#     [security-groups.rules]
-#     [security-groups.rules.inbound]
-#     port_range = [ "0-65535" ]
-#     source_cidr = [ "0.0.0.0/0" ]
+[s3]
+enabled = true
+target_state = "Deleted"
+required_naming_prefix = "cw-${region}"
 
 # [redshift]
 # enabled = false

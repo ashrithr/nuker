@@ -4,6 +4,7 @@ mod cloudwatch;
 mod ec2;
 mod pricing;
 mod rds;
+mod s3;
 
 use {
     crate::config::Config,
@@ -29,11 +30,7 @@ pub struct AwsClient {
 }
 
 impl AwsClient {
-    pub fn new(
-        profile_name: Option<&str>,
-        region: Region,
-        config: &Config,
-    ) -> Result<AwsClient> {
+    pub fn new(profile_name: Option<&str>, region: Region, config: &Config) -> Result<AwsClient> {
         let mut clients: Vec<Box<dyn NukeService>> = Vec::new();
 
         if config.ec2.enabled {
@@ -76,7 +73,7 @@ impl AwsClient {
             clients,
             pricing_client,
             ce_client,
-            profile_name: profile_name.map(|s| s.into())
+            profile_name: profile_name.map(|s| s.into()),
         })
     }
 

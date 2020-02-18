@@ -1,5 +1,6 @@
 use {
     crate::aws::cloudwatch::CwClient,
+    crate::aws::Result,
     crate::config::AuroraConfig,
     crate::config::TargetState,
     crate::error::Error as AwsError,
@@ -13,8 +14,6 @@ use {
         StopDBClusterMessage, Tag,
     },
 };
-
-type Result<T, E = AwsError> = std::result::Result<T, E>;
 
 pub struct AuroraNukeClient {
     pub client: RdsClient,
@@ -383,7 +382,9 @@ impl NukeService for AuroraNukeClient {
 
         match self.config.target_state {
             TargetState::Stopped => Ok(self.stop_clusters(&cluster_ids)?),
-            TargetState::Terminated => Ok(self.terminate_clusters(&cluster_ids)?),
+            TargetState::Terminated | TargetState::Deleted => {
+                Ok(self.terminate_clusters(&cluster_ids)?)
+            }
         }
     }
 
