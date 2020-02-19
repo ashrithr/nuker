@@ -4,7 +4,7 @@
 # 1. Environment variables: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
 # 2. AWS credentials file. Usually located at ~/.aws/credentials.
 # 3. IAM instance profile
-profile = "default"
+# profile = "default"
 
 # Which regions to enfoce the rules in. If its empty, the rules will be enforced
 # in all regions
@@ -12,7 +12,7 @@ regions = ["us-east-1", "us-east-2", "us-west-1", "us-west-2"]
 
 # Whether to enable dry-mode, which would not terminate/delete any resources
 # rather it would just print it out
-dry_run = false
+dry_run = true
 
 # Whether to print the AWS Usage Report by account and service breakdown
 print_usage = false
