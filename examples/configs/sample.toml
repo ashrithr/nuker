@@ -8,11 +8,11 @@ profile = "default"
 
 # Which regions to enfoce the rules in. If its empty, the rules will be enforced
 # in all regions
-regions = ["us-east-1"]
+regions = ["us-east-1", "us-east-2", "us-west-1", "us-west-2"]
 
 # Whether to enable dry-mode, which would not terminate/delete any resources
 # rather it would just print it out
-dry_run = true
+dry_run = false
 
 # Whether to print the AWS Usage Report by account and service breakdown
 print_usage = false

@@ -281,12 +281,14 @@ impl Ec2NukeClient {
         }
 
         if !self.dry_run {
-            self.client
-                .terminate_instances(TerminateInstancesRequest {
-                    instance_ids: instance_ids.to_owned(),
-                    ..Default::default()
-                })
-                .sync()?;
+            if !instance_ids.is_empty() {
+                self.client
+                    .terminate_instances(TerminateInstancesRequest {
+                        instance_ids: instance_ids.to_owned(),
+                        ..Default::default()
+                    })
+                    .sync()?;
+            }
         }
 
         Ok(())
@@ -296,13 +298,15 @@ impl Ec2NukeClient {
         debug!("Stopping instances: {:?}", instance_ids);
 
         if !self.dry_run {
-            self.client
-                .stop_instances(StopInstancesRequest {
-                    instance_ids: instance_ids.to_owned(),
-                    force: Some(true),
-                    ..Default::default()
-                })
-                .sync()?;
+            if !instance_ids.is_empty() {
+                self.client
+                    .stop_instances(StopInstancesRequest {
+                        instance_ids: instance_ids.to_owned(),
+                        force: Some(true),
+                        ..Default::default()
+                    })
+                    .sync()?;
+            }
         }
 
         Ok(())
