@@ -4,8 +4,8 @@ version = "0.1.0"
 authors = ["Ashrith Mekala <ashrith@cloudwick.com>"]
 edition = "2018"
 
-[[bin]]
-name = "aws-nuke"
+# [[bin]]
+# name = "aws-nuke"
 
 [dependencies]
 ansi_term = "0.12"
