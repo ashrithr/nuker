@@ -33,7 +33,7 @@ impl CwClient {
             Ok(CwClient {
                 client: CloudWatchClient::new(region),
                 idle_rules,
-            })            
+            })
         }
     }
 
@@ -150,6 +150,41 @@ impl CwClient {
                 "DBClusterIdentifier".to_string(),
                 cluster_identifier.to_string(),
                 "AWS/RDS".to_string(),
+                "DatabaseConnections".to_string(),
+            )?
+            .datapoints
+            .unwrap_or_default();
+
+        trace!("Datapoints used for comparison: {:?}", metrics);
+
+        Ok(metrics.iter().any(|metric| {
+            metric.maximum.unwrap_or_default()
+                > self.idle_rules.connections.unwrap_or_default() as f64
+        }))
+    }
+
+    pub fn filter_rs_cluster_by_utilization(&self, cluster_id: &String) -> Result<bool> {
+        let metrics = self
+            .get_metric_statistics_maximum(
+                "ClusterIdentifier".to_string(),
+                cluster_id.to_string(),
+                "AWS/Redshift".to_string(),
+                "CPUUtilization".to_string(),
+            )?
+            .datapoints
+            .unwrap_or_default();
+
+        Ok(metrics.iter().any(|metric| {
+            metric.maximum.unwrap_or_default() > self.idle_rules.min_utilization as f64
+        }))
+    }
+
+    pub fn filter_rs_cluster_by_connections(&self, cluster_id: &String) -> Result<bool> {
+        let metrics = self
+            .get_metric_statistics_maximum(
+                "ClusterIdentifier".to_string(),
+                cluster_id.to_string(),
+                "AWS/Redshift".to_string(),
                 "DatabaseConnections".to_string(),
             )?
             .datapoints

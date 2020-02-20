@@ -76,8 +76,6 @@ impl AuroraNukeClient {
                     state: cluster.status.clone(),
                 });
             }
-
-            std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
         Ok(resources)
@@ -108,8 +106,6 @@ impl AuroraNukeClient {
             } else {
                 next_token = result.marker;
             }
-
-            std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
         if !self.config.ignore.is_empty() {
@@ -309,8 +305,6 @@ impl AuroraNukeClient {
                         db_cluster_identifier: cluster_id.to_owned(),
                     })
                     .sync()?;
-
-                std::thread::sleep(std::time::Duration::from_millis(50));
             }
         }
 
@@ -334,8 +328,6 @@ impl AuroraNukeClient {
                         ..Default::default()
                     })
                     .sync()?;
-
-                std::thread::sleep(std::time::Duration::from_millis(50));
             }
         }
 

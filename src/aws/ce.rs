@@ -78,8 +78,6 @@ impl CeClient {
             } else {
                 next_token = result.next_page_token;
             }
-
-            std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
         table.add_row(row![

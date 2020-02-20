@@ -4,6 +4,7 @@ mod cloudwatch;
 mod ec2;
 mod pricing;
 mod rds;
+mod redshift;
 mod s3;
 
 use {
@@ -16,6 +17,7 @@ use {
     log::{error, info},
     pricing::PriceClient,
     rds::RdsNukeClient,
+    redshift::RedshiftNukeClient,
     rusoto_core::Region,
     s3::S3NukeClient,
 };
@@ -66,6 +68,15 @@ impl AwsClient {
                 profile_name,
                 region.clone(),
                 config.s3.clone(),
+                config.dry_run,
+            )?))
+        }
+
+        if config.redshift.enabled {
+            clients.push(Box::new(RedshiftNukeClient::new(
+                profile_name,
+                region.clone(),
+                config.redshift.clone(),
                 config.dry_run,
             )?))
         }
@@ -128,6 +139,10 @@ impl AwsClient {
             .iter()
             .filter(|r| r.resource_type.is_s3())
             .collect();
+        let redshift_resources: Vec<&Resource> = resources
+            .iter()
+            .filter(|r| r.resource_type.is_redshift())
+            .collect();
 
         for client in &self.clients {
             let ref_client = client.as_any();
@@ -147,6 +162,12 @@ impl AwsClient {
             } else if ref_client.is::<S3NukeClient>() {
                 info!("Triggering cleanup of S3 resources: {:?}", s3_resources);
                 client.cleanup(s3_resources.to_owned())?;
+            } else if ref_client.is::<RedshiftNukeClient>() {
+                info!(
+                    "Triggering cleanup of Redshift resources: {:?}",
+                    redshift_resources
+                );
+                client.cleanup(redshift_resources.to_owned())?;
             }
         }
 

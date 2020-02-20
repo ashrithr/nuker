@@ -15,6 +15,7 @@ use {
         DescribeDBInstancesError, ListTagsForResourceError, ModifyDBClusterError,
         ModifyDBInstanceError, StopDBClusterError, StopDBInstanceError,
     },
+    rusoto_redshift::{DeleteClusterError, DescribeClustersError},
     rusoto_s3::{
         DeleteBucketError, DeleteObjectsError, GetBucketTaggingError, ListBucketsError,
         ListObjectVersionsError, ListObjectsV2Error,
@@ -55,6 +56,10 @@ pub enum Error {
     InstanceAttributeDescribe {
         error: RusotoError<DescribeInstanceAttributeError>,
     },
+    #[fail(display = "Issue describing Redshift Clusters: {}", error)]
+    RedshiftClusterDescribe {
+        error: RusotoError<DescribeClustersError>,
+    },
     #[fail(display = "Issue modifying Instance attribute: {}", error)]
     InstanceAttributeModify {
         error: RusotoError<ModifyInstanceAttributeError>,
@@ -90,6 +95,10 @@ pub enum Error {
     #[fail(display = "Failed deleting DB cluster: {}", error)]
     DeleteDBCluster {
         error: RusotoError<DeleteDBClusterError>,
+    },
+    #[fail(display = "Failed deleting Redshift cluster: {}", error)]
+    DeleteRedshiftCluster {
+        error: RusotoError<DeleteClusterError>,
     },
     #[fail(display = "Issue describing Buckets: {}", error)]
     DescribeS3Buckets {

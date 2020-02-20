@@ -120,8 +120,6 @@ impl PriceClient {
             } else {
                 next_token = result.next_token;
             }
-
-            std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
         Ok(services)
@@ -192,8 +190,6 @@ impl PriceClient {
                 next_token = result.next_token.clone();
                 pages.push(result);
             }
-
-            std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
         let mut products: Vec<Value> = Vec::new();
@@ -240,8 +236,6 @@ impl PriceClient {
             }
 
             pages.push(result);
-
-            std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
         Ok(pages)

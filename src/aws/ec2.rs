@@ -135,8 +135,6 @@ impl Ec2NukeClient {
             } else {
                 next_token = result.next_token;
             }
-
-            std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
         if !self.config.ignore.is_empty() {
@@ -275,8 +273,6 @@ impl Ec2NukeClient {
         if self.config.termination_protection.ignore {
             for instance_id in instance_ids {
                 self.disable_termination_protection(instance_id)?;
-
-                std::thread::sleep(std::time::Duration::from_millis(50));
             }
         }
 
@@ -340,8 +336,6 @@ impl Ec2NukeClient {
             } else {
                 next_token = result.next_token;
             }
-
-            std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
         Ok(volumes)
@@ -355,8 +349,6 @@ impl Ec2NukeClient {
                 volume_id: volume_id.to_owned(),
                 ..Default::default()
             });
-
-            std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
         Ok(())
@@ -400,8 +392,6 @@ impl Ec2NukeClient {
             } else {
                 next_token = result.next_token;
             }
-
-            std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
         Ok(security_groups)

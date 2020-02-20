@@ -21,6 +21,7 @@ pub struct Config {
     pub rds: RdsConfig,
     pub aurora: AuroraConfig,
     pub s3: S3Config,
+    pub redshift: RedshiftConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -99,6 +100,16 @@ pub struct AuroraConfig {
     pub ignore: Vec<String>,
     pub idle_rules: IdleRules,
     pub termination_protection: TerminationProtection,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct RedshiftConfig {
+    pub enabled: bool,
+    pub target_state: TargetState,
+    pub required_tags: Vec<String>,
+    pub allowed_instance_types: Vec<String>,
+    pub ignore: Vec<String>,
+    pub idle_rules: IdleRules,
 }
 
 #[derive(Debug, Deserialize, Clone)]

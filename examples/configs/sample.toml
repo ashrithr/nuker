@@ -4,7 +4,7 @@
 # 1. Environment variables: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
 # 2. AWS credentials file. Usually located at ~/.aws/credentials.
 # 3. IAM instance profile
-# profile = "default"
+profile = "default"
 
 # Which regions to enfoce the rules in. If its empty, the rules will be enforced
 # in all regions
@@ -132,27 +132,40 @@ ignore = []
     [aurora.termination_protection]
     ignore = true
 
+[redshift]
+# Specifies whether Redshift enforcement is enabled or not
+enabled = true
+# State to enfoce, if any of the following conditions are not met. Possible
+# states are: 'Stopped' and 'Terminated'. Redshift does not have a stop option
+# so instead the DB will be terminated with a snapshot taken which will be valid
+# for 7 days.
+target_state = "Stopped"
+# Defines required tags on each instance.
+required_tags = ["Name", "Email", "Purpose"]
+# Defines which instance types are allowed, empty means allow any types
+allowed_instance_types = []
+# The following resources will be ignored from rule enforcement
+# ignore = ["db_cluster_identifier-1", "db_cluster_identifier-2"]
+ignore = []
+
+    # Defines CPU utilization rules, the default is if the average CPU
+    # utilization for 1 day, each data point aggeregated over 1 hour window,
+    # is less than 0.5% then the instance will be enforced to its defined
+    # target state
+    # Note: 'metric_granularity' max value is 86400 seconds and 'cpu_duration'
+    # max value is 2 weeks without CloudWatch detailed monitoring enabled
+    [redshift.idle_rules]
+    enabled = true
+    min_utilization = 10
+    min_duration = "1 day"
+    granularity = "1 hour"
+    connections = 50
+
 [s3]
 enabled = false
 target_state = "Deleted"
 required_naming_prefix = "cw-"
 ignore = []
-
-# [redshift]
-# enabled = false
-# target_state = "Stopped"
-#
-#     [redshift.idle]
-#     enabled = true
-#
-#     # The average number of database connections has been less than 1 for the
-#     # last 7 days. The total number of ReadIOPS and WriteIOPS recorded per day
-#     # for the last 7 days has been less than 20 on average.
-#     [redshift.idle.rules]
-#     connections = 1
-#     read_ops = 20
-#     write_ops = 20
-#     duration = "7 days"
 
 # [elasticsearch]
 # enabled = false

@@ -105,8 +105,6 @@ impl S3NukeClient {
             } else {
                 next_token = result.next_continuation_token;
             }
-
-            std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
         Ok(())
@@ -154,8 +152,6 @@ impl S3NukeClient {
                 next_key_token = result.next_key_marker;
                 next_version_token = result.next_version_id_marker;
             }
-
-            std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
         Ok(())
