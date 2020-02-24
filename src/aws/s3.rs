@@ -1,6 +1,6 @@
 use crate::aws::Result;
-use crate::config::{S3Config, TargetState};
-use crate::service::{NTag, NukeService, Resource, ResourceType};
+use crate::config::S3Config;
+use crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType};
 use log::debug;
 use rusoto_core::HttpClient;
 use rusoto_core::Region;
@@ -13,6 +13,7 @@ use rusoto_s3::{
 pub struct S3NukeClient {
     client: S3Client,
     config: S3Config,
+    region: Region,
     dry_run: bool,
 }
 
@@ -30,40 +31,56 @@ impl S3NukeClient {
             Ok(S3NukeClient {
                 client: S3Client::new_with(HttpClient::new()?, pp, region.clone()),
                 config,
+                region,
                 dry_run,
             })
         } else {
             Ok(S3NukeClient {
                 client: S3Client::new(region.clone()),
                 config,
+                region,
                 dry_run,
             })
         }
     }
 
-    fn get_buckets(&self) -> Result<Vec<Bucket>> {
-        let result = self.client.list_buckets().sync()?;
-        let mut buckets = result.buckets.unwrap_or_default();
+    fn package_buckets_as_resources(&self, buckets: Vec<Bucket>) -> Vec<Resource> {
+        let mut resources: Vec<Resource> = Vec::new();
 
-        if !self.config.ignore.is_empty() {
-            debug!("Ignoring the S3 buckets: {:?}", self.config.ignore);
-            buckets.retain(|b| !self.config.ignore.contains(&b.name.clone().unwrap()))
+        for bucket in buckets {
+            let bucket_id = bucket.name.unwrap();
+
+            let enforcement_state: EnforcementState = {
+                if self.config.ignore.contains(&bucket_id) {
+                    EnforcementState::SkipConfig
+                } else if self.resource_prefix_does_not_match(&bucket_id) {
+                    EnforcementState::Delete
+                } else {
+                    EnforcementState::Skip
+                }
+            };
+
+            resources.push(Resource {
+                id: bucket_id.clone(),
+                region: self.region.clone(),
+                resource_type: ResourceType::S3Bucket,
+                tags: self.package_tags_as_ntags(self.get_tags_for_bucket(&bucket_id)),
+                state: Some("Available".to_string()),
+                enforcement_state,
+            })
         }
 
-        Ok(buckets)
+        resources
     }
 
-    fn filter_by_name_prefix(&self, buckets: Vec<Bucket>) -> Vec<Bucket> {
-        buckets
-            .iter()
-            .filter(|b| {
-                !b.name
-                    .as_ref()
-                    .unwrap()
-                    .starts_with(&self.config.required_naming_prefix)
-            })
-            .cloned()
-            .collect::<Vec<Bucket>>()
+    fn resource_prefix_does_not_match(&self, bucket_id: &str) -> bool {
+        bucket_id.starts_with(&self.config.required_naming_prefix)
+    }
+
+    fn get_buckets(&self) -> Result<Vec<Bucket>> {
+        let result = self.client.list_buckets().sync()?;
+
+        Ok(result.buckets.unwrap_or_default())
     }
 
     fn delete_objects_in_bucket(&self, bucket: &str) -> Result<()> {
@@ -200,47 +217,23 @@ impl S3NukeClient {
                 .collect()
         })
     }
-
-    fn package_buckets_as_resources(&self, buckets: Vec<Bucket>) -> Vec<Resource> {
-        buckets
-            .into_iter()
-            .map(|b: Bucket| Resource {
-                id: b.name.clone().unwrap(),
-                resource_type: ResourceType::S3,
-                tags: self.package_tags_as_ntags(
-                    self.get_tags_for_bucket(b.name.clone().unwrap().as_ref()),
-                ),
-                state: Some("Available".to_string()),
-            })
-            .collect()
-    }
 }
 
 impl NukeService for S3NukeClient {
     fn scan(&self) -> Result<Vec<Resource>> {
         let buckets = self.get_buckets()?;
-        let filtered_buckets = self.filter_by_name_prefix(buckets);
-
-        debug!("Buckets filtered by naming: {:?}", filtered_buckets);
-
-        Ok(self.package_buckets_as_resources(filtered_buckets))
+        Ok(self.package_buckets_as_resources(buckets))
     }
 
-    fn cleanup(&self, resources: Vec<&Resource>) -> Result<()> {
-        for resource in resources {
-            match self.config.target_state {
-                TargetState::Deleted => self.delete_bucket(&resource.id)?,
-                _ => debug!(
-                    "Unknown target state of bucket. Ignoring the bucket: {:?}",
-                    resource.id
-                ),
-            }
-        }
-
-        Ok(())
+    fn stop(&self, resource: &Resource) -> Result<()> {
+        self.delete_bucket(&resource.id)
     }
 
-    fn as_any(&self) -> &dyn ::std::any::Any {
+    fn delete(&self, resource: &Resource) -> Result<()> {
+        self.delete_bucket(&resource.id)
+    }
+
+    fn as_any(&self) -> &dyn::std::any::Any {
         self
     }
 }

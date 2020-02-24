@@ -4,17 +4,14 @@ version = "0.1.0"
 authors = ["Ashrith Mekala <ashrith@cloudwick.com>"]
 edition = "2018"
 
-# [[bin]]
-# name = "aws-nuke"
-
 [dependencies]
-ansi_term = "0.12"
 chrono = "0.4"
 clap = "2.33"
-derive_more = "0.15.0"
+colored = "1.9"
+derive_more = "0.99.3"
 failure = "0.1.6"
 failure_derive = "0.1.6"
-fern = "0.5"
+fern = { version = "0.5", features = ["colored"] }
 humantime = "2.0.0"
 humantime-serde = "1.0.0"
 lazy_static = "1.4.0"

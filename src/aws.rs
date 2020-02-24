@@ -1,8 +1,8 @@
 mod aurora;
 mod ce;
 mod cloudwatch;
+mod ebs;
 mod ec2;
-mod pricing;
 mod rds;
 mod redshift;
 mod s3;
@@ -14,8 +14,7 @@ use {
     aurora::AuroraNukeClient,
     ce::CeClient,
     ec2::Ec2NukeClient,
-    log::{error, info},
-    pricing::PriceClient,
+    log::error,
     rds::RdsNukeClient,
     redshift::RedshiftNukeClient,
     rusoto_core::Region,
@@ -27,7 +26,6 @@ type Result<T, E = AwsError> = std::result::Result<T, E>;
 pub struct AwsClient {
     pub region: Region,
     clients: Vec<Box<dyn NukeService>>,
-    pricing_client: PriceClient,
     ce_client: Option<CeClient>,
     profile_name: Option<String>,
 }
@@ -87,12 +85,9 @@ impl AwsClient {
             None
         };
 
-        let pricing_client = PriceClient::new(profile_name)?;
-
         Ok(AwsClient {
             region,
             clients,
-            pricing_client,
             ce_client,
             profile_name: profile_name.map(|s| s.into()),
         })
@@ -122,7 +117,7 @@ impl AwsClient {
         Ok(resources)
     }
 
-    pub fn cleanup_resources(&self, resources: &Vec<Resource>) -> Result<()> {
+    pub fn cleanup_resources(&self, resources: &[Resource]) -> Result<()> {
         let ec2_resources: Vec<&Resource> = resources
             .iter()
             .filter(|r| r.resource_type.is_ec2())
@@ -148,34 +143,17 @@ impl AwsClient {
             let ref_client = client.as_any();
 
             if ref_client.is::<Ec2NukeClient>() {
-                info!("Triggering cleanup of EC2 resources: {:?}", ec2_resources);
-                client.cleanup(ec2_resources.to_owned())?;
+                client.cleanup(&ec2_resources)?;
             } else if ref_client.is::<RdsNukeClient>() {
-                info!("Triggering cleanup of RDS resources: {:?}", rds_resources);
-                client.cleanup(rds_resources.to_owned())?;
+                client.cleanup(&rds_resources)?;
             } else if ref_client.is::<AuroraNukeClient>() {
-                info!(
-                    "Triggering cleanup of Aurora resources: {:?}",
-                    aurora_resources
-                );
-                client.cleanup(aurora_resources.to_owned())?;
+                client.cleanup(&aurora_resources)?;
             } else if ref_client.is::<S3NukeClient>() {
-                info!("Triggering cleanup of S3 resources: {:?}", s3_resources);
-                client.cleanup(s3_resources.to_owned())?;
+                client.cleanup(&s3_resources)?;
             } else if ref_client.is::<RedshiftNukeClient>() {
-                info!(
-                    "Triggering cleanup of Redshift resources: {:?}",
-                    redshift_resources
-                );
-                client.cleanup(redshift_resources.to_owned())?;
+                client.cleanup(&redshift_resources)?;
             }
         }
-
-        Ok(())
-    }
-
-    pub fn print_savings(&self, _resources: &Vec<Resource>) -> Result<()> {
-        self.pricing_client.get_ec2_pricing()?;
 
         Ok(())
     }

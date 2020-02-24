@@ -1,6 +1,6 @@
 use {
     crate::{aws::AwsClient, config::Config, error::Error as AwsError},
-    ansi_term::Color::{Cyan, Yellow},
+    colored::*,
     log::{error, info},
     rusoto_core::Region,
     std::str::FromStr,
@@ -21,9 +21,9 @@ impl Nuke {
         let mut clients: Vec<AwsClient> = Vec::new();
 
         if self.config.dry_run {
-            info!("{}", Cyan.paint("DRY RUN ENABLED"));
+            info!("{}", "DRY RUN ENABLED".blue().bold());
         } else {
-            info!("{}", Yellow.paint("DRY RUN DISABLED"));
+            info!("{}", "DRY RUN DISABLED".yellow().bold());
         }
 
         for region in &self.config.regions {
@@ -34,19 +34,21 @@ impl Nuke {
                     clients.push(client);
                 }
                 Err(err) => {
-                    error!("initializing AWS Client for profile: {:?}.\n{}", profile, err);
+                    error!(
+                        "initializing AWS Client for profile: {:?}.\n{}",
+                        profile, err
+                    );
                 }
             }
         }
 
         for client in clients {
-            info!("REGION: {}", Cyan.paint(client.region.name()));
+            info!("REGION: {}", client.region.name().blue().bold());
 
             client.print_usage()?;
             let resources = client.locate_resources()?;
-            client.cleanup_resources(&resources)?;
-            // TODO:
-            // client.print_savings(&resources)?;
+
+            client.cleanup_resources(&resources[..])?;
         }
 
         Ok(())

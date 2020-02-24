@@ -1,8 +1,19 @@
 use aws_nuke::{config, nuke};
-use {chrono::Utc, fern, log::debug};
+use fern;
+use fern::colors::{Color, ColoredLevelConfig};
+use log::debug;
 fn main() {
     let (verbose, config_path) = config::parse_args();
+    let config = config::parse_config_file(&config_path);
 
+    setup_logging(verbose);
+
+    debug!("{:?}", config);
+
+    nuke::Nuke::new(config).run().unwrap()
+}
+
+fn setup_logging(verbose: u64) {
     let level = match verbose {
         0 => log::LevelFilter::Error,
         1 => log::LevelFilter::Warn,
@@ -11,15 +22,26 @@ fn main() {
         _ => log::LevelFilter::Trace,
     };
 
+    let colors_line = ColoredLevelConfig::new()
+        .error(Color::Red)
+        .warn(Color::Yellow)
+        .debug(Color::BrightBlack)
+        .trace(Color::BrightBlack);
+
+    let colors_level = colors_line.clone().info(Color::Blue);
+
     fern::Dispatch::new()
-        .format(|out, message, record| {
+        .format(move |out, message, record| {
             out.finish(format_args!(
-                "[{}][{}][{}][{}] {}",
-                record.module_path().unwrap(),
-                record.line().unwrap(),
-                Utc::now().to_rfc3339(),
-                record.level(),
-                message
+                "{color_line}[{date}][{target}][{level}{color_line}] {message}\x1B[0m",
+                color_line = format_args!(
+                    "\x1B[{}m",
+                    colors_line.get_color(&record.level()).to_fg_str()
+                ),
+                date = chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                target = record.target(),
+                level = colors_level.color(record.level()),
+                message = message,
             ))
         })
         .level(level)
@@ -35,9 +57,5 @@ fn main() {
         .apply()
         .expect("could not set up logging");
 
-    let config = config::parse_config_file(&config_path);
-
-    debug!("{:?}", config);
-
-    nuke::Nuke::new(config).run().unwrap()
+    debug!("finished setting up logging!");
 }

@@ -2,7 +2,7 @@ use {
     crate::error::Error as AwsError,
     chrono::prelude::*,
     chrono::Duration,
-    prettytable::{cell, row, Cell, Row, Table},
+    prettytable::{cell, row, Table},
     rusoto_ce::{
         CostExplorer, CostExplorerClient, DateInterval, GetCostAndUsageRequest,
         GetCostAndUsageResponse, GroupDefinition, MetricValue, ResultByTime,

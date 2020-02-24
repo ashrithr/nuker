@@ -7,6 +7,18 @@ use std::time::Duration;
 
 const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
+/// Cli Args
+#[derive(Debug, Clone)]
+pub struct Args {
+    config: String,
+    profile: Option<String>,
+    access_key_id: Option<String>,
+    secret_access_key: Option<String>,
+    session_token: Option<String>,
+    dry_run: bool,
+    verbose: u64,
+}
+
 /// Configuration struct for aws-nuke executable
 ///
 /// This struct is built from reading the configuration file
@@ -24,10 +36,9 @@ pub struct Config {
     pub redshift: RedshiftConfig,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Eq, PartialEq)]
 pub enum TargetState {
     Stopped,
-    Terminated,
     Deleted,
 }
 
