@@ -25,6 +25,7 @@ pub struct Config {
     pub print_usage: bool,
     pub usage_days: i64,
     pub ec2: Ec2Config,
+    pub ebs: EbsConfig,
     pub rds: RdsConfig,
     pub aurora: AuroraConfig,
     pub s3: S3Config,
@@ -60,11 +61,6 @@ pub struct TerminationProtection {
     pub ignore: bool,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct EbsCleanup {
-    pub enabled: bool,
-}
-
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct SecurityGroups {
     pub enabled: bool,
@@ -82,8 +78,14 @@ pub struct Ec2Config {
     pub ignore: Vec<String>,
     pub idle_rules: IdleRules,
     pub termination_protection: TerminationProtection,
-    pub ebs_cleanup: EbsCleanup,
     pub security_groups: SecurityGroups,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct EbsConfig {
+    pub enabled: bool,
+    pub target_state: TargetState,
+    pub ignore: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -142,29 +144,31 @@ pub fn parse_args() -> Args {
         .arg(
             Arg::with_name("region")
                 .long("region")
-                .help("Which regions to enfoce the rules in. Default is the rules will be \
-                    enforced across all the regions.")
+                .help(
+                    "Which regions to enforce the rules in. Default is the rules will be \
+                    enforced across all the regions.",
+                )
                 .takes_value(true)
                 .multiple(true)
-                .number_of_values(1)
+                .number_of_values(1),
         )
         .arg(
             Arg::with_name("profile")
                 .long("profile")
-                .help("Named Profile to use for authenticating with AWS. If the profile is \
+                .help(
+                    "Named Profile to use for authenticating with AWS. If the profile is \
                     *not* set, the credentials will be sourced in the following order: \n\
                     1. Environment variables: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY \n\
                     2. AWS credentials file. Usually located at ~/.aws/credentials.\n\
-                    3. IAM instance profile")
-                .takes_value(true)
+                    3. IAM instance profile",
+                )
+                .takes_value(true),
         )
-        .arg(
-            Arg::with_name("no-dry-run")
-                .long("no-dry-run")
-                .help("Disables the dry run behavior, which just lists the resources that are \
+        .arg(Arg::with_name("no-dry-run").long("no-dry-run").help(
+            "Disables the dry run behavior, which just lists the resources that are \
                     being cleaned but not actually delete them. Enabling this option will disable \
-                    dry run behaviour and deletes the resources.")
-        )
+                    dry run behaviour and deletes the resources.",
+        ))
         .arg(
             Arg::with_name("verbose")
                 .short("v")
@@ -172,7 +176,6 @@ pub fn parse_args() -> Args {
                 .help("Turn on verbose output."),
         )
         .get_matches();
-
 
     let verbose = if args.is_present("verbose") {
         args.occurrences_of("verbose")

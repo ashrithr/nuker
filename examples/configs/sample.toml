@@ -38,10 +38,6 @@ ignore = []
     [ec2.termination_protection]
     ignore = true
 
-    # Defines if detached EBS volumes have to be cleaned up
-    [ec2.ebs_cleanup]
-    enabled = true
-
     # Identify resources that are using Security Groups based on the following
     # rules.
     [ec2.security_groups]
@@ -49,6 +45,15 @@ ignore = []
     from_port = 0
     to_port = 65535
     source_cidr = [ "0.0.0.0/0" ]
+
+[ebs]
+# Specifies whether to clean up Volumes that are detached and not being used
+enabled = true
+# State to enfore. Possible states are 'Deleted'
+target_state = "Deleted"
+# The following volumes will be ignored from rules enforcement
+# ignore = ["vol-identifier-1", ...]
+ignore = []
 
 [rds]
 # Specifies whether RDS enforcement is enabled or not

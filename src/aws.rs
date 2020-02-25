@@ -7,6 +7,7 @@ mod rds;
 mod redshift;
 mod s3;
 
+use crate::aws::ebs::EbsNukeClient;
 use {
     crate::config::Config,
     crate::error::Error as AwsError,
@@ -31,7 +32,12 @@ pub struct AwsClient {
 }
 
 impl AwsClient {
-    pub fn new(profile_name: Option<&str>, region: Region, config: &Config, dry_run: bool) -> Result<AwsClient> {
+    pub fn new(
+        profile_name: Option<&str>,
+        region: Region,
+        config: &Config,
+        dry_run: bool,
+    ) -> Result<AwsClient> {
         let mut clients: Vec<Box<dyn NukeService>> = Vec::new();
 
         if config.ec2.enabled {
@@ -79,6 +85,15 @@ impl AwsClient {
             )?))
         }
 
+        if config.ebs.enabled {
+            clients.push(Box::new(EbsNukeClient::new(
+                profile_name,
+                region.clone(),
+                config.ebs.clone(),
+                dry_run,
+            )?))
+        }
+
         let ce_client = if config.print_usage {
             Some(CeClient::new(profile_name, config.usage_days)?)
         } else {
@@ -122,6 +137,10 @@ impl AwsClient {
             .iter()
             .filter(|r| r.resource_type.is_ec2())
             .collect();
+        let ebs_resources: Vec<&Resource> = resources
+            .iter()
+            .filter(|r| r.resource_type.is_volume())
+            .collect();
         let rds_resources: Vec<&Resource> = resources
             .iter()
             .filter(|r| r.resource_type.is_rds())
@@ -144,6 +163,8 @@ impl AwsClient {
 
             if ref_client.is::<Ec2NukeClient>() {
                 client.cleanup(&ec2_resources)?;
+            } else if ref_client.is::<EbsNukeClient>() {
+                client.cleanup(&ebs_resources)?;
             } else if ref_client.is::<RdsNukeClient>() {
                 client.cleanup(&rds_resources)?;
             } else if ref_client.is::<AuroraNukeClient>() {
