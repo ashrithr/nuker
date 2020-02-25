@@ -2,7 +2,7 @@ use crate::aws::cloudwatch::CwClient;
 use crate::aws::Result;
 use crate::config::EmrConfig;
 use crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType};
-use log::{debug, trace};
+use log::{debug, trace, warn};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_ec2::{DescribeSecurityGroupsRequest, Ec2, Ec2Client, Filter};
@@ -234,15 +234,23 @@ impl EmrNukeClient {
 
             if let Some(cs) = result.clusters {
                 for c in cs {
-                    let result = self
+                    // TODO: https://github.com/rusoto/rusoto/issues/1266
+
+                    match self
                         .client
                         .describe_cluster(DescribeClusterInput {
                             cluster_id: c.id.unwrap_or_default(),
                         })
-                        .sync()?;
-
-                    if let Some(cluster) = result.cluster {
-                        clusters.push(cluster);
+                        .sync()
+                    {
+                        Ok(result) => {
+                            if let Some(cluster) = result.cluster {
+                                clusters.push(cluster);
+                            }
+                        },
+                        Err(e) => {
+                            warn!("Failed 'describe-cluster'. Err: {:?}", e);
+                        }
                     }
                 }
             }
