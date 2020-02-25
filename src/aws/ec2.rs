@@ -366,7 +366,6 @@ mod tests {
             ignore: vec![],
             idle_rules: IdleRules::default(),
             termination_protection: TerminationProtection { ignore: true },
-            ebs_cleanup: EbsCleanup { enabled: false },
             security_groups: SecurityGroups::default(),
         }
     }

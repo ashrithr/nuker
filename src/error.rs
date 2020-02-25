@@ -9,6 +9,10 @@ use {
         DescribeVolumesError, ModifyInstanceAttributeError, StopInstancesError,
         TerminateInstancesError,
     },
+    rusoto_emr::{
+        DescribeClusterError, ListClustersError, ListInstancesError, SetTerminationProtectionError,
+        TerminateJobFlowsError,
+    },
     rusoto_pricing::{DescribeServicesError, GetProductsError},
     rusoto_rds::{
         DeleteDBClusterError, DeleteDBInstanceError, DescribeDBClustersError,
@@ -55,6 +59,26 @@ pub enum Error {
     #[fail(display = "Issue describing Instance attribute: {}", error)]
     InstanceAttributeDescribe {
         error: RusotoError<DescribeInstanceAttributeError>,
+    },
+    #[fail(display = "Issue describing EMR Clusters: {}", error)]
+    EmrClustersDescribe {
+        error: RusotoError<ListClustersError>,
+    },
+    #[fail(display = "Issue describing EMR Cluster: {}", error)]
+    EmrClusterDescribe {
+        error: RusotoError<DescribeClusterError>,
+    },
+    #[fail(display = "Issue describing EMR Instances: {}", error)]
+    EmrInstancesDescribe {
+        error: RusotoError<ListInstancesError>,
+    },
+    #[fail(display = "Issue setting EMR Termination Protection: {}", error)]
+    EmrTerminationProtection {
+        error: RusotoError<SetTerminationProtectionError>,
+    },
+    #[fail(display = "Issue terminating EMR clusters: {}", error)]
+    EmrTerminateClusters {
+        error: RusotoError<TerminateJobFlowsError>,
     },
     #[fail(display = "Issue describing Redshift Clusters: {}", error)]
     RedshiftClusterDescribe {

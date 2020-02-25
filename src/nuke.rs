@@ -1,5 +1,5 @@
 use {
-    crate::{aws::AwsClient, config::Config, config::Args, error::Error as AwsError},
+    crate::{aws::AwsClient, config::Args, config::Config, error::Error as AwsError},
     colored::*,
     log::debug,
     rusoto_core::Region,

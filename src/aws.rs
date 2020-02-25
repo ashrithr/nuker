@@ -3,6 +3,7 @@ mod ce;
 mod cloudwatch;
 mod ebs;
 mod ec2;
+mod emr;
 mod rds;
 mod redshift;
 mod s3;
@@ -15,6 +16,7 @@ use {
     aurora::AuroraNukeClient,
     ce::CeClient,
     ec2::Ec2NukeClient,
+    emr::EmrNukeClient,
     log::error,
     rds::RdsNukeClient,
     redshift::RedshiftNukeClient,
@@ -94,6 +96,15 @@ impl AwsClient {
             )?))
         }
 
+        if config.emr.enabled {
+            clients.push(Box::new(EmrNukeClient::new(
+                profile_name,
+                region.clone(),
+                config.emr.clone(),
+                dry_run,
+            )?))
+        }
+
         let ce_client = if config.print_usage {
             Some(CeClient::new(profile_name, config.usage_days)?)
         } else {
@@ -157,6 +168,10 @@ impl AwsClient {
             .iter()
             .filter(|r| r.resource_type.is_redshift())
             .collect();
+        let emr_resources: Vec<&Resource> = resources
+            .iter()
+            .filter(|r| r.resource_type.is_emr())
+            .collect();
 
         for client in &self.clients {
             let ref_client = client.as_any();
@@ -173,6 +188,8 @@ impl AwsClient {
                 client.cleanup(&s3_resources)?;
             } else if ref_client.is::<RedshiftNukeClient>() {
                 client.cleanup(&redshift_resources)?;
+            } else if ref_client.is::<EmrNukeClient>() {
+                client.cleanup(&emr_resources)?;
             }
         }
 

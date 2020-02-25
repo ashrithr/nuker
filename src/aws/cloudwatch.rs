@@ -181,6 +181,28 @@ impl CwClient {
         Ok(self.filter_metrics_by_connections(metrics))
     }
 
+    /// Uses IsIdle metric to see if the cluster is performing work or not. It is set to 1 if
+    /// no tasks are running and no jobs are running, and set to 0 otherwise. This value is
+    /// checked at five-minute intervals and a value of 1 indicates only that the cluster
+    /// was idle when checked, not that it was idle for the entire five minutes.
+    pub fn filter_emr_by_utilization(&self, cluster_id: &String) -> Result<bool> {
+        let metrics = self
+            .get_metric_statistics_maximum(
+                "JobFlowId".to_string(),
+                cluster_id.to_string(),
+                "AWS/ElasticMapReduce".to_string(),
+                "IsIdle".to_string(),
+            )?
+            .datapoints
+            .unwrap_or_default();
+
+        trace!("Datapoints used for comparison {:?}", metrics);
+
+        Ok(metrics
+            .iter()
+            .all(|metric| metric.maximum.unwrap_or_default() == 1.0))
+    }
+
     fn filter_metrics_by_min_utilization(&self, metrics: Vec<Datapoint>) -> bool {
         metrics.iter().any(|metric| {
             metric.maximum.unwrap_or_default() > self.idle_rules.min_utilization as f64

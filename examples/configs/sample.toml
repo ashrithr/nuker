@@ -6,7 +6,7 @@ usage_days = 1
 # Specifies whether EC2 enforcement is enabled or not
 enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
-# states are: 'Stopped' and 'Terminated'
+# states are: 'Stopped' and 'Deleted'
 target_state = "Stopped"
 # Defines required tags on each instance.
 required_tags = ["Name", "Email", "Purpose"]
@@ -32,12 +32,6 @@ ignore = []
     min_duration = "1 day"
     granularity = "1 hour"
 
-    # Defines whether to acknowledge the teraminate protection, if 'ignore' is
-    # set to 'true' then the utility would ignore the termination protection
-    # flag and would terminate the instances anyway.
-    [ec2.termination_protection]
-    ignore = true
-
     # Identify resources that are using Security Groups based on the following
     # rules.
     [ec2.security_groups]
@@ -45,6 +39,12 @@ ignore = []
     from_port = 0
     to_port = 65535
     source_cidr = [ "0.0.0.0/0" ]
+
+    # Defines whether to acknowledge the teraminate protection, if 'ignore' is
+    # set to 'true' then the utility would ignore the termination protection
+    # flag and would terminate the instances anyway.
+    [ec2.termination_protection]
+    ignore = true
 
 [ebs]
 # Specifies whether to clean up Volumes that are detached and not being used
@@ -59,7 +59,7 @@ ignore = []
 # Specifies whether RDS enforcement is enabled or not
 enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
-# states are: 'Stopped' and 'Terminated'
+# states are: 'Stopped' and 'Deleted'
 target_state = "Stopped"
 # Defines required tags on each instance.
 required_tags = ["Name", "Email", "Purpose"]
@@ -92,7 +92,7 @@ ignore = []
 # Specifies whether RDS-Aurora enforcement is enabled or not
 enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
-# states are: 'Stopped' and 'Terminated'
+# states are: 'Stopped' and 'Deleted'
 target_state = "Stopped"
 # Defines required tags on each instance.
 required_tags = ["Name", "Email", "Purpose"]
@@ -125,7 +125,7 @@ ignore = []
 # Specifies whether Redshift enforcement is enabled or not
 enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
-# states are: 'Stopped' and 'Terminated'. Redshift does not have a stop option
+# states are: 'Stopped' and 'Deleted'. Redshift does not have a stop option
 # so instead the DB will be terminated with a snapshot taken which will be valid
 # for 7 days.
 target_state = "Stopped"
@@ -156,4 +156,45 @@ target_state = "Deleted"
 required_naming_prefix = "cw-"
 ignore = []
 
-# [emr]
+[emr]
+# Specifies whether EMR enforcement is enabled or not
+enabled = true
+# State to enfoce, if any of the following conditions are not met. Possible
+# states are: 'Stopped' and 'Deleted'.
+# Note: EMR does not support Stopping clusters, instead the cluster will be
+# deleted.
+target_state = "Stopped"
+# Defines required tags on each instance.
+required_tags = ["Name", "Email", "Purpose"]
+# Defines which instance types are allowed, empty means allow any types
+allowed_instance_types = []
+# The following resources will be ignored from rule enforcement
+# ignore = ["instance-id1", "instance-id2"]
+ignore = []
+
+    # Identify any EMR instances that appear to be idle based on the following
+    # rules.
+    [emr.idle_rules]
+    # Defines Cluster utilization rules, the default is if the cluster is not
+    # exectuing any tasks over a day.
+    # Note: 'granularity' max value is 86400 seconds and 'min_duration'
+    # max value is 2 weeks without CloudWatch detailed monitoring enabled.
+    #
+    # Defines if idle instances have to be nuked
+    enabled = true
+    min_duration = "1 day"
+    granularity = "1 hour"
+
+    # Identify resources that are using Security Groups based on the following
+    # rules.
+    [emr.security_groups]
+    enabled = true
+    from_port = 0
+    to_port = 65535
+    source_cidr = [ "0.0.0.0/0" ]
+
+    # Defines whether to acknowledge the teraminate protection, if 'ignore' is
+    # set to 'true' then the utility would ignore the termination protection
+    # flag and would terminate the instances anyway.
+    [emr.termination_protection]
+    ignore = true

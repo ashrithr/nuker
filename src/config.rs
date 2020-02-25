@@ -29,6 +29,7 @@ pub struct Config {
     pub rds: RdsConfig,
     pub aurora: AuroraConfig,
     pub s3: S3Config,
+    pub emr: EmrConfig,
     pub redshift: RedshiftConfig,
 }
 
@@ -86,6 +87,18 @@ pub struct EbsConfig {
     pub enabled: bool,
     pub target_state: TargetState,
     pub ignore: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct EmrConfig {
+    pub enabled: bool,
+    pub target_state: TargetState,
+    pub required_tags: Vec<String>,
+    pub allowed_instance_types: Vec<String>,
+    pub ignore: Vec<String>,
+    pub idle_rules: IdleRules,
+    pub termination_protection: TerminationProtection,
+    pub security_groups: SecurityGroups,
 }
 
 #[derive(Debug, Deserialize, Clone)]

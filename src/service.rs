@@ -14,6 +14,7 @@ pub enum ResourceType {
     Aurora,
     S3Bucket,
     Redshift,
+    EmrCluster,
 }
 
 impl ResourceType {
@@ -62,6 +63,13 @@ impl ResourceType {
     pub fn is_redshift(&self) -> bool {
         match *self {
             ResourceType::Redshift => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_emr(&self) -> bool {
+        match *self {
+            ResourceType::EmrCluster => true,
             _ => false,
         }
     }
