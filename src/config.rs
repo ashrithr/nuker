@@ -42,7 +42,7 @@ pub enum TargetState {
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct IdleRules {
     pub enabled: bool,
-    pub min_utilization: f32,
+    pub min_utilization: Option<f32>,
     #[serde(with = "humantime_serde")]
     pub min_duration: Duration,
     #[serde(with = "humantime_serde")]

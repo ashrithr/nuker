@@ -2,7 +2,7 @@ use crate::aws::cloudwatch::CwClient;
 use crate::aws::Result;
 use crate::config::EmrConfig;
 use crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType};
-use log::debug;
+use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_ec2::{DescribeSecurityGroupsRequest, Ec2, Ec2Client, Filter};
@@ -253,6 +253,8 @@ impl EmrNukeClient {
                 next_token = result.marker;
             }
         }
+
+        trace!("EMR get_clusters: {:?}", clusters);
 
         Ok(clusters)
     }

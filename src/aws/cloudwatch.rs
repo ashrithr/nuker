@@ -205,7 +205,7 @@ impl CwClient {
 
     fn filter_metrics_by_min_utilization(&self, metrics: Vec<Datapoint>) -> bool {
         metrics.iter().any(|metric| {
-            metric.maximum.unwrap_or_default() > self.idle_rules.min_utilization as f64
+            metric.maximum.unwrap_or_default() > self.idle_rules.min_utilization.unwrap_or_default() as f64
         })
     }
 
@@ -247,7 +247,7 @@ mod tests {
             ),
             idle_rules: IdleRules {
                 enabled: true,
-                min_utilization: 0.0,
+                min_utilization: Some(0.0),
                 min_duration: Duration::from_secs(86400),
                 granularity: Duration::from_secs(3600),
                 connections: Some(100),
@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn check_metrics_filter_by_min_utilization_of_10() {
         let mut cw_client = create_client();
-        cw_client.idle_rules.min_utilization = 10.0;
+        cw_client.idle_rules.min_utilization = Some(10.0);
 
         let actual = cw_client.filter_metrics_by_min_utilization(get_metrics_for_min_utilization());
 
@@ -318,7 +318,7 @@ mod tests {
     #[test]
     fn check_metrics_filter_by_min_utilization_of_20() {
         let mut cw_client = create_client();
-        cw_client.idle_rules.min_utilization = 20.0;
+        cw_client.idle_rules.min_utilization = Some(20.0);
 
         let actual = cw_client.filter_metrics_by_min_utilization(get_metrics_for_min_utilization());
 
