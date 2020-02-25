@@ -74,7 +74,7 @@ docker run --rm -it \
 -v "$PWD/examples/configs/sample.toml":/configs/config.toml \
 -e AWS_ACCESS_KEY_ID=REPLACE_WITH_ACCESS_KEY \
 -e AWS_SECRET_ACCESS_KEY=REPLACE_WITH_SECRET_KEY \
-ashrithr/aws-nuke:v0.2.0 \
+ashrithr/aws-nuke:latest \
 --config /configs/config.toml \
 ```
 
@@ -84,7 +84,7 @@ or
 docker run --rm -it \
 -v "$PWD/examples/configs/sample.toml":/configs/config.toml \
 -v "$HOME/.aws":/home/aws-nuke/.aws \
-ashrithr/aws-nuke:v0.2.0 \
+ashrithr/aws-nuke:latest \
 --profile default \
 --config /configs/config.toml \
 ```

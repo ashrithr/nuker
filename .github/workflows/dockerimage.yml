@@ -16,6 +16,8 @@ jobs:
         id: vars
         run: echo ::set-output name=tag::$(echo ${GITHUB_REF:10})
       - name: Build the tagged Docker image
-        run: docker build . --file Dockerfile --tag ashrithr/aws-nuke:${{steps.vars.outputs.tag}}
-      - name: Push the tagged DOcker image
+        run: docker build . --file Dockerfile --tag ashrithr/aws-nuke:${{steps.vars.outputs.tag}} --tag ashrithr/aws-nuke:latest
+      - name: Push the version tagged Docker image
         run: docker push ashrithr/aws-nuke:${{steps.vars.outputs.tag}}
+      - name: Push the latest tagged Docker image
+        run: docker push ashrithr/aws-nuke:latest
