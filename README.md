@@ -9,7 +9,7 @@ Cleans up AWS resources based on configurable Rules. This project is a WIP.
 * EC2
     - Clean up based on Tags
     - Clean up based on Allowed Instance Types
-    - Clean up based on Idle Instances based on CloudWatch metrics
+    - Clean up Idle Instances based on CloudWatch metrics
     - Clean up based on Security Group rules
     - Clean up idle EBS volumes
 * RDS
@@ -19,7 +19,11 @@ Cleans up AWS resources based on configurable Rules. This project is a WIP.
 * RDS Aurora
     - Clean up based on Tags
     - Clean up based on Allowed Instance Types
-    - Clean up based in Idle Instances based on CloudWatch metrics
+    - Clean up Idle Instances based on CloudWatch metrics
+* Redshift
+    - Clean up based on Tags
+    - Clean up based on Allowed Instance Types
+    - Clean up Idle Instances based on Cloudwatch metrics
 * S3
     - Clean up based on bucket naming prefix
 
@@ -44,7 +48,11 @@ cargo build --release
 Once built, run using the following command:
 
 ```
-./target/release/aws-nuke -C config.toml -vvv
+./target/release/aws-nuke --config examples/configs/sample.toml \
+--profile default \
+--region us-east-1 \
+--region us-east-2 \
+-vvv
 ```
 
 To get help:
@@ -62,9 +70,21 @@ docker build -t aws-nuke .
 ```
 
 ```
-docker run \
--v "$PWD/examples/configs":/configs \
+docker run --rm -it \
+-v "$PWD/examples/configs/sample.toml":/configs/config.toml \
 -e AWS_ACCESS_KEY_ID=REPLACE_WITH_ACCESS_KEY \
 -e AWS_SECRET_ACCESS_KEY=REPLACE_WITH_SECRET_KEY \
-aws-nuke -C /configs/sample.toml -vvv
+ashrithr/aws-nuke:v0.2.0 \
+--config /configs/config.toml \
+```
+
+or
+
+```
+docker run --rm -it \
+-v "$PWD/examples/configs/sample.toml":/configs/config.toml \
+-v "$HOME/.aws":/home/aws-nuke/.aws \
+ashrithr/aws-nuke:v0.2.0 \
+--profile default \
+--config /configs/config.toml \
 ```

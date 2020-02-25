@@ -4,7 +4,7 @@ use {
     chrono::{DateTime, TimeZone, Utc},
     log::trace,
     rusoto_cloudwatch::{
-        CloudWatch, CloudWatchClient, Dimension, GetMetricStatisticsInput,
+        CloudWatch, CloudWatchClient, Datapoint, Dimension, GetMetricStatisticsInput,
         GetMetricStatisticsOutput,
     },
     rusoto_core::{HttpClient, Region},
@@ -52,8 +52,8 @@ impl CwClient {
                 name: dimension_name,
                 value: dimension_value,
             }]),
-            namespace: namespace,
-            metric_name: metric_name,
+            namespace,
+            metric_name,
             start_time: self.get_start_time_from_duration(end_time, idle_rules.min_duration),
             end_time: end_time.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
             period: idle_rules.granularity.as_secs() as i64,
@@ -84,9 +84,7 @@ impl CwClient {
 
         trace!("Datapoints used for comparison: {:?}", metrics);
 
-        Ok(metrics.iter().any(|metric| {
-            metric.maximum.unwrap_or_default() > self.idle_rules.min_utilization as f64
-        }))
+        Ok(self.filter_metrics_by_min_utilization(metrics))
     }
 
     pub fn filter_db_instance_by_utilization(&self, instance_name: &String) -> Result<bool> {
@@ -102,9 +100,7 @@ impl CwClient {
 
         trace!("Datapoints used for comparison: {:?}", metrics);
 
-        Ok(metrics.iter().any(|metric| {
-            metric.maximum.unwrap_or_default() > self.idle_rules.min_utilization as f64
-        }))
+        Ok(self.filter_metrics_by_min_utilization(metrics))
     }
 
     pub fn filter_db_instance_by_connections(&self, instance_name: &String) -> Result<bool> {
@@ -120,10 +116,7 @@ impl CwClient {
 
         trace!("Datapoints used for comparison: {:?}", metrics);
 
-        Ok(metrics.iter().any(|metric| {
-            metric.maximum.unwrap_or_default()
-                > self.idle_rules.connections.unwrap_or_default() as f64
-        }))
+        Ok(self.filter_metrics_by_connections(metrics))
     }
 
     pub fn filter_db_cluster_by_utilization(&self, cluster_identifier: &String) -> Result<bool> {
@@ -139,9 +132,7 @@ impl CwClient {
 
         trace!("Datapoints used for comparison: {:?}", metrics);
 
-        Ok(metrics.iter().any(|metric| {
-            metric.maximum.unwrap_or_default() > self.idle_rules.min_utilization as f64
-        }))
+        Ok(self.filter_metrics_by_min_utilization(metrics))
     }
 
     pub fn filter_db_cluster_by_connections(&self, cluster_identifier: &String) -> Result<bool> {
@@ -157,10 +148,7 @@ impl CwClient {
 
         trace!("Datapoints used for comparison: {:?}", metrics);
 
-        Ok(metrics.iter().any(|metric| {
-            metric.maximum.unwrap_or_default()
-                > self.idle_rules.connections.unwrap_or_default() as f64
-        }))
+        Ok(self.filter_metrics_by_connections(metrics))
     }
 
     pub fn filter_rs_cluster_by_utilization(&self, cluster_id: &String) -> Result<bool> {
@@ -174,9 +162,7 @@ impl CwClient {
             .datapoints
             .unwrap_or_default();
 
-        Ok(metrics.iter().any(|metric| {
-            metric.maximum.unwrap_or_default() > self.idle_rules.min_utilization as f64
-        }))
+        Ok(self.filter_metrics_by_min_utilization(metrics))
     }
 
     pub fn filter_rs_cluster_by_connections(&self, cluster_id: &String) -> Result<bool> {
@@ -192,10 +178,20 @@ impl CwClient {
 
         trace!("Datapoints used for comparison: {:?}", metrics);
 
-        Ok(metrics.iter().any(|metric| {
+        Ok(self.filter_metrics_by_connections(metrics))
+    }
+
+    fn filter_metrics_by_min_utilization(&self, metrics: Vec<Datapoint>) -> bool {
+        metrics.iter().any(|metric| {
+            metric.maximum.unwrap_or_default() > self.idle_rules.min_utilization as f64
+        })
+    }
+
+    fn filter_metrics_by_connections(&self, metrics: Vec<Datapoint>) -> bool {
+        metrics.iter().any(|metric| {
             metric.maximum.unwrap_or_default()
                 > self.idle_rules.connections.unwrap_or_default() as f64
-        }))
+        })
     }
 
     fn get_start_time_from_duration(
@@ -210,5 +206,100 @@ impl CwClient {
             Utc.timestamp_millis(diff)
                 .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusoto_cloudwatch::Datapoint;
+    use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher};
+    use std::time::Duration;
+
+    fn create_client() -> CwClient {
+        CwClient {
+            client: CloudWatchClient::new_with(
+                MockRequestDispatcher::default(),
+                MockCredentialsProvider,
+                Default::default(),
+            ),
+            idle_rules: IdleRules {
+                enabled: true,
+                min_utilization: 0.0,
+                min_duration: Duration::from_secs(86400),
+                granularity: Duration::from_secs(3600),
+                connections: Some(100),
+            },
+        }
+    }
+
+    fn get_metrics_for_min_utilization() -> Vec<Datapoint> {
+        vec![
+            Datapoint {
+                maximum: Some(9.1231234),
+                unit: Some("Percent".to_string()),
+                ..Default::default()
+            },
+            Datapoint {
+                maximum: Some(10.123123),
+                unit: Some("Percent".to_string()),
+                ..Default::default()
+            },
+            Datapoint {
+                maximum: Some(5.123123),
+                unit: Some("Percent".to_string()),
+                ..Default::default()
+            },
+            Datapoint {
+                maximum: Some(1.457890),
+                unit: Some("Percent".to_string()),
+                ..Default::default()
+            },
+            Datapoint {
+                maximum: Some(11.457890),
+                unit: Some("Percent".to_string()),
+                ..Default::default()
+            },
+            Datapoint {
+                maximum: Some(4.457890),
+                unit: Some("Percent".to_string()),
+                ..Default::default()
+            },
+            Datapoint {
+                maximum: Some(2.457890),
+                unit: Some("Percent".to_string()),
+                ..Default::default()
+            },
+            Datapoint {
+                maximum: Some(0.457890),
+                unit: Some("Percent".to_string()),
+                ..Default::default()
+            },
+            Datapoint {
+                maximum: Some(0.5647839),
+                unit: Some("Percent".to_string()),
+                ..Default::default()
+            },
+        ]
+    }
+
+    #[test]
+    fn check_metrics_filter_by_min_utilization_of_10() {
+        let mut cw_client = create_client();
+        cw_client.idle_rules.min_utilization = 10.0;
+
+        let actual = cw_client.filter_metrics_by_min_utilization(get_metrics_for_min_utilization());
+
+        assert_eq!(actual, true)
+    }
+
+    #[test]
+    fn check_metrics_filter_by_min_utilization_of_20() {
+        let mut cw_client = create_client();
+        cw_client.idle_rules.min_utilization = 20.0;
+
+        let actual = cw_client.filter_metrics_by_min_utilization(get_metrics_for_min_utilization());
+
+        assert_eq!(actual, false)
     }
 }

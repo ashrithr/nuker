@@ -10,13 +10,11 @@ const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 /// Cli Args
 #[derive(Debug, Clone)]
 pub struct Args {
-    config: String,
-    profile: Option<String>,
-    access_key_id: Option<String>,
-    secret_access_key: Option<String>,
-    session_token: Option<String>,
-    dry_run: bool,
-    verbose: u64,
+    pub config: String,
+    pub profile: Option<String>,
+    pub regions: Vec<String>,
+    pub dry_run: bool,
+    pub verbose: u64,
 }
 
 /// Configuration struct for aws-nuke executable
@@ -24,9 +22,6 @@ pub struct Args {
 /// This struct is built from reading the configuration file
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub profile: Option<String>,
-    pub regions: Vec<String>,
-    pub dry_run: bool,
     pub print_usage: bool,
     pub usage_days: i64,
     pub ec2: Ec2Config,
@@ -42,9 +37,9 @@ pub enum TargetState {
     Deleted,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct IdleRules {
-    enabled: bool,
+    pub enabled: bool,
     pub min_utilization: f32,
     #[serde(with = "humantime_serde")]
     pub min_duration: Duration,
@@ -70,7 +65,7 @@ pub struct EbsCleanup {
     pub enabled: bool,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct SecurityGroups {
     pub enabled: bool,
     pub source_cidr: Vec<String>,
@@ -132,7 +127,7 @@ pub struct S3Config {
 }
 
 /// Parse the command line arguments for aws-nuke executable
-pub fn parse_args() -> (u64, String) {
+pub fn parse_args() -> Args {
     let args = App::new("aws-nuke")
         .version(VERSION.unwrap_or("unknown"))
         .arg(
@@ -145,6 +140,32 @@ pub fn parse_args() -> (u64, String) {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("region")
+                .long("region")
+                .help("Which regions to enfoce the rules in. Default is the rules will be \
+                    enforced across all the regions.")
+                .takes_value(true)
+                .multiple(true)
+                .number_of_values(1)
+        )
+        .arg(
+            Arg::with_name("profile")
+                .long("profile")
+                .help("Named Profile to use for authenticating with AWS. If the profile is \
+                    *not* set, the credentials will be sourced in the following order: \n\
+                    1. Environment variables: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY \n\
+                    2. AWS credentials file. Usually located at ~/.aws/credentials.\n\
+                    3. IAM instance profile")
+                .takes_value(true)
+        )
+        .arg(
+            Arg::with_name("no-dry-run")
+                .long("no-dry-run")
+                .help("Disables the dry run behavior, which just lists the resources that are \
+                    being cleaned but not actually delete them. Enabling this option will disable \
+                    dry run behaviour and deletes the resources.")
+        )
+        .arg(
             Arg::with_name("verbose")
                 .short("v")
                 .multiple(true)
@@ -152,13 +173,32 @@ pub fn parse_args() -> (u64, String) {
         )
         .get_matches();
 
+
     let verbose = if args.is_present("verbose") {
         args.occurrences_of("verbose")
     } else {
         0
     };
 
-    (verbose, args.value_of("config-file").unwrap().to_string())
+    let dry_run = if args.is_present("no-dry-run") {
+        false
+    } else {
+        true
+    };
+
+    let regions: Vec<&str> = if args.is_present("region") {
+        args.values_of("region").unwrap().collect()
+    } else {
+        vec![]
+    };
+
+    Args {
+        config: args.value_of("config-file").unwrap().to_string(),
+        regions: regions.iter().map(|r| r.to_string()).collect(),
+        profile: args.value_of("profile").map(|s| s.to_owned()),
+        dry_run,
+        verbose,
+    }
 }
 
 /// Parses the aws-nuke configuration file

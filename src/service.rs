@@ -1,4 +1,5 @@
 //! Represents a Nukable service
+use crate::config::TargetState;
 use colored::*;
 use rusoto_core::Region;
 use std::fmt;
@@ -91,6 +92,7 @@ pub enum EnforcementState {
     Delete,
     Skip,
     SkipConfig,
+    SkipStopped,
 }
 
 impl EnforcementState {
@@ -100,6 +102,15 @@ impl EnforcementState {
             EnforcementState::Delete => "would be removed".blue().bold(),
             EnforcementState::Skip => "skipped because of rules".yellow().bold(),
             EnforcementState::SkipConfig => "skipped because of config".yellow().bold(),
+            EnforcementState::SkipStopped => "skipped as resource is not running".yellow().bold(),
+        }
+    }
+
+    pub fn from_target_state(target_state: &TargetState) -> Self {
+        if *target_state == TargetState::Deleted {
+            EnforcementState::Delete
+        } else {
+            EnforcementState::Stop
         }
     }
 }
@@ -159,7 +170,7 @@ pub trait NukeService: ::std::any::Any {
     /// Delete the resource
     fn delete(&self, resource: &Resource) -> Result<()>;
 
-    fn as_any(&self) -> &dyn::std::any::Any;
+    fn as_any(&self) -> &dyn ::std::any::Any;
 }
 
 pub trait RequiredTagsFilter {

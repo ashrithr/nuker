@@ -1,49 +1,66 @@
 use {
-    crate::{aws::AwsClient, config::Config, error::Error as AwsError},
+    crate::{aws::AwsClient, config::Config, config::Args, error::Error as AwsError},
     colored::*,
-    log::{error, info},
+    log::debug,
     rusoto_core::Region,
     std::str::FromStr,
 };
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
 
+static REGIONS: &'static [Region] = &[
+    Region::ApEast1,
+    Region::ApNortheast1,
+    Region::ApNortheast2,
+    Region::ApNortheast3,
+    Region::ApSouth1,
+    Region::ApSoutheast1,
+    Region::ApSoutheast2,
+    Region::CaCentral1,
+    Region::EuCentral1,
+    Region::EuNorth1,
+    Region::EuWest1,
+    Region::EuWest2,
+    Region::EuWest3,
+    Region::MeSouth1,
+    Region::SaEast1,
+    Region::UsEast1,
+    Region::UsEast2,
+    Region::UsWest1,
+    Region::UsWest2,
+];
+
 pub struct Nuke {
+    args: Args,
     config: Config,
 }
 
 impl Nuke {
-    pub fn new(config: Config) -> Self {
-        Nuke { config }
+    pub fn new(config: Config, args: Args) -> Self {
+        Nuke { args, config }
     }
 
     pub fn run(&self) -> Result<()> {
         let mut clients: Vec<AwsClient> = Vec::new();
 
-        if self.config.dry_run {
-            info!("{}", "DRY RUN ENABLED".blue().bold());
+        if self.args.dry_run {
+            println!("{}", "DRY RUN ENABLED".blue().bold());
         } else {
-            info!("{}", "DRY RUN DISABLED".yellow().bold());
+            println!("{}", "DRY RUN DISABLED".red().bold());
         }
 
-        for region in &self.config.regions {
-            let profile = &self.config.profile;
-            let profile = profile.as_ref().map(|p| &**p);
-            match AwsClient::new(profile, Region::from_str(region)?, &self.config) {
-                Ok(client) => {
-                    clients.push(client);
-                }
-                Err(err) => {
-                    error!(
-                        "initializing AWS Client for profile: {:?}.\n{}",
-                        profile, err
-                    );
-                }
+        if self.args.regions.is_empty() {
+            for region in REGIONS.iter() {
+                clients.push(self.create_client(region.to_owned())?);
+            }
+        } else {
+            for region in &self.args.regions {
+                clients.push(self.create_client(Region::from_str(region)?)?);
             }
         }
 
         for client in clients {
-            info!("REGION: {}", client.region.name().blue().bold());
+            debug!("REGION: {}", client.region.name().blue().bold());
 
             client.print_usage()?;
             let resources = client.locate_resources()?;
@@ -52,5 +69,11 @@ impl Nuke {
         }
 
         Ok(())
+    }
+
+    fn create_client(&self, region: Region) -> Result<AwsClient> {
+        let profile = &self.args.profile;
+        let profile = profile.as_ref().map(|p| &**p);
+        AwsClient::new(profile, region, &self.config, self.args.dry_run)
     }
 }

@@ -3,14 +3,14 @@ use fern;
 use fern::colors::{Color, ColoredLevelConfig};
 use log::debug;
 fn main() {
-    let (verbose, config_path) = config::parse_args();
-    let config = config::parse_config_file(&config_path);
+    let args = config::parse_args();
+    let config = config::parse_config_file(&args.config);
 
-    setup_logging(verbose);
+    setup_logging(args.verbose);
 
     debug!("{:?}", config);
 
-    nuke::Nuke::new(config).run().unwrap()
+    nuke::Nuke::new(config, args).run().unwrap()
 }
 
 fn setup_logging(verbose: u64) {

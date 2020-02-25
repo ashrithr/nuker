@@ -2,7 +2,6 @@ use {
     crate::aws::cloudwatch::CwClient,
     crate::aws::Result,
     crate::config::Ec2Config,
-    crate::config::TargetState,
     crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
     log::debug,
     rusoto_core::{HttpClient, Region},
@@ -62,13 +61,12 @@ impl Ec2NukeClient {
         })
     }
 
-    fn package_instances_as_resources(&self, instances: Vec<Instance>) -> Result<Vec<Resource>> {
+    fn package_instances_as_resources(
+        &self,
+        instances: Vec<Instance>,
+        sgs: Option<Vec<String>>,
+    ) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
-        let sgs = if self.config.security_groups.enabled {
-            Some(self.get_security_groups()?)
-        } else {
-            None
-        };
 
         for instance in instances {
             let instance_id = instance.instance_id.as_ref().unwrap().to_owned();
@@ -76,21 +74,25 @@ impl Ec2NukeClient {
             let enforcement_state: EnforcementState = {
                 if self.config.ignore.contains(&instance_id) {
                     // Instance not in ignore list
+                    debug!("Skipping resource from ignore list - {}", instance_id);
                     EnforcementState::SkipConfig
                 } else if instance.state.as_ref().unwrap().code != Some(16) {
                     // Instance not in running state
-                    EnforcementState::Skip
+                    debug!("Skipping as instance is not running - {}", instance_id);
+                    EnforcementState::SkipStopped
                 } else {
-                    if self.resource_tags_does_not_match(&instance)
-                        || self.resource_types_does_not_match(&instance)
-                        || self.is_resource_idle(&instance)
-                        || self.is_resource_secure(&instance, sgs.clone())
-                    {
-                        if self.config.target_state == TargetState::Deleted {
-                            EnforcementState::Delete
-                        } else {
-                            EnforcementState::Stop
-                        }
+                    if self.resource_tags_does_not_match(&instance) {
+                        debug!("Resource tags does not match - {}", instance_id);
+                        EnforcementState::from_target_state(&self.config.target_state)
+                    } else if self.resource_types_does_not_match(&instance) {
+                        debug!("Resource types does not match - {}", instance_id);
+                        EnforcementState::from_target_state(&self.config.target_state)
+                    } else if self.is_resource_idle(&instance) {
+                        debug!("Resource is idle - {}", instance_id);
+                        EnforcementState::from_target_state(&self.config.target_state)
+                    } else if self.is_resource_not_secure(&instance, sgs.clone()) {
+                        debug!("Resource is not secure - {}", instance_id);
+                        EnforcementState::from_target_state(&self.config.target_state)
                     } else {
                         EnforcementState::Skip
                     }
@@ -111,24 +113,36 @@ impl Ec2NukeClient {
     }
 
     fn resource_tags_does_not_match(&self, instance: &Instance) -> bool {
-        !self.check_tags(&instance.tags, &self.config.required_tags)
+        if !self.config.required_tags.is_empty() {
+            !self.check_tags(&instance.tags, &self.config.required_tags)
+        } else {
+            false
+        }
     }
 
     fn resource_types_does_not_match(&self, instance: &Instance) -> bool {
-        !self
-            .config
-            .allowed_instance_types
-            .contains(&instance.instance_type.clone().unwrap())
+        if !self.config.allowed_instance_types.is_empty() {
+            !self
+                .config
+                .allowed_instance_types
+                .contains(&instance.instance_type.clone().unwrap())
+        } else {
+            false
+        }
     }
 
     fn is_resource_idle(&self, instance: &Instance) -> bool {
-        !self
-            .cwclient
-            .filter_instance_by_utilization(&instance.instance_id.as_ref().unwrap())
-            .unwrap()
+        if self.config.idle_rules.enabled {
+            !self
+                .cwclient
+                .filter_instance_by_utilization(&instance.instance_id.as_ref().unwrap())
+                .unwrap()
+        } else {
+            false
+        }
     }
 
-    fn is_resource_secure(&self, instance: &Instance, sgs: Option<Vec<String>>) -> bool {
+    fn is_resource_not_secure(&self, instance: &Instance, sgs: Option<Vec<String>>) -> bool {
         if self.config.security_groups.enabled && sgs.is_some() {
             let instance_sgs = instance
                 .security_groups
@@ -138,9 +152,9 @@ impl Ec2NukeClient {
                 .map(|gi| gi.group_id.clone().unwrap())
                 .collect::<Vec<String>>();
 
-            !sgs.unwrap().iter().any(|s| instance_sgs.contains(&s))
+            sgs.unwrap().iter().any(|s| instance_sgs.contains(&s))
         } else {
-            true
+            false
         }
     }
 
@@ -312,8 +326,13 @@ impl Ec2NukeClient {
 impl NukeService for Ec2NukeClient {
     fn scan(&self) -> Result<Vec<Resource>> {
         let instances = self.get_instances(Vec::new())?;
+        let sgs = if self.config.security_groups.enabled {
+            Some(self.get_security_groups()?)
+        } else {
+            None
+        };
 
-        Ok(self.package_instances_as_resources(instances)?)
+        Ok(self.package_instances_as_resources(instances, sgs)?)
     }
 
     fn stop(&self, resource: &Resource) -> Result<()> {
@@ -324,7 +343,203 @@ impl NukeService for Ec2NukeClient {
         self.terminate_resources(vec![resource.id.to_owned()].as_ref())
     }
 
-    fn as_any(&self) -> &dyn::std::any::Any {
+    fn as_any(&self) -> &dyn ::std::any::Any {
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::aws::cloudwatch::CwClient;
+    use crate::config::*;
+    use rusoto_cloudwatch::CloudWatchClient;
+    use rusoto_ec2::{Ec2Client, GroupIdentifier, Instance, InstanceState, Tag};
+    use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher};
+
+    fn create_config() -> Ec2Config {
+        Ec2Config {
+            enabled: true,
+            target_state: TargetState::Stopped,
+            required_tags: vec![],
+            allowed_instance_types: vec![],
+            ignore: vec![],
+            idle_rules: IdleRules::default(),
+            termination_protection: TerminationProtection { ignore: true },
+            ebs_cleanup: EbsCleanup { enabled: false },
+            security_groups: SecurityGroups::default(),
+        }
+    }
+
+    fn create_ec2_client(ec2_config: Ec2Config) -> Ec2NukeClient {
+        Ec2NukeClient {
+            client: Ec2Client::new_with(
+                MockRequestDispatcher::default(),
+                MockCredentialsProvider,
+                Default::default(),
+            ),
+            cwclient: CwClient {
+                client: CloudWatchClient::new_with(
+                    MockRequestDispatcher::default(),
+                    MockCredentialsProvider,
+                    Default::default(),
+                ),
+                idle_rules: ec2_config.idle_rules.clone(),
+            },
+            config: ec2_config,
+            region: Region::UsEast1,
+            dry_run: true,
+        }
+    }
+
+    fn get_ec2_instances() -> Vec<Instance> {
+        vec![
+            Instance {
+                instance_id: Some("i-abc1234567".to_string()),
+                instance_type: Some("d2.8xlarge".to_string()),
+                state: Some(InstanceState {
+                    code: Some(16),
+                    ..Default::default()
+                }),
+                security_groups: Some(vec![GroupIdentifier {
+                    group_id: Some("sg-6787980909".to_string()),
+                    group_name: Some("some-group".to_string()),
+                }]),
+                ..Default::default()
+            },
+            Instance {
+                instance_id: Some("i-def89012345".to_string()),
+                instance_type: Some("t2.xlarge".to_string()),
+                tags: Some(vec![Tag {
+                    key: Some("Name".to_string()),
+                    value: Some("Some".to_string()),
+                }]),
+                state: Some(InstanceState {
+                    code: Some(16),
+                    ..Default::default()
+                }),
+                security_groups: Some(vec![GroupIdentifier {
+                    group_id: Some("sg-xxxxxxxx".to_string()),
+                    group_name: Some("some-group".to_string()),
+                }]),
+                ..Default::default()
+            },
+            Instance {
+                instance_id: Some("i-ghi89012345".to_string()),
+                instance_type: Some("t2.2xlarge".to_string()),
+                tags: Some(vec![
+                    Tag {
+                        key: Some("Name".to_string()),
+                        value: Some("Some".to_string()),
+                    },
+                    Tag {
+                        key: Some("Purpose".to_string()),
+                        value: Some("Some".to_string()),
+                    },
+                ]),
+                state: Some(InstanceState {
+                    code: Some(16),
+                    ..Default::default()
+                }),
+                security_groups: Some(vec![GroupIdentifier {
+                    group_id: Some("sg-123456789".to_string()),
+                    group_name: Some("some-group".to_string()),
+                }]),
+                ..Default::default()
+            },
+        ]
+    }
+
+    fn filter_resources(resources: Vec<Resource>) -> Vec<String> {
+        resources
+            .into_iter()
+            .filter(|r| match r.enforcement_state {
+                EnforcementState::Stop | EnforcementState::Delete => true,
+                _ => false,
+            })
+            .map(|r| r.id)
+            .collect()
+    }
+
+    #[test]
+    fn check_package_resources_by_single_tag() {
+        let mut ec2_config = create_config();
+        ec2_config.required_tags = vec!["Name".to_string()];
+
+        let ec2_client = create_ec2_client(ec2_config);
+        let resources = ec2_client
+            .package_instances_as_resources(get_ec2_instances(), None)
+            .unwrap();
+
+        let expected = vec!["i-abc1234567".to_string()];
+        let result: Vec<String> = filter_resources(resources);
+
+        assert_eq!(expected, result)
+    }
+
+    #[test]
+    fn check_package_resources_by_multiple_tags() {
+        let mut ec2_config = create_config();
+        ec2_config.required_tags = vec!["Name".to_string(), "Purpose".to_string()];
+
+        let ec2_client = create_ec2_client(ec2_config);
+        let resources = ec2_client
+            .package_instances_as_resources(get_ec2_instances(), None)
+            .unwrap();
+        let expected = vec!["i-abc1234567".to_string(), "i-def89012345".to_string()];
+        let result: Vec<String> = filter_resources(resources);
+
+        assert_eq!(expected, result)
+    }
+
+    #[test]
+    fn check_package_resources_by_types() {
+        let mut ec2_config = create_config();
+        ec2_config.allowed_instance_types = vec!["t2.2xlarge".to_string(), "t2.xlarge".to_string()];
+
+        let ec2_client = create_ec2_client(ec2_config);
+        let resources = ec2_client
+            .package_instances_as_resources(get_ec2_instances(), None)
+            .unwrap();
+        let expected = vec!["i-abc1234567".to_string()];
+        let result: Vec<String> = filter_resources(resources);
+
+        assert_eq!(expected, result)
+    }
+
+    #[test]
+    fn check_package_resources_by_sgs() {
+        let mut ec2_config = create_config();
+        ec2_config.security_groups.enabled = true;
+        let open_sgs = vec!["sg-xxxxxxxx".to_string()];
+
+        let ec2_client = create_ec2_client(ec2_config);
+        let resources = ec2_client
+            .package_instances_as_resources(get_ec2_instances(), Some(open_sgs))
+            .unwrap();
+        println!("{:?}", resources);
+        let expected = vec!["i-def89012345".to_string()];
+        let result: Vec<String> = filter_resources(resources);
+
+        assert_eq!(expected, result)
+    }
+
+    #[test]
+    fn check_packaged_resources_by_all() {
+        let mut ec2_config = create_config();
+        ec2_config.required_tags = vec!["Name".to_string(), "Purpose".to_string()];
+        ec2_config.allowed_instance_types = vec!["t2.2xlarge".to_string(), "t2.xlarge".to_string()];
+        ec2_config.security_groups.enabled = true;
+        let open_sgs = vec!["sg-xxxxxxxx".to_string()];
+
+        let ec2_client = create_ec2_client(ec2_config);
+        let resources = ec2_client
+            .package_instances_as_resources(get_ec2_instances(), Some(open_sgs))
+            .unwrap();
+        println!("{:?}", resources);
+        let mut expected = vec!["i-def89012345".to_string(), "i-abc1234567".to_string()];
+        let mut result: Vec<String> = filter_resources(resources);
+
+        assert_eq!(expected.sort(), result.sort())
     }
 }

@@ -1,19 +1,3 @@
-# Named Profile to use for authenticating with AWS. Comment the profile name to
-# use the default credentials provider, whose behavior is to check the sources
-# in the following order:
-# 1. Environment variables: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
-# 2. AWS credentials file. Usually located at ~/.aws/credentials.
-# 3. IAM instance profile
-profile = "default"
-
-# Which regions to enfoce the rules in. If its empty, the rules will be enforced
-# in all regions
-regions = ["us-east-1", "us-east-2", "us-west-1", "us-west-2"]
-
-# Whether to enable dry-mode, which would not terminate/delete any resources
-# rather it would just print it out
-dry_run = true
-
 # Whether to print the AWS Usage Report by account and service breakdown
 print_usage = false
 usage_days = 1
@@ -167,14 +151,4 @@ target_state = "Deleted"
 required_naming_prefix = "cw-"
 ignore = []
 
-# [elasticsearch]
-# enabled = false
-# target_state = "Stopped"
-#
-#     [elasticsearch.idle]
-#     enabled = true
-#
-#     [elasticsearch.idle.rules]
-#     cpu_min_utilization = 2
-#     cpu_min_duration = "7 days"
-#     metric_granularity = "1 hour"
+# [emr]

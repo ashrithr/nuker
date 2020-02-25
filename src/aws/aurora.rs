@@ -2,7 +2,6 @@ use {
     crate::aws::cloudwatch::CwClient,
     crate::aws::Result,
     crate::config::AuroraConfig,
-    crate::config::TargetState,
     crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
     log::debug,
     rusoto_core::{HttpClient, Region},
@@ -72,17 +71,14 @@ impl AuroraNukeClient {
                 if self.config.ignore.contains(&cluster_id) {
                     EnforcementState::SkipConfig
                 } else if cluster.status != Some("available".to_string()) {
-                    EnforcementState::Skip
+                    EnforcementState::SkipStopped
                 } else {
-                    if self.resource_tags_does_not_match(&cluster)
-                        || self.resource_types_does_not_match(&cluster)
-                        || self.is_resource_idle(&cluster)
-                    {
-                        if self.config.target_state == TargetState::Deleted {
-                            EnforcementState::Delete
-                        } else {
-                            EnforcementState::Stop
-                        }
+                    if self.resource_tags_does_not_match(&cluster) {
+                        EnforcementState::from_target_state(&self.config.target_state)
+                    } else if self.resource_types_does_not_match(&cluster) {
+                        EnforcementState::from_target_state(&self.config.target_state)
+                    } else if self.is_resource_idle(&cluster) {
+                        EnforcementState::from_target_state(&self.config.target_state)
                     } else {
                         EnforcementState::Skip
                     }
@@ -103,36 +99,49 @@ impl AuroraNukeClient {
     }
 
     fn resource_tags_does_not_match(&self, cluster: &DBCluster) -> bool {
-        !self.check_tags(
-            &self
-                .list_tags(cluster.db_cluster_arn.clone())
-                .unwrap_or_default(),
-            &self.config.required_tags,
-        )
+        if !self.config.required_tags.is_empty() {
+            !self.check_tags(
+                &self
+                    .list_tags(cluster.db_cluster_arn.clone())
+                    .unwrap_or_default(),
+                &self.config.required_tags,
+            )
+        } else {
+            false
+        }
     }
 
     fn resource_types_does_not_match(&self, cluster: &DBCluster) -> bool {
-        if let Ok(instance_types) = self.get_instance_types(cluster) {
-            if instance_types
-                .iter()
-                .any(|it| self.config.allowed_instance_types.contains(&it))
-            {
-                return true;
+        if !self.config.allowed_instance_types.is_empty() {
+            if let Ok(instance_types) = self.get_instance_types(cluster) {
+                if instance_types
+                    .iter()
+                    .any(|it| self.config.allowed_instance_types.contains(&it))
+                {
+                    return true;
+                }
             }
+            false
+        } else {
+            false
         }
-
-        false
     }
 
     fn is_resource_idle(&self, cluster: &DBCluster) -> bool {
-        !self
-            .cwclient
-            .filter_db_cluster_by_utilization(&cluster.db_cluster_identifier.as_ref().unwrap())
-            .unwrap()
-            && !self
+        if self.config.idle_rules.enabled {
+            !self
                 .cwclient
-                .filter_db_cluster_by_connections(&cluster.db_cluster_identifier.as_ref().unwrap())
+                .filter_db_cluster_by_utilization(&cluster.db_cluster_identifier.as_ref().unwrap())
                 .unwrap()
+                && !self
+                    .cwclient
+                    .filter_db_cluster_by_connections(
+                        &cluster.db_cluster_identifier.as_ref().unwrap(),
+                    )
+                    .unwrap()
+        } else {
+            false
+        }
     }
 
     fn get_clusters(&self, filter: Vec<Filter>) -> Result<Vec<DBCluster>> {
@@ -315,7 +324,7 @@ impl NukeService for AuroraNukeClient {
         self.terminate_resource(resource.id.to_owned())
     }
 
-    fn as_any(&self) -> &dyn::std::any::Any {
+    fn as_any(&self) -> &dyn ::std::any::Any {
         self
     }
 }

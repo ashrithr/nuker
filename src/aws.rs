@@ -31,7 +31,7 @@ pub struct AwsClient {
 }
 
 impl AwsClient {
-    pub fn new(profile_name: Option<&str>, region: Region, config: &Config) -> Result<AwsClient> {
+    pub fn new(profile_name: Option<&str>, region: Region, config: &Config, dry_run: bool) -> Result<AwsClient> {
         let mut clients: Vec<Box<dyn NukeService>> = Vec::new();
 
         if config.ec2.enabled {
@@ -39,7 +39,7 @@ impl AwsClient {
                 profile_name,
                 region.clone(),
                 config.ec2.clone(),
-                config.dry_run,
+                dry_run,
             )?));
         }
 
@@ -48,7 +48,7 @@ impl AwsClient {
                 profile_name,
                 region.clone(),
                 config.rds.clone(),
-                config.dry_run,
+                dry_run,
             )?));
         }
 
@@ -57,7 +57,7 @@ impl AwsClient {
                 profile_name,
                 region.clone(),
                 config.aurora.clone(),
-                config.dry_run,
+                dry_run,
             )?))
         }
 
@@ -66,7 +66,7 @@ impl AwsClient {
                 profile_name,
                 region.clone(),
                 config.s3.clone(),
-                config.dry_run,
+                dry_run,
             )?))
         }
 
@@ -75,7 +75,7 @@ impl AwsClient {
                 profile_name,
                 region.clone(),
                 config.redshift.clone(),
-                config.dry_run,
+                dry_run,
             )?))
         }
 
