@@ -133,8 +133,8 @@ impl AwsClient {
                 }
                 Err(err) => {
                     error!(
-                        "Error occurred locating resources in profile: {:?}. {}",
-                        self.profile_name, err
+                        "Error occurred locating resources in region: '{:?}' using profile: '{:?}'. {}",
+                        self.region, self.profile_name, err
                     );
                 }
             }

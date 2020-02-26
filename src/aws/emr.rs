@@ -247,7 +247,7 @@ impl EmrNukeClient {
                             if let Some(cluster) = result.cluster {
                                 clusters.push(cluster);
                             }
-                        },
+                        }
                         Err(e) => {
                             warn!("Failed 'describe-cluster'. Err: {:?}", e);
                         }

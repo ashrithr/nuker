@@ -1,4 +1,4 @@
-use aws_nuke::{config, nuke};
+use nuker::{config, nuke};
 use fern;
 use fern::colors::{Color, ColoredLevelConfig};
 use log::debug;

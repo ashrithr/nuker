@@ -1,5 +1,5 @@
 [package]
-name = "aws_nuke"
+name = "nuker"
 version = "0.1.0"
 authors = ["Ashrith Mekala <ashrith@cloudwick.com>"]
 edition = "2018"

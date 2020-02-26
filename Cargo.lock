@@ -67,42 +67,6 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "aws_nuke"
-version = "0.1.0"
-dependencies = [
- "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "colored 1.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "derive_more 0.99.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "env_logger 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "fern 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "humantime 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "humantime-serde 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "lettre 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "prettytable-rs 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rusoto_ce 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rusoto_cloudwatch 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rusoto_core 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rusoto_credential 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rusoto_ec2 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rusoto_emr 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rusoto_iam 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rusoto_mock 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rusoto_pricing 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rusoto_rds 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rusoto_redshift 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rusoto_s3 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.90 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_derive 1.0.90 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_json 1.0.39 (registry+https://github.com/rust-lang/crates.io-index)",
- "toml 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "backtrace"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -858,6 +822,42 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "memchr 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "version_check 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "nuker"
+version = "0.1.0"
+dependencies = [
+ "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "colored 1.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "derive_more 0.99.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "env_logger 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "fern 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "humantime 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "humantime-serde 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lettre 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "prettytable-rs 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_ce 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_cloudwatch 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_core 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_credential 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_ec2 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_emr 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_iam 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_mock 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_pricing 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_rds 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_redshift 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_s3 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.90 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_derive 1.0.90 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "toml 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

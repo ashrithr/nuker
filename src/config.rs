@@ -17,7 +17,7 @@ pub struct Args {
     pub verbose: u64,
 }
 
-/// Configuration struct for aws-nuke executable
+/// Configuration struct for nuker executable
 ///
 /// This struct is built from reading the configuration file
 #[derive(Debug, Deserialize)]
@@ -141,9 +141,9 @@ pub struct S3Config {
     pub ignore: Vec<String>,
 }
 
-/// Parse the command line arguments for aws-nuke executable
+/// Parse the command line arguments for nuker executable
 pub fn parse_args() -> Args {
-    let args = App::new("aws-nuke")
+    let args = App::new("nuker")
         .version(VERSION.unwrap_or("unknown"))
         .arg(
             Arg::with_name("config-file")
@@ -217,7 +217,7 @@ pub fn parse_args() -> Args {
     }
 }
 
-/// Parses the aws-nuke configuration file
+/// Parses the nuker configuration file
 pub fn parse_config_file(filename: &str) -> Config {
     let mut fp = match File::open(filename) {
         Err(e) => panic!("Could not open file {} with error {}", filename, e),

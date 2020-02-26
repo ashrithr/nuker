@@ -12,7 +12,6 @@ static REGIONS: &'static [Region] = &[
     Region::ApEast1,
     Region::ApNortheast1,
     Region::ApNortheast2,
-    Region::ApNortheast3,
     Region::ApSouth1,
     Region::ApSoutheast1,
     Region::ApSoutheast2,

@@ -1,4 +1,4 @@
-![Rust](https://github.com/ashrithr/aws-nuke/workflows/Rust/badge.svg?branch=master)
+![Rust](https://github.com/ashrithr/nuker/workflows/Rust/badge.svg?branch=master)
 
 # AWS Resource Cleaner
 
@@ -26,10 +26,15 @@ Cleans up AWS resources based on configurable Rules. This project is a WIP.
     - Clean up Idle Instances based on Cloudwatch metrics
 * S3
     - Clean up based on bucket naming prefix
+* EMR
+    - Clean up based on Tags
+    - Clean up based on allowed Instance types
+    - Clean up Idle Instances based on Cloudwatch metrics
+    - Clean up based on Security Group rules
 
 ## Configuration
 
-aws-nuke requires a configuration file to operate with, sample configuration is located for reference here: `examples/config/sample.toml`.
+nuker requires a configuration file to operate with, sample configuration is located for reference here: `examples/config/sample.toml`.
 
 Make a copy of the sample configuration and make changes as needed based on the comments provided in the sample configuration file.
 
@@ -39,7 +44,7 @@ cp examples/config/sample.toml config.toml
 
 ## Build and Running
 
-aws-nuke can be built using the following command:
+nuker can be built using the following command:
 
 ```
 cargo build --release
@@ -48,7 +53,7 @@ cargo build --release
 Once built, run using the following command:
 
 ```
-./target/release/aws-nuke --config examples/configs/sample.toml \
+./target/release/nuker --config examples/configs/sample.toml \
 --profile default \
 --region us-east-1 \
 --region us-east-2 \
@@ -58,33 +63,33 @@ Once built, run using the following command:
 To get help:
 
 ```
-./target/release/aws-nuke -h
+./target/release/nuker -h
 ```
 
 ## Docker
 
-aws-nuke can be built using Docker:
+nuker can be built using Docker:
 
 ```
-docker build -t aws-nuke .
+docker build -t nuker .
 ```
 
 ```
 docker run --rm -it \
--v "$PWD/examples/configs/sample.toml":/configs/config.toml \
+-v "$PWD/examples/configs/sample.toml":/home/nuker/config.toml \
 -e AWS_ACCESS_KEY_ID=REPLACE_WITH_ACCESS_KEY \
 -e AWS_SECRET_ACCESS_KEY=REPLACE_WITH_SECRET_KEY \
-ashrithr/aws-nuke:latest \
---config /configs/config.toml \
+ashrithr/nuker:latest \
+--config /home/nuker/config.toml
 ```
 
 or
 
 ```
 docker run --rm -it \
--v "$PWD/examples/configs/sample.toml":/configs/config.toml \
--v "$HOME/.aws":/home/aws-nuke/.aws \
-ashrithr/aws-nuke:latest \
+-v "$PWD/examples/configs/sample.toml":/home/nuker/config.toml \
+-v "$HOME/.aws":/home/nuker/.aws \
+ashrithr/nuker:latest \
 --profile default \
---config /configs/config.toml \
+--config /home/nuker/config.toml
 ```

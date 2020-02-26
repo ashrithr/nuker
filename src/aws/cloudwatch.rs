@@ -205,7 +205,8 @@ impl CwClient {
 
     fn filter_metrics_by_min_utilization(&self, metrics: Vec<Datapoint>) -> bool {
         metrics.iter().any(|metric| {
-            metric.maximum.unwrap_or_default() > self.idle_rules.min_utilization.unwrap_or_default() as f64
+            metric.maximum.unwrap_or_default()
+                > self.idle_rules.min_utilization.unwrap_or_default() as f64
         })
     }
 
