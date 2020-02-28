@@ -9,7 +9,10 @@ type Result<T, E = crate::error::Error> = std::result::Result<T, E>;
 #[derive(Display, Debug)]
 pub enum ResourceType {
     Ec2Instance,
-    Ec2Volume,
+    Ec2Interface,
+    Ec2Address,
+    EbsVolume,
+    EbsSnapshot,
     RDS,
     Aurora,
     S3Bucket,
@@ -20,7 +23,9 @@ pub enum ResourceType {
 impl ResourceType {
     pub fn is_ec2(&self) -> bool {
         match *self {
-            ResourceType::Ec2Instance | ResourceType::Ec2Volume => true,
+            ResourceType::Ec2Instance | ResourceType::Ec2Interface | ResourceType::Ec2Address => {
+                true
+            }
             _ => false,
         }
     }
@@ -34,7 +39,35 @@ impl ResourceType {
 
     pub fn is_volume(&self) -> bool {
         match *self {
-            ResourceType::Ec2Volume => true,
+            ResourceType::EbsVolume => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_snapshot(&self) -> bool {
+        match *self {
+            ResourceType::EbsSnapshot => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_ebs(&self) -> bool {
+        match *self {
+            ResourceType::EbsVolume | ResourceType::EbsSnapshot => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_eni(&self) -> bool {
+        match *self {
+            ResourceType::Ec2Interface => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_eip(&self) -> bool {
+        match *self {
+            ResourceType::Ec2Address => true,
             _ => false,
         }
     }
@@ -94,6 +127,21 @@ pub struct NTag {
     pub value: Option<String>,
 }
 
+impl fmt::Display for NTag {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.key.is_some() && self.value.is_some() {
+            write!(
+                f,
+                "{} -> {}",
+                self.key.as_ref().unwrap().on_white().black(),
+                self.value.as_ref().unwrap().on_white().black()
+            )
+        } else {
+            write!(f, "{:?} -> {:?}", self.key, self.value)
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum EnforcementState {
     Stop,
@@ -137,12 +185,23 @@ impl fmt::Display for Resource {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "[{}] - {} - {} - {}",
+            "[{}] - {} - {}",
             self.region.name().bold(),
             self.resource_type,
-            self.id.bold(),
-            self.enforcement_state.name()
-        )
+            self.id.bold()
+        )?;
+
+        if self.tags.is_some() && !self.tags.as_ref().unwrap().is_empty() {
+            write!(f, " - {{")?;
+            for tag in self.tags.as_ref().unwrap() {
+                write!(f, "[{}]", tag)?;
+            }
+            write!(f, "}}")?;
+        }
+
+        write!(f, " - {}", self.enforcement_state.name())?;
+
+        Ok(())
     }
 }
 

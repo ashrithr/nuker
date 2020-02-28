@@ -1,15 +1,18 @@
 use {
     crate::aws::cloudwatch::CwClient,
+    crate::aws::util,
     crate::aws::Result,
-    crate::config::Ec2Config,
+    crate::config::{Ec2Config, RequiredTags},
     crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
     log::debug,
     rusoto_core::{HttpClient, Region},
     rusoto_credential::ProfileProvider,
     rusoto_ec2::{
+        Address, DeleteNetworkInterfaceRequest, DescribeAddressesRequest,
         DescribeInstanceAttributeRequest, DescribeInstancesRequest, DescribeInstancesResult,
-        DescribeSecurityGroupsRequest, Ec2, Ec2Client, Filter, Instance,
-        ModifyInstanceAttributeRequest, StopInstancesRequest, Tag, TerminateInstancesRequest,
+        DescribeNetworkInterfacesRequest, DescribeSecurityGroupsRequest, Ec2, Ec2Client, Filter,
+        Instance, ModifyInstanceAttributeRequest, NetworkInterface, ReleaseAddressRequest,
+        StopInstancesRequest, Tag, TerminateInstancesRequest,
     },
 };
 
@@ -112,6 +115,67 @@ impl Ec2NukeClient {
         Ok(resources)
     }
 
+    fn package_interfaces_as_resources(
+        &self,
+        interfaces: Vec<NetworkInterface>,
+    ) -> Result<Vec<Resource>> {
+        let mut resources: Vec<Resource> = Vec::new();
+
+        for interface in interfaces {
+            let interface_id = interface.network_interface_id.as_ref().unwrap().to_owned();
+
+            let enforcement_state: EnforcementState = {
+                if interface.attachment.is_some()
+                    && interface.attachment.unwrap().status == Some("detached".to_string())
+                {
+                    debug!("Resource is detached and idle: {}", interface_id);
+                    EnforcementState::Delete
+                } else {
+                    EnforcementState::Skip
+                }
+            };
+
+            resources.push(Resource {
+                id: interface_id,
+                region: self.region.clone(),
+                resource_type: ResourceType::Ec2Interface,
+                tags: self.package_tags_as_ntags(interface.tag_set.clone()),
+                state: interface.status,
+                enforcement_state,
+            });
+        }
+
+        Ok(resources)
+    }
+
+    fn package_addresses_as_resources(&self, addresses: Vec<Address>) -> Result<Vec<Resource>> {
+        let mut resources: Vec<Resource> = Vec::new();
+
+        for address in addresses {
+            let address_id = address.allocation_id.as_ref().unwrap().to_owned();
+
+            let enforcement_state: EnforcementState = {
+                if address.association_id.is_none() {
+                    debug!("Resource is detached and idle: {}", address_id);
+                    EnforcementState::Delete
+                } else {
+                    EnforcementState::Skip
+                }
+            };
+
+            resources.push(Resource {
+                id: address_id,
+                region: self.region.clone(),
+                resource_type: ResourceType::Ec2Address,
+                tags: self.package_tags_as_ntags(address.tags.clone()),
+                state: None,
+                enforcement_state,
+            });
+        }
+
+        Ok(resources)
+    }
+
     fn resource_tags_does_not_match(&self, instance: &Instance) -> bool {
         if !self.config.required_tags.is_empty() {
             !self.check_tags(&instance.tags, &self.config.required_tags)
@@ -132,10 +196,10 @@ impl Ec2NukeClient {
     }
 
     fn is_resource_idle(&self, instance: &Instance) -> bool {
-        if self.config.idle_rules.enabled {
+        if !self.config.idle_rules.is_empty() {
             !self
                 .cwclient
-                .filter_instance_by_utilization(&instance.instance_id.as_ref().unwrap())
+                .filter_instance(&instance.instance_id.as_ref().unwrap())
                 .unwrap()
         } else {
             false
@@ -198,14 +262,9 @@ impl Ec2NukeClient {
 
     /// Checks instance tags against required tags and returns true only if all required tags are
     /// present
-    fn check_tags(&self, tags: &Option<Vec<Tag>>, required_tags: &Vec<String>) -> bool {
-        let tags: Vec<String> = tags
-            .clone()
-            .unwrap_or_default()
-            .iter()
-            .map(|t| t.key.clone().unwrap())
-            .collect();
-        required_tags.iter().all(|rt| tags.contains(rt))
+    fn check_tags(&self, tags: &Option<Vec<Tag>>, required_tags: &Vec<RequiredTags>) -> bool {
+        let ntags = self.package_tags_as_ntags(tags.to_owned());
+        util::compare_tags(ntags, required_tags)
     }
 
     fn disable_termination_protection(&self, instance_id: &str) -> Result<()> {
@@ -238,48 +297,85 @@ impl Ec2NukeClient {
         Ok(())
     }
 
-    fn terminate_resources(&self, instance_ids: &Vec<String>) -> Result<()> {
-        debug!("Terminating the instances: {:?}", instance_ids);
+    fn delete_resource(&self, resource: &Resource) -> Result<()> {
+        debug!("Deleting the resource: {:?}", resource.id);
 
-        if self.config.termination_protection.ignore {
-            for instance_id in instance_ids {
-                self.disable_termination_protection(instance_id)?;
+        match resource.resource_type {
+            ResourceType::Ec2Instance => {
+                if self.config.termination_protection.ignore {
+                    self.disable_termination_protection(resource.id.as_ref())?;
+                }
+
+                if !self.dry_run {
+                    self.client
+                        .terminate_instances(TerminateInstancesRequest {
+                            instance_ids: vec![resource.id.clone()],
+                            ..Default::default()
+                        })
+                        .sync()?;
+                }
             }
-        }
-
-        if !self.dry_run {
-            if !instance_ids.is_empty() {
-                self.client
-                    .terminate_instances(TerminateInstancesRequest {
-                        instance_ids: instance_ids.to_owned(),
-                        ..Default::default()
-                    })
-                    .sync()?;
+            ResourceType::Ec2Interface => {
+                self.delete_interface(resource)?;
             }
-        }
-
-        Ok(())
-    }
-
-    fn stop_resources(&self, instance_ids: &Vec<String>) -> Result<()> {
-        debug!("Stopping instances: {:?}", instance_ids);
-
-        if !self.dry_run {
-            if !instance_ids.is_empty() {
-                self.client
-                    .stop_instances(StopInstancesRequest {
-                        instance_ids: instance_ids.to_owned(),
-                        force: Some(true),
-                        ..Default::default()
-                    })
-                    .sync()?;
+            ResourceType::Ec2Address => {
+                self.delete_address(resource)?;
             }
+            _ => {}
         }
 
         Ok(())
     }
 
-    fn get_security_groups(&self) -> Result<Vec<String>> {
+    fn stop_resource(&self, resource: &Resource) -> Result<()> {
+        match resource.resource_type {
+            ResourceType::Ec2Instance => {
+                debug!("Stopping Resource: {:?}", resource.id);
+
+                if !self.dry_run {
+                    self.client
+                        .stop_instances(StopInstancesRequest {
+                            instance_ids: vec![resource.id.clone()],
+                            force: Some(true),
+                            ..Default::default()
+                        })
+                        .sync()?;
+                }
+            }
+            ResourceType::Ec2Interface | ResourceType::Ec2Address => {
+                self.delete_resource(resource)?;
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn get_open_sgs(&self) -> Result<Vec<String>> {
+        self.get_security_groups(Some(vec![
+            Filter {
+                name: Some("ip-permission.cidr".to_string()),
+                values: Some(self.config.security_groups.source_cidr.clone()),
+            },
+            Filter {
+                name: Some("ip-permission.from-port".to_string()),
+                values: Some(vec![self.config.security_groups.from_port.to_string()]),
+            },
+            Filter {
+                name: Some("ip-permission.to-port".to_string()),
+                values: Some(vec![self.config.security_groups.to_port.to_string()]),
+            },
+        ]))
+    }
+
+    fn get_default_sgs(&self) -> Result<Vec<String>> {
+        self.get_security_groups(Some(vec![Filter {
+            name: Some("group-name".to_string()),
+            values: Some(vec!["default".to_string(), "launch-wizard-*".to_string()]),
+        }]))
+    }
+
+    fn get_security_groups(&self, filters: Option<Vec<Filter>>) -> Result<Vec<String>> {
         let mut next_token: Option<String> = None;
         let mut security_groups: Vec<String> = Vec::new();
 
@@ -287,20 +383,7 @@ impl Ec2NukeClient {
             let result = self
                 .client
                 .describe_security_groups(DescribeSecurityGroupsRequest {
-                    filters: Some(vec![
-                        Filter {
-                            name: Some("ip-permission.cidr".to_string()),
-                            values: Some(self.config.security_groups.source_cidr.clone()),
-                        },
-                        Filter {
-                            name: Some("ip-permission.from-port".to_string()),
-                            values: Some(vec![self.config.security_groups.from_port.to_string()]),
-                        },
-                        Filter {
-                            name: Some("ip-permission.to-port".to_string()),
-                            values: Some(vec![self.config.security_groups.to_port.to_string()]),
-                        },
-                    ]),
+                    filters: filters.clone(),
                     next_token,
                     ..Default::default()
                 })
@@ -321,26 +404,116 @@ impl Ec2NukeClient {
 
         Ok(security_groups)
     }
+
+    fn get_network_interfaces(&self) -> Result<Vec<NetworkInterface>> {
+        let mut next_token: Option<String> = None;
+        let mut interfaces: Vec<NetworkInterface> = Vec::new();
+
+        loop {
+            let result = self
+                .client
+                .describe_network_interfaces(DescribeNetworkInterfacesRequest {
+                    next_token,
+                    ..Default::default()
+                })
+                .sync()?;
+
+            if let Some(nics) = result.network_interfaces {
+                for nic in nics {
+                    interfaces.push(nic);
+                }
+            }
+
+            if result.next_token.is_none() {
+                break;
+            } else {
+                next_token = result.next_token;
+            }
+        }
+
+        Ok(interfaces)
+    }
+
+    fn delete_interface(&self, resource: &Resource) -> Result<()> {
+        if !self.dry_run {
+            self.client
+                .delete_network_interface(DeleteNetworkInterfaceRequest {
+                    network_interface_id: resource.id.clone(),
+                    ..Default::default()
+                })
+                .sync()?
+        }
+
+        Ok(())
+    }
+
+    fn get_addresses(&self) -> Result<Vec<Address>> {
+        let mut addresses: Vec<Address> = Vec::new();
+
+        let result = self
+            .client
+            .describe_addresses(DescribeAddressesRequest {
+                ..Default::default()
+            })
+            .sync()?;
+
+        if result.addresses.is_some() {
+            addresses.append(&mut result.addresses.unwrap())
+        }
+
+        Ok(addresses)
+    }
+
+    fn delete_address(&self, resource: &Resource) -> Result<()> {
+        if !self.dry_run {
+            self.client
+                .release_address(ReleaseAddressRequest {
+                    allocation_id: Some(resource.id.to_owned()),
+                    ..Default::default()
+                })
+                .sync()?;
+        }
+
+        Ok(())
+    }
 }
 
 impl NukeService for Ec2NukeClient {
     fn scan(&self) -> Result<Vec<Resource>> {
+        let mut resources: Vec<Resource> = Vec::new();
+
         let instances = self.get_instances(Vec::new())?;
-        let sgs = if self.config.security_groups.enabled {
-            Some(self.get_security_groups()?)
+        let sgs: Option<Vec<String>> = if self.config.security_groups.enabled {
+            Some(
+                self.get_open_sgs()?
+                    .into_iter()
+                    .chain(self.get_default_sgs()?.into_iter())
+                    .collect::<Vec<String>>(),
+            )
         } else {
             None
         };
+        resources.append(&mut self.package_instances_as_resources(instances, sgs)?);
 
-        Ok(self.package_instances_as_resources(instances, sgs)?)
+        if self.config.eni.cleanup {
+            let interfaces = self.get_network_interfaces()?;
+            resources.append(&mut self.package_interfaces_as_resources(interfaces)?);
+        }
+
+        if self.config.eip.cleanup {
+            let addresses = self.get_addresses()?;
+            resources.append(&mut self.package_addresses_as_resources(addresses)?);
+        }
+
+        Ok(resources)
     }
 
     fn stop(&self, resource: &Resource) -> Result<()> {
-        self.stop_resources(vec![resource.id.to_owned()].as_ref())
+        self.stop_resource(resource)
     }
 
     fn delete(&self, resource: &Resource) -> Result<()> {
-        self.terminate_resources(vec![resource.id.to_owned()].as_ref())
+        self.delete_resource(resource)
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {
@@ -353,9 +526,12 @@ mod tests {
     use super::*;
     use crate::aws::cloudwatch::CwClient;
     use crate::config::*;
+    use regex::Regex;
     use rusoto_cloudwatch::CloudWatchClient;
     use rusoto_ec2::{Ec2Client, GroupIdentifier, Instance, InstanceState, Tag};
     use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher};
+
+    static EC2_NAME_TAG: &str = "^ec2-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\\-]+)$";
 
     fn create_config() -> Ec2Config {
         Ec2Config {
@@ -364,9 +540,11 @@ mod tests {
             required_tags: vec![],
             allowed_instance_types: vec![],
             ignore: vec![],
-            idle_rules: IdleRules::default(),
+            idle_rules: vec![],
             termination_protection: TerminationProtection { ignore: true },
             security_groups: SecurityGroups::default(),
+            eni: Eni::default(),
+            eip: Eip::default(),
         }
     }
 
@@ -411,7 +589,7 @@ mod tests {
                 instance_type: Some("t2.xlarge".to_string()),
                 tags: Some(vec![Tag {
                     key: Some("Name".to_string()),
-                    value: Some("Some".to_string()),
+                    value: Some("ec2-uw2-1a-p-tbd".to_string()),
                 }]),
                 state: Some(InstanceState {
                     code: Some(16),
@@ -429,11 +607,11 @@ mod tests {
                 tags: Some(vec![
                     Tag {
                         key: Some("Name".to_string()),
-                        value: Some("Some".to_string()),
+                        value: Some("ec2-uw2-1a-p-tbd".to_string()),
                     },
                     Tag {
-                        key: Some("Purpose".to_string()),
-                        value: Some("Some".to_string()),
+                        key: Some("Owner:Email".to_string()),
+                        value: Some("abc@def.com".to_string()),
                     },
                 ]),
                 state: Some(InstanceState {
@@ -463,7 +641,11 @@ mod tests {
     #[test]
     fn check_package_resources_by_single_tag() {
         let mut ec2_config = create_config();
-        ec2_config.required_tags = vec!["Name".to_string()];
+        ec2_config.required_tags = vec![RequiredTags {
+            name: "Name".to_string(),
+            pattern: Some(EC2_NAME_TAG.to_string()),
+            regex: Some(Regex::new(EC2_NAME_TAG).unwrap()),
+        }];
 
         let ec2_client = create_ec2_client(ec2_config);
         let resources = ec2_client
@@ -479,7 +661,18 @@ mod tests {
     #[test]
     fn check_package_resources_by_multiple_tags() {
         let mut ec2_config = create_config();
-        ec2_config.required_tags = vec!["Name".to_string(), "Purpose".to_string()];
+        ec2_config.required_tags = vec![
+            RequiredTags {
+                name: "Name".to_string(),
+                pattern: Some(EC2_NAME_TAG.to_string()),
+                regex: Some(Regex::new(EC2_NAME_TAG).unwrap()),
+            },
+            RequiredTags {
+                name: "Owner:Email".to_string(),
+                pattern: Some("^(.*)@def.com".to_string()),
+                regex: Some(Regex::new("^(.*)@def.com").unwrap()),
+            },
+        ];
 
         let ec2_client = create_ec2_client(ec2_config);
         let resources = ec2_client
@@ -526,7 +719,18 @@ mod tests {
     #[test]
     fn check_packaged_resources_by_all() {
         let mut ec2_config = create_config();
-        ec2_config.required_tags = vec!["Name".to_string(), "Purpose".to_string()];
+        ec2_config.required_tags = vec![
+            RequiredTags {
+                name: "Name".to_string(),
+                pattern: Some(EC2_NAME_TAG.to_string()),
+                regex: Some(Regex::new(EC2_NAME_TAG).unwrap()),
+            },
+            RequiredTags {
+                name: "Owner:Email".to_string(),
+                pattern: Some("^(.*)@def.com".to_string()),
+                regex: Some(Regex::new("^(.*)@def.com").unwrap()),
+            },
+        ];
         ec2_config.allowed_instance_types = vec!["t2.2xlarge".to_string(), "t2.xlarge".to_string()];
         ec2_config.security_groups.enabled = true;
         let open_sgs = vec!["sg-xxxxxxxx".to_string()];

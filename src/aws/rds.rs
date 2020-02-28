@@ -1,9 +1,10 @@
 use {
     crate::aws::cloudwatch::CwClient,
+    crate::aws::util,
     crate::aws::Result,
-    crate::config::RdsConfig,
+    crate::config::{RdsConfig, RequiredTags},
     crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
-    log::{debug, trace},
+    log::debug,
     rusoto_core::{HttpClient, Region},
     rusoto_credential::ProfileProvider,
     rusoto_rds::{
@@ -125,19 +126,11 @@ impl RdsNukeClient {
     }
 
     fn is_resource_idle(&self, instance: &DBInstance) -> bool {
-        if self.config.idle_rules.enabled {
+        if !self.config.idle_rules.is_empty() {
             !self
                 .cwclient
-                .filter_db_instance_by_utilization(
-                    &instance.db_instance_identifier.as_ref().unwrap(),
-                )
+                .filter_db_instance(&instance.db_instance_identifier.as_ref().unwrap())
                 .unwrap()
-                && !self
-                    .cwclient
-                    .filter_db_instance_by_connections(
-                        &instance.db_instance_identifier.as_ref().unwrap(),
-                    )
-                    .unwrap()
         } else {
             false
         }
@@ -176,8 +169,6 @@ impl RdsNukeClient {
             }
         }
 
-        trace!("RDS get_instances: {:?}", instances);
-
         Ok(instances)
     }
 
@@ -192,14 +183,9 @@ impl RdsNukeClient {
         Ok(result.tag_list)
     }
 
-    fn check_tags(&self, tags: &Option<Vec<Tag>>, required_tags: &Vec<String>) -> bool {
-        let tags: Vec<String> = tags
-            .clone()
-            .unwrap_or_default()
-            .iter()
-            .map(|t| t.key.clone().unwrap())
-            .collect();
-        required_tags.iter().all(|rt| tags.contains(rt))
+    fn check_tags(&self, tags: &Option<Vec<Tag>>, required_tags: &Vec<RequiredTags>) -> bool {
+        let ntags = self.package_tags_as_ntags(tags.to_owned());
+        util::compare_tags(ntags, required_tags)
     }
 
     fn disable_termination_protection(&self, instance_id: &str) -> Result<()> {

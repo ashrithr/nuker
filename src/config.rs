@@ -1,6 +1,8 @@
 //! Configuration Parser
 use clap::{App, Arg};
-use serde_derive::Deserialize;
+use log::warn;
+use regex::Regex;
+use serde::Deserialize;
 use std::fs::File;
 use std::io::Read;
 use std::time::Duration;
@@ -40,11 +42,20 @@ pub enum TargetState {
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
+pub struct RequiredTags {
+    pub name: String,
+    pub pattern: Option<String>,
+    #[serde(skip)]
+    pub regex: Option<Regex>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct IdleRules {
-    pub enabled: bool,
-    pub min_utilization: Option<f32>,
+    pub namespace: String,
+    pub metric: String,
+    pub minimum: Option<f32>,
     #[serde(with = "humantime_serde")]
-    pub min_duration: Duration,
+    pub duration: Duration,
     #[serde(with = "humantime_serde")]
     pub granularity: Duration,
     pub connections: Option<u64>,
@@ -70,16 +81,28 @@ pub struct SecurityGroups {
     pub to_port: u16,
 }
 
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct Eni {
+    pub cleanup: bool,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct Eip {
+    pub cleanup: bool,
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct Ec2Config {
     pub enabled: bool,
     pub target_state: TargetState,
-    pub required_tags: Vec<String>,
+    pub required_tags: Vec<RequiredTags>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
-    pub idle_rules: IdleRules,
+    pub idle_rules: Vec<IdleRules>,
     pub termination_protection: TerminationProtection,
     pub security_groups: SecurityGroups,
+    pub eni: Eni,
+    pub eip: Eip,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -87,16 +110,19 @@ pub struct EbsConfig {
     pub enabled: bool,
     pub target_state: TargetState,
     pub ignore: Vec<String>,
+    pub idle_rules: Vec<IdleRules>,
+    #[serde(with = "humantime_serde")]
+    pub older_than: Option<Duration>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct EmrConfig {
     pub enabled: bool,
     pub target_state: TargetState,
-    pub required_tags: Vec<String>,
+    pub required_tags: Vec<RequiredTags>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
-    pub idle_rules: IdleRules,
+    pub idle_rules: Vec<IdleRules>,
     pub termination_protection: TerminationProtection,
     pub security_groups: SecurityGroups,
 }
@@ -105,10 +131,10 @@ pub struct EmrConfig {
 pub struct RdsConfig {
     pub enabled: bool,
     pub target_state: TargetState,
-    pub required_tags: Vec<String>,
+    pub required_tags: Vec<RequiredTags>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
-    pub idle_rules: IdleRules,
+    pub idle_rules: Vec<IdleRules>,
     pub termination_protection: TerminationProtection,
 }
 
@@ -116,10 +142,10 @@ pub struct RdsConfig {
 pub struct AuroraConfig {
     pub enabled: bool,
     pub target_state: TargetState,
-    pub required_tags: Vec<String>,
+    pub required_tags: Vec<RequiredTags>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
-    pub idle_rules: IdleRules,
+    pub idle_rules: Vec<IdleRules>,
     pub termination_protection: TerminationProtection,
 }
 
@@ -127,10 +153,10 @@ pub struct AuroraConfig {
 pub struct RedshiftConfig {
     pub enabled: bool,
     pub target_state: TargetState,
-    pub required_tags: Vec<String>,
+    pub required_tags: Vec<RequiredTags>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
-    pub idle_rules: IdleRules,
+    pub idle_rules: Vec<IdleRules>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -230,5 +256,48 @@ pub fn parse_config_file(filename: &str) -> Config {
 }
 
 pub fn parse_config(buffer: &str) -> Config {
-    toml::from_str(buffer).expect("could not parse toml configuration")
+    let mut config: Config = toml::from_str(buffer).expect("could not parse toml configuration");
+
+    // Compile all regex expressions up front
+    for rt in &mut config.ec2.required_tags {
+        if rt.pattern.is_some() {
+            rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+        }
+    }
+
+    for rt in &mut config.rds.required_tags {
+        if rt.pattern.is_some() {
+            rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+        }
+    }
+
+    for rt in &mut config.aurora.required_tags {
+        if rt.pattern.is_some() {
+            rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+        }
+    }
+
+    for rt in &mut config.redshift.required_tags {
+        if rt.pattern.is_some() {
+            rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+        }
+    }
+
+    for rt in &mut config.emr.required_tags {
+        if rt.pattern.is_some() {
+            rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+        }
+    }
+
+    config
+}
+
+fn compile_regex(pattern: &str) -> Option<Regex> {
+    match Regex::new(pattern) {
+        Ok(regex) => Some(regex),
+        Err(err) => {
+            warn!("Failed compiling regex: {} - {:?}", pattern, err);
+            None
+        }
+    }
 }

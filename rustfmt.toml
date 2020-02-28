@@ -1,0 +1,4 @@
+comment_width = 100
+edition = "2018"
+merge_imports = true
+wrap_comments = true

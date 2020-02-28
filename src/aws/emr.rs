@@ -1,8 +1,9 @@
 use crate::aws::cloudwatch::CwClient;
+use crate::aws::util;
 use crate::aws::Result;
-use crate::config::EmrConfig;
+use crate::config::{EmrConfig, RequiredTags};
 use crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType};
-use log::{debug, trace, warn};
+use log::{debug, warn};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_ec2::{DescribeSecurityGroupsRequest, Ec2, Ec2Client, Filter};
@@ -143,14 +144,9 @@ impl EmrNukeClient {
         }
     }
 
-    fn is_resource_idle(&self, cluster: &Cluster) -> bool {
-        if self.config.idle_rules.enabled {
-            self.cwclient
-                .filter_emr_by_utilization(&cluster.id.as_ref().unwrap())
-                .unwrap()
-        } else {
-            false
-        }
+    fn is_resource_idle(&self, _cluster: &Cluster) -> bool {
+        // TODO: https://github.com/rusoto/rusoto/issues/1266
+        false
     }
 
     fn is_resource_not_secure(&self, cluster: &Cluster, sgs: Option<Vec<String>>) -> bool {
@@ -209,14 +205,9 @@ impl EmrNukeClient {
 
     /// Checks cluster tags against required tags and returns true only if all required tags are
     /// present
-    fn check_tags(&self, tags: &Option<Vec<Tag>>, required_tags: &Vec<String>) -> bool {
-        let tags: Vec<String> = tags
-            .clone()
-            .unwrap_or_default()
-            .iter()
-            .map(|t| t.key.clone().unwrap())
-            .collect();
-        required_tags.iter().all(|rt| tags.contains(rt))
+    fn check_tags(&self, tags: &Option<Vec<Tag>>, required_tags: &Vec<RequiredTags>) -> bool {
+        let ntags = self.package_tags_as_ntags(tags.to_owned());
+        util::compare_tags(ntags, required_tags)
     }
 
     fn get_clusters(&self) -> Result<Vec<Cluster>> {
@@ -261,8 +252,6 @@ impl EmrNukeClient {
                 next_token = result.marker;
             }
         }
-
-        trace!("EMR get_clusters: {:?}", clusters);
 
         Ok(clusters)
     }

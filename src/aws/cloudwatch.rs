@@ -16,11 +16,15 @@ type Result<T, E = AwsError> = std::result::Result<T, E>;
 
 pub struct CwClient {
     pub client: CloudWatchClient,
-    pub idle_rules: IdleRules,
+    pub idle_rules: Vec<IdleRules>,
 }
 
 impl CwClient {
-    pub fn new(profile_name: Option<&str>, region: Region, idle_rules: IdleRules) -> Result<Self> {
+    pub fn new(
+        profile_name: Option<&str>,
+        region: Region,
+        idle_rules: Vec<IdleRules>,
+    ) -> Result<Self> {
         if let Some(profile) = profile_name {
             let mut pp = ProfileProvider::new()?;
             pp.set_profile(profile);
@@ -43,9 +47,10 @@ impl CwClient {
         dimension_value: String,
         namespace: String,
         metric_name: String,
+        min_duration: Duration,
+        granularity: Duration,
     ) -> Result<GetMetricStatisticsOutput> {
         let end_time = Utc::now();
-        let idle_rules = self.idle_rules.clone();
 
         let req = GetMetricStatisticsInput {
             dimensions: Some(vec![Dimension {
@@ -54,14 +59,12 @@ impl CwClient {
             }]),
             namespace,
             metric_name,
-            start_time: self.get_start_time_from_duration(end_time, idle_rules.min_duration),
+            start_time: self.get_start_time_from_duration(end_time, min_duration),
             end_time: end_time.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-            period: idle_rules.granularity.as_secs() as i64,
+            period: granularity.as_secs() as i64,
             statistics: Some(vec!["Maximum".to_owned()]),
             ..Default::default()
         };
-
-        trace!("Sending 'get-metric-statistics' request {:?}", req);
 
         self.client
             .get_metric_statistics(req)
@@ -71,150 +74,53 @@ impl CwClient {
             })
     }
 
-    pub fn filter_instance_by_utilization(&self, instance_id: &String) -> Result<bool> {
-        let metrics = self
-            .get_metric_statistics_maximum(
-                "InstanceId".to_string(),
-                instance_id.to_string(),
-                "AWS/EC2".to_string(),
-                "CPUUtilization".to_string(),
-            )?
-            .datapoints
-            .unwrap_or_default();
+    fn filter_resource(&self, resource_id: &str, dimension: &str) -> Result<bool> {
+        let mut result = false;
 
-        trace!("Datapoints used for comparison: {:?}", metrics);
+        for idle_rule in &self.idle_rules {
+            let metrics = self
+                .get_metric_statistics_maximum(
+                    dimension.to_string(),
+                    resource_id.to_string(),
+                    idle_rule.namespace.to_string(),
+                    idle_rule.metric.to_string(),
+                    idle_rule.duration,
+                    idle_rule.granularity,
+                )?
+                .datapoints
+                .unwrap_or_default();
 
-        Ok(self.filter_metrics_by_min_utilization(metrics))
+            trace!("Datapoints used for comparison: {:?}", metrics);
+            result = self.filter_metrics(metrics, idle_rule.minimum.unwrap_or_default() as f64);
+        }
+
+        Ok(result)
     }
 
-    pub fn filter_db_instance_by_utilization(&self, instance_name: &String) -> Result<bool> {
-        let metrics = self
-            .get_metric_statistics_maximum(
-                "DBInstanceIdentifier".to_string(),
-                instance_name.to_string(),
-                "AWS/RDS".to_string(),
-                "CPUUtilization".to_string(),
-            )?
-            .datapoints
-            .unwrap_or_default();
-
-        trace!("Datapoints used for comparison: {:?}", metrics);
-
-        Ok(self.filter_metrics_by_min_utilization(metrics))
+    pub fn filter_instance(&self, instance_id: &str) -> Result<bool> {
+        self.filter_resource(instance_id, "InstanceId")
     }
 
-    pub fn filter_db_instance_by_connections(&self, instance_name: &String) -> Result<bool> {
-        let metrics = self
-            .get_metric_statistics_maximum(
-                "DBInstanceIdentifier".to_string(),
-                instance_name.to_string(),
-                "AWS/RDS".to_string(),
-                "DatabaseConnections".to_string(),
-            )?
-            .datapoints
-            .unwrap_or_default();
-
-        trace!("Datapoints used for comparison: {:?}", metrics);
-
-        Ok(self.filter_metrics_by_connections(metrics))
+    pub fn filter_volume(&self, volume_id: &str) -> Result<bool> {
+        self.filter_resource(volume_id, "VolumeId")
     }
 
-    pub fn filter_db_cluster_by_utilization(&self, cluster_identifier: &String) -> Result<bool> {
-        let metrics = self
-            .get_metric_statistics_maximum(
-                "DBClusterIdentifier".to_string(),
-                cluster_identifier.to_string(),
-                "AWS/RDS".to_string(),
-                "CPUUtilization".to_string(),
-            )?
-            .datapoints
-            .unwrap_or_default();
-
-        trace!("Datapoints used for comparison: {:?}", metrics);
-
-        Ok(self.filter_metrics_by_min_utilization(metrics))
+    pub fn filter_db_instance(&self, instance_name: &str) -> Result<bool> {
+        self.filter_resource(instance_name, "DBInstanceIdentifier")
     }
 
-    pub fn filter_db_cluster_by_connections(&self, cluster_identifier: &String) -> Result<bool> {
-        let metrics = self
-            .get_metric_statistics_maximum(
-                "DBClusterIdentifier".to_string(),
-                cluster_identifier.to_string(),
-                "AWS/RDS".to_string(),
-                "DatabaseConnections".to_string(),
-            )?
-            .datapoints
-            .unwrap_or_default();
-
-        trace!("Datapoints used for comparison: {:?}", metrics);
-
-        Ok(self.filter_metrics_by_connections(metrics))
+    pub fn filter_db_cluster(&self, cluster_identifier: &str) -> Result<bool> {
+        self.filter_resource(cluster_identifier, "DBClusterIdentifier")
     }
 
-    pub fn filter_rs_cluster_by_utilization(&self, cluster_id: &String) -> Result<bool> {
-        let metrics = self
-            .get_metric_statistics_maximum(
-                "ClusterIdentifier".to_string(),
-                cluster_id.to_string(),
-                "AWS/Redshift".to_string(),
-                "CPUUtilization".to_string(),
-            )?
-            .datapoints
-            .unwrap_or_default();
-
-        Ok(self.filter_metrics_by_min_utilization(metrics))
+    pub fn filter_rs_cluster(&self, cluster_id: &String) -> Result<bool> {
+        self.filter_resource(cluster_id, "ClusterIdentifier")
     }
 
-    pub fn filter_rs_cluster_by_connections(&self, cluster_id: &String) -> Result<bool> {
-        let metrics = self
-            .get_metric_statistics_maximum(
-                "ClusterIdentifier".to_string(),
-                cluster_id.to_string(),
-                "AWS/Redshift".to_string(),
-                "DatabaseConnections".to_string(),
-            )?
-            .datapoints
-            .unwrap_or_default();
-
-        trace!("Datapoints used for comparison: {:?}", metrics);
-
-        Ok(self.filter_metrics_by_connections(metrics))
-    }
-
-    /// Uses IsIdle metric to see if the cluster is performing work or not. It is set to 1 if
-    /// no tasks are running and no jobs are running, and set to 0 otherwise. This value is
-    /// checked at five-minute intervals and a value of 1 indicates only that the cluster
-    /// was idle when checked, not that it was idle for the entire five minutes.
-    pub fn filter_emr_by_utilization(&self, cluster_id: &String) -> Result<bool> {
-        let metrics = self
-            .get_metric_statistics_maximum(
-                "JobFlowId".to_string(),
-                cluster_id.to_string(),
-                "AWS/ElasticMapReduce".to_string(),
-                "IsIdle".to_string(),
-            )?
-            .datapoints
-            .unwrap_or_default();
-
-        trace!("Datapoints used for comparison {:?}", metrics);
-
-        Ok(metrics
+    fn filter_metrics(&self, metrics: Vec<Datapoint>, minimum: f64) -> bool {
+        metrics
             .iter()
-            .all(|metric| metric.maximum.unwrap_or_default() == 1.0))
-    }
-
-    fn filter_metrics_by_min_utilization(&self, metrics: Vec<Datapoint>) -> bool {
-        metrics.iter().any(|metric| {
-            metric.maximum.unwrap_or_default()
-                > self.idle_rules.min_utilization.unwrap_or_default() as f64
-        })
-    }
-
-    fn filter_metrics_by_connections(&self, metrics: Vec<Datapoint>) -> bool {
-        metrics.iter().any(|metric| {
-            metric.maximum.unwrap_or_default()
-                > self.idle_rules.connections.unwrap_or_default() as f64
-        })
+            .any(|metric| metric.maximum.unwrap_or_default() > minimum)
     }
 
     fn get_start_time_from_duration(
@@ -246,13 +152,14 @@ mod tests {
                 MockCredentialsProvider,
                 Default::default(),
             ),
-            idle_rules: IdleRules {
-                enabled: true,
-                min_utilization: Some(0.0),
-                min_duration: Duration::from_secs(86400),
+            idle_rules: vec![IdleRules {
+                namespace: "AWS/EC2".to_string(),
+                metric: "CPUUtilization".to_string(),
+                minimum: Some(0.0),
+                duration: Duration::from_secs(86400),
                 granularity: Duration::from_secs(3600),
                 connections: Some(100),
-            },
+            }],
         }
     }
 
@@ -308,21 +215,23 @@ mod tests {
 
     #[test]
     fn check_metrics_filter_by_min_utilization_of_10() {
-        let mut cw_client = create_client();
-        cw_client.idle_rules.min_utilization = Some(10.0);
-
-        let actual = cw_client.filter_metrics_by_min_utilization(get_metrics_for_min_utilization());
-
-        assert_eq!(actual, true)
+        let cw_client = &create_client();
+        for _ in &cw_client.idle_rules {
+            assert_eq!(
+                cw_client.filter_metrics(get_metrics_for_min_utilization(), 10.0),
+                true
+            )
+        }
     }
 
     #[test]
     fn check_metrics_filter_by_min_utilization_of_20() {
-        let mut cw_client = create_client();
-        cw_client.idle_rules.min_utilization = Some(20.0);
-
-        let actual = cw_client.filter_metrics_by_min_utilization(get_metrics_for_min_utilization());
-
-        assert_eq!(actual, false)
+        let cw_client = &create_client();
+        for _ in &cw_client.idle_rules {
+            assert_eq!(
+                cw_client.filter_metrics(get_metrics_for_min_utilization(), 20.0),
+                false
+            )
+        }
     }
 }

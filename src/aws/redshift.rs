@@ -1,7 +1,8 @@
 use {
     crate::aws::cloudwatch::CwClient,
+    crate::aws::util,
     crate::aws::Result,
-    crate::config::RedshiftConfig,
+    crate::config::{RedshiftConfig, RequiredTags},
     crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
     log::debug,
     rusoto_core::{HttpClient, Region},
@@ -116,15 +117,11 @@ impl RedshiftNukeClient {
     }
 
     fn is_resource_idle(&self, cluster: &Cluster) -> bool {
-        if self.config.idle_rules.enabled {
+        if !self.config.idle_rules.is_empty() {
             !self
                 .cwclient
-                .filter_rs_cluster_by_utilization(&cluster.cluster_identifier.as_ref().unwrap())
+                .filter_rs_cluster(&cluster.cluster_identifier.as_ref().unwrap())
                 .unwrap()
-                && !self
-                    .cwclient
-                    .filter_rs_cluster_by_connections(&cluster.cluster_identifier.as_ref().unwrap())
-                    .unwrap()
         } else {
             false
         }
@@ -169,14 +166,9 @@ impl RedshiftNukeClient {
         Ok(clusters)
     }
 
-    fn check_tags(&self, tags: &Option<Vec<Tag>>, required_tags: &Vec<String>) -> bool {
-        let tags: Vec<String> = tags
-            .clone()
-            .unwrap_or_default()
-            .iter()
-            .map(|t| t.key.clone().unwrap())
-            .collect();
-        required_tags.iter().all(|rt| tags.contains(rt))
+    fn check_tags(&self, tags: &Option<Vec<Tag>>, required_tags: &Vec<RequiredTags>) -> bool {
+        let ntags = self.package_tags_as_ntags(tags.to_owned());
+        util::compare_tags(ntags, required_tags)
     }
 
     fn terminate_resource(&self, cluster_id: String) -> Result<()> {

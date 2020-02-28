@@ -7,6 +7,7 @@ mod emr;
 mod rds;
 mod redshift;
 mod s3;
+mod util;
 
 use crate::aws::ebs::EbsNukeClient;
 use {
@@ -150,7 +151,7 @@ impl AwsClient {
             .collect();
         let ebs_resources: Vec<&Resource> = resources
             .iter()
-            .filter(|r| r.resource_type.is_volume())
+            .filter(|r| r.resource_type.is_ebs())
             .collect();
         let rds_resources: Vec<&Resource> = resources
             .iter()

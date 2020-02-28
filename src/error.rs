@@ -5,15 +5,16 @@ use {
     rusoto_core::RusotoError,
     rusoto_credential::CredentialsError,
     rusoto_ec2::{
-        DescribeInstanceAttributeError, DescribeInstancesError, DescribeSecurityGroupsError,
-        DescribeVolumesError, ModifyInstanceAttributeError, StopInstancesError,
-        TerminateInstancesError,
+        DeleteNetworkInterfaceError, DeleteSnapshotError, DeleteVolumeError,
+        DescribeAddressesError, DescribeInstanceAttributeError, DescribeInstancesError,
+        DescribeNetworkInterfacesError, DescribeSecurityGroupsError, DescribeSnapshotsError,
+        DescribeVolumesError, ModifyInstanceAttributeError, ReleaseAddressError,
+        StopInstancesError, TerminateInstancesError,
     },
     rusoto_emr::{
         DescribeClusterError, ListClustersError, ListInstancesError, SetTerminationProtectionError,
         TerminateJobFlowsError,
     },
-    rusoto_pricing::{DescribeServicesError, GetProductsError},
     rusoto_rds::{
         DeleteDBClusterError, DeleteDBInstanceError, DescribeDBClustersError,
         DescribeDBInstancesError, ListTagsForResourceError, ModifyDBClusterError,
@@ -40,9 +41,37 @@ pub enum Error {
     VolumesDescribe {
         error: RusotoError<DescribeVolumesError>,
     },
+    #[fail(display = "Issue deleting Volume: {}", error)]
+    VolumeDelete {
+        error: RusotoError<DeleteVolumeError>,
+    },
+    #[fail(display = "Issue describing Snapshots: {}", error)]
+    SnapshotsDescribe {
+        error: RusotoError<DescribeSnapshotsError>,
+    },
+    #[fail(display = "Issue deleting Snapshot: {}", error)]
+    SnapshotDelete {
+        error: RusotoError<DeleteSnapshotError>,
+    },
     #[fail(display = "Issue describing Security Groups: {}", error)]
     SecurityGroupsDescribe {
         error: RusotoError<DescribeSecurityGroupsError>,
+    },
+    #[fail(display = "Issue describing Network Interfaces: {}", error)]
+    InterfacesDescribe {
+        error: RusotoError<DescribeNetworkInterfacesError>,
+    },
+    #[fail(display = "Issue deleting network interface: {}", error)]
+    InterfaceDelete {
+        error: RusotoError<DeleteNetworkInterfaceError>,
+    },
+    #[fail(display = "Issue describing Addresses: {}", error)]
+    AddressesDescribe {
+        error: RusotoError<DescribeAddressesError>,
+    },
+    #[fail(display = "Issue releasing address: {}", error)]
+    AddressDelete {
+        error: RusotoError<ReleaseAddressError>,
     },
     #[fail(display = "Issue describing DB Instances: {}", error)]
     DBInstanceDescribe {
@@ -155,14 +184,6 @@ pub enum Error {
     #[fail(display = "Issue querying Cost Explorer: {}", error)]
     CeError {
         error: RusotoError<GetCostAndUsageError>,
-    },
-    #[fail(display = "Issue querying Pricing: {}", error)]
-    DescribeServicesError {
-        error: RusotoError<DescribeServicesError>,
-    },
-    #[fail(display = "Issue querying Pricing: {}", error)]
-    GetProductsError {
-        error: RusotoError<GetProductsError>,
     },
     #[fail(display = "JSON Encoding/Decoding error: {}", error)]
     JsonError { error: serde_json::error::Error },
