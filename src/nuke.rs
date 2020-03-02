@@ -53,7 +53,7 @@ impl Nuke {
         }
 
         if !self.args.dry_run && !self.args.force {
-            let input: String = self.get_input("Are you sure you want to continue?");
+            let input: String = self.get_input("Are you sure you want to continue (yes/no)?");
             if &input.to_lowercase() != "yes" {
                 exit(1);
             }

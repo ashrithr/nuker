@@ -8,9 +8,11 @@ mod glue;
 mod rds;
 mod redshift;
 mod s3;
+mod sagemaker;
 mod sts;
 mod util;
 
+use crate::aws::sagemaker::SagemakerNukeClient;
 use crate::{
     aws::ebs::EbsNukeClient,
     config::Config,
@@ -121,6 +123,15 @@ impl AwsClient {
             )?))
         }
 
+        if config.sagemaker.enabled {
+            clients.push(Box::new(SagemakerNukeClient::new(
+                profile_name,
+                region.clone(),
+                config.sagemaker.clone(),
+                dry_run,
+            )?))
+        }
+
         let ce_client = if config.print_usage {
             Some(CeClient::new(profile_name, config.usage_days)?)
         } else {
@@ -192,6 +203,10 @@ impl AwsClient {
             .iter()
             .filter(|r| r.resource_type.is_glue())
             .collect();
+        let sagemaker_resources: Vec<&Resource> = resources
+            .iter()
+            .filter(|r| r.resource_type.is_sagemaker())
+            .collect();
 
         for client in &self.clients {
             let ref_client = client.as_any();
@@ -212,6 +227,8 @@ impl AwsClient {
                 client.cleanup(&emr_resources)?;
             } else if ref_client.is::<GlueNukeClient>() {
                 client.cleanup(&glue_resources)?;
+            } else if ref_client.is::<SagemakerNukeClient>() {
+                client.cleanup(&sagemaker_resources)?;
             }
         }
 

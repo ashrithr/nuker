@@ -22,6 +22,10 @@ use rusoto_s3::{
     DeleteBucketError, DeleteObjectsError, GetBucketTaggingError, ListBucketsError,
     ListObjectVersionsError, ListObjectsV2Error,
 };
+use rusoto_sagemaker::{
+    DeleteNotebookInstanceError, ListNotebookInstancesError, ListTagsError,
+    StopNotebookInstanceError,
+};
 use rusoto_sts::GetCallerIdentityError;
 
 #[derive(Debug, Fail, From)]
@@ -182,11 +186,11 @@ pub enum Error {
     CeError {
         error: RusotoError<GetCostAndUsageError>,
     },
-    #[fail(display = "Issue decribing Glue Dev Endpoints: {}", error)]
+    #[fail(display = "Issue describing Glue Dev Endpoints: {}", error)]
     DescribeDevEndpoints {
         error: RusotoError<GetDevEndpointsError>,
     },
-    #[fail(display = "Issue decribing Glue Tags: {}", error)]
+    #[fail(display = "Issue describing Glue Tags: {}", error)]
     DescribeTags { error: RusotoError<GetTagsError> },
     #[fail(display = "Issue getting caller identity: {}", error)]
     GetCallerIdentity {
@@ -195,6 +199,20 @@ pub enum Error {
     #[fail(display = "Failed deleting Glue Dev Endpoint: {}", error)]
     DeleteDevEndpoint {
         error: RusotoError<DeleteDevEndpointError>,
+    },
+    #[fail(display = "Issue describing Sagemaker Notebooks: {}", error)]
+    DescribeNotebooks {
+        error: RusotoError<ListNotebookInstancesError>,
+    },
+    #[fail(display = "Issue describing Sagemaker Notebook tags: {}", error)]
+    DescribeNotebookTags { error: RusotoError<ListTagsError> },
+    #[fail(display = "Failed deleting Sagemaker Notebook: {}", error)]
+    DeleteSagemakerNotebook {
+        error: RusotoError<DeleteNotebookInstanceError>,
+    },
+    #[fail(display = "Failed stopping Sagemaker Notebook: {}", error)]
+    StopSagemakerNotebook {
+        error: RusotoError<StopNotebookInstanceError>,
     },
     #[fail(display = "JSON Encoding/Decoding error: {}", error)]
     JsonError { error: serde_json::error::Error },

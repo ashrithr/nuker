@@ -187,8 +187,8 @@ impl RdsNukeClient {
     }
 
     fn disable_termination_protection(&self, instance_id: &str) -> Result<()> {
-        // TODO: This call can be saved by saving the termiantion protection state in the
-        // Resource struct, while scanning for isntances.
+        // TODO: This call can be saved by saving the termination protection state in the
+        // Resource struct, while scanning for instances.
         let resp = self
             .client
             .describe_db_instances(DescribeDBInstancesMessage {
@@ -238,6 +238,7 @@ impl RdsNukeClient {
                 .delete_db_instance(DeleteDBInstanceMessage {
                     db_instance_identifier: instance_id,
                     delete_automated_backups: Some(false),
+                    skip_final_snapshot: Some(true),
                     ..Default::default()
                 })
                 .sync()?;

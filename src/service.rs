@@ -19,6 +19,7 @@ pub enum ResourceType {
     Redshift,
     EmrCluster,
     GlueDevEndpoint,
+    SagemakerNotebook,
 }
 
 impl ResourceType {
@@ -111,6 +112,13 @@ impl ResourceType {
     pub fn is_glue(&self) -> bool {
         match *self {
             ResourceType::GlueDevEndpoint => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_sagemaker(&self) -> bool {
+        match *self {
+            ResourceType::SagemakerNotebook => true,
             _ => false,
         }
     }

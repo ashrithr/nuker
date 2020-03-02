@@ -33,6 +33,7 @@ pub struct Config {
     pub emr: EmrConfig,
     pub redshift: RedshiftConfig,
     pub glue: GlueConfig,
+    pub sagemaker: SagemakerConfig,
 }
 
 #[derive(Debug, Deserialize, Clone, Eq, PartialEq)]
@@ -172,6 +173,17 @@ pub struct GlueConfig {
     pub enabled: bool,
     pub target_state: TargetState,
     pub required_tags: Option<Vec<RequiredTags>>,
+    pub ignore: Vec<String>,
+    #[serde(with = "humantime_serde")]
+    pub older_than: Duration,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct SagemakerConfig {
+    pub enabled: bool,
+    pub target_state: TargetState,
+    pub required_tags: Option<Vec<RequiredTags>>,
+    pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
     #[serde(with = "humantime_serde")]
     pub older_than: Duration,
