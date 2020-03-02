@@ -114,6 +114,31 @@ impl CwClient {
         self.filter_resource(cluster_id, "ClusterIdentifier")
     }
 
+    pub fn filter_emr_cluster(&self, cluster_id: &String) -> Result<bool> {
+        // FIXME: make this code generic
+        let mut result = false;
+
+        for idle_rule in &self.idle_rules {
+            let metrics = self
+                .get_metric_statistics_maximum(
+                    "JobFlowId".to_string(),
+                    cluster_id.to_string(),
+                    idle_rule.namespace.to_string(),
+                    idle_rule.metric.to_string(),
+                    idle_rule.duration,
+                    idle_rule.granularity,
+                )?
+                .datapoints
+                .unwrap_or_default();
+
+            result = metrics.iter().all(|m| {
+                m.maximum.unwrap_or_default() == idle_rule.minimum.unwrap_or_default() as f64
+            });
+        }
+
+        Ok(result)
+    }
+
     fn filter_metrics(&self, metrics: Vec<Datapoint>, minimum: f64) -> bool {
         metrics
             .iter()

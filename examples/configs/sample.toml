@@ -285,14 +285,14 @@ ignore = []
 
 [emr]
 # Specifies whether EMR enforcement is enabled or not
-enabled = false
+enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Deleted'.
 # Note: EMR does not support Stopping clusters, instead the cluster will be
 # deleted.
 target_state = "Deleted"
 # Defines which instance types are allowed, empty means allow any types
-allowed_instance_types = []
+allowed_instance_types = ["m3.xlarge", "m4.large", "m4.xlarge", "m5.xlarge"]
 # The following resources will be ignored from rule enforcement
 # ignore = ["instance-id1", "instance-id2"]
 ignore = []

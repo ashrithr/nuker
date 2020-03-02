@@ -1,15 +1,15 @@
 use crate::{
-    aws::{cloudwatch::CwClient, util, Result},
-    config::{EmrConfig, RequiredTags},
-    service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
+    aws::{cloudwatch::CwClient, Result},
+    config::EmrConfig,
+    service::{EnforcementState, NukeService, Resource, ResourceType},
 };
-use log::{debug, warn};
+use log::debug;
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_ec2::{DescribeSecurityGroupsRequest, Ec2, Ec2Client, Filter};
 use rusoto_emr::{
-    Cluster, DescribeClusterInput, Emr, EmrClient, ListClustersInput, ListInstancesInput,
-    SetTerminationProtectionInput, Tag, TerminateJobFlowsInput,
+    ClusterSummary, Emr, EmrClient, ListClustersInput, ListInstancesInput,
+    SetTerminationProtectionInput, TerminateJobFlowsInput,
 };
 
 pub struct EmrNukeClient {
@@ -60,20 +60,9 @@ impl EmrNukeClient {
         }
     }
 
-    fn package_tags_as_ntags(&self, tags: Option<Vec<Tag>>) -> Option<Vec<NTag>> {
-        tags.map(|ts| {
-            ts.iter()
-                .map(|tag| NTag {
-                    key: tag.key.clone(),
-                    value: tag.value.clone(),
-                })
-                .collect()
-        })
-    }
-
     fn package_clusters_as_resources(
         &self,
-        clusters: Vec<Cluster>,
+        clusters: Vec<ClusterSummary>,
         sgs: Option<Vec<String>>,
     ) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
@@ -111,7 +100,7 @@ impl EmrNukeClient {
                 id: cluster_id,
                 region: self.region.clone(),
                 resource_type: ResourceType::EmrCluster,
-                tags: self.package_tags_as_ntags(cluster.tags.clone()),
+                tags: None,
                 state: cluster.status.as_ref().unwrap().state.clone(),
                 enforcement_state,
             });
@@ -120,15 +109,12 @@ impl EmrNukeClient {
         Ok(resources)
     }
 
-    fn resource_tags_does_not_match(&self, cluster: &Cluster) -> bool {
-        if self.config.required_tags.is_some() {
-            !self.check_tags(&cluster.tags, &self.config.required_tags.as_ref().unwrap())
-        } else {
-            false
-        }
+    fn resource_tags_does_not_match(&self, _cluster: &ClusterSummary) -> bool {
+        // TODO: https://github.com/rusoto/rusoto/issues/1266
+        false
     }
 
-    fn resource_types_does_not_match(&self, cluster: &Cluster) -> bool {
+    fn resource_types_does_not_match(&self, cluster: &ClusterSummary) -> bool {
         if !self.config.allowed_instance_types.is_empty() {
             if let Ok(instance_types) = self.get_instance_types(cluster.id.as_ref().unwrap()) {
                 if instance_types
@@ -144,44 +130,52 @@ impl EmrNukeClient {
         }
     }
 
-    fn is_resource_idle(&self, _cluster: &Cluster) -> bool {
-        // TODO: https://github.com/rusoto/rusoto/issues/1266
-        false
-    }
-
-    fn is_resource_not_secure(&self, cluster: &Cluster, sgs: Option<Vec<String>>) -> bool {
-        if self.config.security_groups.enabled && sgs.is_some() {
-            let mut cluster_sgs = Vec::new();
-
-            if let Some(instance_attributes) = cluster.ec_2_instance_attributes.clone() {
-                if let Some(master_sg) = instance_attributes.emr_managed_master_security_group {
-                    cluster_sgs.push(master_sg.clone());
-                }
-
-                if let Some(worker_sg) = instance_attributes.emr_managed_slave_security_group {
-                    cluster_sgs.push(worker_sg.clone());
-                }
-
-                if let Some(add_master_sgs) = instance_attributes.additional_master_security_groups
-                {
-                    for add_master_sg in add_master_sgs {
-                        cluster_sgs.push(add_master_sg);
-                    }
-                }
-
-                if let Some(add_worker_sgs) = instance_attributes.additional_slave_security_groups {
-                    for add_worker_sg in add_worker_sgs {
-                        cluster_sgs.push(add_worker_sg);
-                    }
-                }
-
-                sgs.unwrap().iter().any(|s| cluster_sgs.contains(&s))
-            } else {
-                false
-            }
+    fn is_resource_idle(&self, cluster: &ClusterSummary) -> bool {
+        if !self.config.idle_rules.is_empty() {
+            !self
+                .cwclient
+                .filter_emr_cluster(&cluster.id.as_ref().unwrap())
+                .unwrap()
         } else {
             false
         }
+    }
+
+    fn is_resource_not_secure(&self, _cluster: &ClusterSummary, _sgs: Option<Vec<String>>) -> bool {
+        // TODO: https://github.com/rusoto/rusoto/issues/1266
+        false
+        // if self.config.security_groups.enabled && sgs.is_some() {
+        //     let mut cluster_sgs = Vec::new();
+        //
+        //     if let Some(instance_attributes) = cluster.ec_2_instance_attributes.clone() {
+        //         if let Some(master_sg) = instance_attributes.emr_managed_master_security_group {
+        //             cluster_sgs.push(master_sg.clone());
+        //         }
+        //
+        //         if let Some(worker_sg) = instance_attributes.emr_managed_slave_security_group {
+        //             cluster_sgs.push(worker_sg.clone());
+        //         }
+        //
+        //         if let Some(add_master_sgs) = instance_attributes.additional_master_security_groups
+        //         {
+        //             for add_master_sg in add_master_sgs {
+        //                 cluster_sgs.push(add_master_sg);
+        //             }
+        //         }
+        //
+        //         if let Some(add_worker_sgs) = instance_attributes.additional_slave_security_groups {
+        //             for add_worker_sg in add_worker_sgs {
+        //                 cluster_sgs.push(add_worker_sg);
+        //             }
+        //         }
+        //
+        //         sgs.unwrap().iter().any(|s| cluster_sgs.contains(&s))
+        //     } else {
+        //         false
+        //     }
+        // } else {
+        //     false
+        // }
     }
 
     fn get_instance_types(&self, cluster_id: &str) -> Result<Vec<String>> {
@@ -203,16 +197,9 @@ impl EmrNukeClient {
         Ok(instance_types)
     }
 
-    /// Checks cluster tags against required tags and returns true only if all required tags are
-    /// present
-    fn check_tags(&self, tags: &Option<Vec<Tag>>, required_tags: &Vec<RequiredTags>) -> bool {
-        let ntags = self.package_tags_as_ntags(tags.to_owned());
-        util::compare_tags(ntags, required_tags)
-    }
-
-    fn get_clusters(&self) -> Result<Vec<Cluster>> {
+    fn get_clusters(&self) -> Result<Vec<ClusterSummary>> {
         let mut next_token: Option<String> = None;
-        let mut clusters: Vec<Cluster> = Vec::new();
+        let mut clusters: Vec<ClusterSummary> = Vec::new();
 
         loop {
             let result = self
@@ -225,24 +212,25 @@ impl EmrNukeClient {
 
             if let Some(cs) = result.clusters {
                 for c in cs {
-                    // TODO: https://github.com/rusoto/rusoto/issues/1266
-
-                    match self
-                        .client
-                        .describe_cluster(DescribeClusterInput {
-                            cluster_id: c.id.unwrap_or_default(),
-                        })
-                        .sync()
-                    {
-                        Ok(result) => {
-                            if let Some(cluster) = result.cluster {
-                                clusters.push(cluster);
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Failed 'describe-cluster'. Err: {:?}", e);
-                        }
-                    }
+                    clusters.push(c);
+                    //     // TODO: https://github.com/rusoto/rusoto/issues/1266
+                    //
+                    //     match self
+                    //         .client
+                    //         .describe_cluster(DescribeClusterInput {
+                    //             cluster_id: c.id.unwrap_or_default(),
+                    //         })
+                    //         .sync()
+                    //     {
+                    //         Ok(result) => {
+                    //             if let Some(cluster) = result.cluster {
+                    //                 clusters.push(cluster);
+                    //             }
+                    //         }
+                    //         Err(e) => {
+                    //             warn!("Failed 'describe-cluster'. Err: {:?}", e);
+                    //         }
+                    //     }
                 }
             }
 
