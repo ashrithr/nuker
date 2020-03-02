@@ -1,15 +1,12 @@
-use {
-    crate::error::Error as AwsError,
-    chrono::prelude::*,
-    chrono::Duration,
-    prettytable::{cell, row, Table},
-    rusoto_ce::{
-        CostExplorer, CostExplorerClient, DateInterval, GetCostAndUsageRequest,
-        GetCostAndUsageResponse, GroupDefinition, MetricValue, ResultByTime,
-    },
-    rusoto_core::{HttpClient, Region},
-    rusoto_credential::ProfileProvider,
+use crate::error::Error as AwsError;
+use chrono::{prelude::*, Duration};
+use prettytable::{cell, row, Table};
+use rusoto_ce::{
+    CostExplorer, CostExplorerClient, DateInterval, GetCostAndUsageRequest,
+    GetCostAndUsageResponse, GroupDefinition, MetricValue, ResultByTime,
 };
+use rusoto_core::{HttpClient, Region};
+use rusoto_credential::ProfileProvider;
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
 

@@ -1,17 +1,15 @@
-use {
-    crate::aws::cloudwatch::CwClient,
-    crate::aws::util,
-    crate::aws::Result,
-    crate::config::{RdsConfig, RequiredTags},
-    crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
-    log::debug,
-    rusoto_core::{HttpClient, Region},
-    rusoto_credential::ProfileProvider,
-    rusoto_rds::{
-        DBInstance, DeleteDBInstanceMessage, DescribeDBInstancesMessage, Filter,
-        ListTagsForResourceMessage, ModifyDBInstanceMessage, Rds, RdsClient, StopDBInstanceMessage,
-        Tag,
-    },
+use crate::{
+    aws::{cloudwatch::CwClient, util, Result},
+    config::{RdsConfig, RequiredTags},
+    service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
+};
+use log::debug;
+use rusoto_core::{HttpClient, Region};
+use rusoto_credential::ProfileProvider;
+use rusoto_rds::{
+    DBInstance, DeleteDBInstanceMessage, DescribeDBInstancesMessage, Filter,
+    ListTagsForResourceMessage, ModifyDBInstanceMessage, Rds, RdsClient, StopDBInstanceMessage,
+    Tag,
 };
 
 const AURORA_POSTGRES_ENGINE: &str = "aurora-postgresql";
@@ -102,12 +100,12 @@ impl RdsNukeClient {
     }
 
     fn resource_tags_does_not_match(&self, instance: &DBInstance) -> bool {
-        if !self.config.required_tags.is_empty() {
+        if self.config.required_tags.is_some() {
             !self.check_tags(
                 &self
                     .list_tags(instance.db_instance_arn.clone())
                     .unwrap_or_default(),
-                &self.config.required_tags,
+                &self.config.required_tags.as_ref().unwrap(),
             )
         } else {
             false

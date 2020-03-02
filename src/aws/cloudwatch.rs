@@ -1,16 +1,13 @@
-use {
-    crate::config::IdleRules,
-    crate::error::Error as AwsError,
-    chrono::{DateTime, TimeZone, Utc},
-    log::trace,
-    rusoto_cloudwatch::{
-        CloudWatch, CloudWatchClient, Datapoint, Dimension, GetMetricStatisticsInput,
-        GetMetricStatisticsOutput,
-    },
-    rusoto_core::{HttpClient, Region},
-    rusoto_credential::ProfileProvider,
-    std::time::Duration,
+use crate::{config::IdleRules, error::Error as AwsError};
+use chrono::{DateTime, TimeZone, Utc};
+use log::trace;
+use rusoto_cloudwatch::{
+    CloudWatch, CloudWatchClient, Datapoint, Dimension, GetMetricStatisticsInput,
+    GetMetricStatisticsOutput,
 };
+use rusoto_core::{HttpClient, Region};
+use rusoto_credential::ProfileProvider;
+use std::time::Duration;
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
 

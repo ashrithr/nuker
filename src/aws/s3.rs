@@ -1,9 +1,10 @@
-use crate::aws::Result;
-use crate::config::S3Config;
-use crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType};
+use crate::{
+    aws::Result,
+    config::S3Config,
+    service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
+};
 use log::debug;
-use rusoto_core::HttpClient;
-use rusoto_core::Region;
+use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_s3::{
     Bucket, Delete, DeleteBucketRequest, DeleteObjectsRequest, GetBucketTaggingRequest,

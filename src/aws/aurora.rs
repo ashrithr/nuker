@@ -1,17 +1,15 @@
-use {
-    crate::aws::cloudwatch::CwClient,
-    crate::aws::util,
-    crate::aws::Result,
-    crate::config::{AuroraConfig, RequiredTags},
-    crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
-    log::debug,
-    rusoto_core::{HttpClient, Region},
-    rusoto_credential::ProfileProvider,
-    rusoto_rds::{
-        DBCluster, DeleteDBClusterMessage, DescribeDBClustersMessage, DescribeDBInstancesMessage,
-        Filter, ListTagsForResourceMessage, ModifyDBClusterMessage, Rds, RdsClient,
-        StopDBClusterMessage, Tag,
-    },
+use crate::{
+    aws::{cloudwatch::CwClient, util, Result},
+    config::{AuroraConfig, RequiredTags},
+    service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
+};
+use log::debug;
+use rusoto_core::{HttpClient, Region};
+use rusoto_credential::ProfileProvider;
+use rusoto_rds::{
+    DBCluster, DeleteDBClusterMessage, DescribeDBClustersMessage, DescribeDBInstancesMessage,
+    Filter, ListTagsForResourceMessage, ModifyDBClusterMessage, Rds, RdsClient,
+    StopDBClusterMessage, Tag,
 };
 
 pub struct AuroraNukeClient {
@@ -100,12 +98,12 @@ impl AuroraNukeClient {
     }
 
     fn resource_tags_does_not_match(&self, cluster: &DBCluster) -> bool {
-        if !self.config.required_tags.is_empty() {
+        if self.config.required_tags.is_some() {
             !self.check_tags(
                 &self
                     .list_tags(cluster.db_cluster_arn.clone())
                     .unwrap_or_default(),
-                &self.config.required_tags,
+                &self.config.required_tags.as_ref().unwrap(),
             )
         } else {
             false

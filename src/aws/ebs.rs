@@ -1,16 +1,14 @@
-use {
-    crate::aws::cloudwatch::CwClient,
-    crate::aws::Result,
-    crate::config::EbsConfig,
-    crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
-    chrono::{DateTime, Utc},
-    log::debug,
-    rusoto_core::credential::ProfileProvider,
-    rusoto_core::{HttpClient, Region},
-    rusoto_ec2::{
-        DeleteSnapshotRequest, DeleteVolumeRequest, DescribeSnapshotsRequest,
-        DescribeVolumesRequest, Ec2, Ec2Client, Filter, Snapshot, Tag, Volume,
-    },
+use crate::{
+    aws::{cloudwatch::CwClient, Result},
+    config::EbsConfig,
+    service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
+};
+use chrono::{DateTime, Utc};
+use log::debug;
+use rusoto_core::{credential::ProfileProvider, HttpClient, Region};
+use rusoto_ec2::{
+    DeleteSnapshotRequest, DeleteVolumeRequest, DescribeSnapshotsRequest, DescribeVolumesRequest,
+    Ec2, Ec2Client, Filter, Snapshot, Tag, Volume,
 };
 
 pub struct EbsNukeClient {

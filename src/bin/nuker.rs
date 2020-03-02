@@ -1,7 +1,10 @@
-use fern;
-use fern::colors::{Color, ColoredLevelConfig};
+use fern::{
+    self,
+    colors::{Color, ColoredLevelConfig},
+};
 use log::debug;
 use nuker::{config, nuke};
+
 fn main() {
     let args = config::parse_args();
     let config = config::parse_config_file(&args.config);

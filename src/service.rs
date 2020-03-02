@@ -18,6 +18,7 @@ pub enum ResourceType {
     S3Bucket,
     Redshift,
     EmrCluster,
+    GlueDevEndpoint,
 }
 
 impl ResourceType {
@@ -106,6 +107,13 @@ impl ResourceType {
             _ => false,
         }
     }
+
+    pub fn is_glue(&self) -> bool {
+        match *self {
+            ResourceType::GlueDevEndpoint => true,
+            _ => false,
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -121,7 +129,7 @@ pub enum FilterRule {
     AllowedTypes,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NTag {
     pub key: Option<String>,
     pub value: Option<String>,

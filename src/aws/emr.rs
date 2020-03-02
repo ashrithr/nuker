@@ -1,8 +1,8 @@
-use crate::aws::cloudwatch::CwClient;
-use crate::aws::util;
-use crate::aws::Result;
-use crate::config::{EmrConfig, RequiredTags};
-use crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType};
+use crate::{
+    aws::{cloudwatch::CwClient, util, Result},
+    config::{EmrConfig, RequiredTags},
+    service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
+};
 use log::{debug, warn};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
@@ -121,8 +121,8 @@ impl EmrNukeClient {
     }
 
     fn resource_tags_does_not_match(&self, cluster: &Cluster) -> bool {
-        if !self.config.required_tags.is_empty() {
-            !self.check_tags(&cluster.tags, &self.config.required_tags)
+        if self.config.required_tags.is_some() {
+            !self.check_tags(&cluster.tags, &self.config.required_tags.as_ref().unwrap())
         } else {
             false
         }

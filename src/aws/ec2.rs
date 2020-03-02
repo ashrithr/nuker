@@ -1,19 +1,17 @@
-use {
-    crate::aws::cloudwatch::CwClient,
-    crate::aws::util,
-    crate::aws::Result,
-    crate::config::{Ec2Config, RequiredTags},
-    crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
-    log::debug,
-    rusoto_core::{HttpClient, Region},
-    rusoto_credential::ProfileProvider,
-    rusoto_ec2::{
-        Address, DeleteNetworkInterfaceRequest, DescribeAddressesRequest,
-        DescribeInstanceAttributeRequest, DescribeInstancesRequest, DescribeInstancesResult,
-        DescribeNetworkInterfacesRequest, DescribeSecurityGroupsRequest, Ec2, Ec2Client, Filter,
-        Instance, ModifyInstanceAttributeRequest, NetworkInterface, ReleaseAddressRequest,
-        StopInstancesRequest, Tag, TerminateInstancesRequest,
-    },
+use crate::{
+    aws::{cloudwatch::CwClient, util, Result},
+    config::{Ec2Config, RequiredTags},
+    service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
+};
+use log::debug;
+use rusoto_core::{HttpClient, Region};
+use rusoto_credential::ProfileProvider;
+use rusoto_ec2::{
+    Address, DeleteNetworkInterfaceRequest, DescribeAddressesRequest,
+    DescribeInstanceAttributeRequest, DescribeInstancesRequest, DescribeInstancesResult,
+    DescribeNetworkInterfacesRequest, DescribeSecurityGroupsRequest, Ec2, Ec2Client, Filter,
+    Instance, ModifyInstanceAttributeRequest, NetworkInterface, ReleaseAddressRequest,
+    StopInstancesRequest, Tag, TerminateInstancesRequest,
 };
 
 pub struct Ec2NukeClient {
@@ -177,8 +175,8 @@ impl Ec2NukeClient {
     }
 
     fn resource_tags_does_not_match(&self, instance: &Instance) -> bool {
-        if !self.config.required_tags.is_empty() {
-            !self.check_tags(&instance.tags, &self.config.required_tags)
+        if self.config.required_tags.is_some() {
+            !self.check_tags(&instance.tags, &self.config.required_tags.as_ref().unwrap())
         } else {
             false
         }
@@ -524,8 +522,7 @@ impl NukeService for Ec2NukeClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::aws::cloudwatch::CwClient;
-    use crate::config::*;
+    use crate::{aws::cloudwatch::CwClient, config::*};
     use regex::Regex;
     use rusoto_cloudwatch::CloudWatchClient;
     use rusoto_ec2::{Ec2Client, GroupIdentifier, Instance, InstanceState, Tag};
@@ -537,7 +534,7 @@ mod tests {
         Ec2Config {
             enabled: true,
             target_state: TargetState::Stopped,
-            required_tags: vec![],
+            required_tags: None,
             allowed_instance_types: vec![],
             ignore: vec![],
             idle_rules: vec![],
@@ -641,11 +638,11 @@ mod tests {
     #[test]
     fn check_package_resources_by_single_tag() {
         let mut ec2_config = create_config();
-        ec2_config.required_tags = vec![RequiredTags {
+        ec2_config.required_tags = Some(vec![RequiredTags {
             name: "Name".to_string(),
             pattern: Some(EC2_NAME_TAG.to_string()),
             regex: Some(Regex::new(EC2_NAME_TAG).unwrap()),
-        }];
+        }]);
 
         let ec2_client = create_ec2_client(ec2_config);
         let resources = ec2_client
@@ -661,7 +658,7 @@ mod tests {
     #[test]
     fn check_package_resources_by_multiple_tags() {
         let mut ec2_config = create_config();
-        ec2_config.required_tags = vec![
+        ec2_config.required_tags = Some(vec![
             RequiredTags {
                 name: "Name".to_string(),
                 pattern: Some(EC2_NAME_TAG.to_string()),
@@ -672,7 +669,7 @@ mod tests {
                 pattern: Some("^(.*)@def.com".to_string()),
                 regex: Some(Regex::new("^(.*)@def.com").unwrap()),
             },
-        ];
+        ]);
 
         let ec2_client = create_ec2_client(ec2_config);
         let resources = ec2_client
@@ -719,7 +716,7 @@ mod tests {
     #[test]
     fn check_packaged_resources_by_all() {
         let mut ec2_config = create_config();
-        ec2_config.required_tags = vec![
+        ec2_config.required_tags = Some(vec![
             RequiredTags {
                 name: "Name".to_string(),
                 pattern: Some(EC2_NAME_TAG.to_string()),
@@ -730,7 +727,7 @@ mod tests {
                 pattern: Some("^(.*)@def.com".to_string()),
                 regex: Some(Regex::new("^(.*)@def.com").unwrap()),
             },
-        ];
+        ]);
         ec2_config.allowed_instance_types = vec!["t2.2xlarge".to_string(), "t2.xlarge".to_string()];
         ec2_config.security_groups.enabled = true;
         let open_sgs = vec!["sg-xxxxxxxx".to_string()];

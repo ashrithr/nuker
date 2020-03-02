@@ -4,12 +4,13 @@ usage_days = 1
 
 [ec2]
 # Specifies whether EC2 enforcement is enabled or not
-enabled = true
+enabled = false
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Deleted'
 target_state = "Stopped"
 # Defines which instance types are allowed, empty means allow any types
-allowed_instance_types = []
+allowed_instance_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
+"t3.micro", "t3.small", "t3.medium", "t3.large", "t3.xlarge"]
 # The following resources will be ignored from rule enforcement
 # ignore = ["instance-id1", "instance-id2"]
 ignore = []
@@ -86,7 +87,7 @@ ignore = []
 
 [ebs]
 # Specifies whether to clean up Volumes that are detached and not being used
-enabled = true
+enabled = false
 # State to enfore. Possible states are 'Deleted'
 target_state = "Deleted"
 # The following volumes will be ignored from rules enforcement
@@ -111,7 +112,7 @@ older_than = "30 days"
 
 [rds]
 # Specifies whether RDS enforcement is enabled or not
-enabled = true
+enabled = false
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Deleted'
 target_state = "Stopped"
@@ -168,7 +169,7 @@ ignore = []
 
 [aurora]
 # Specifies whether RDS-Aurora enforcement is enabled or not
-enabled = true
+enabled = false
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Deleted'
 target_state = "Stopped"
@@ -225,7 +226,7 @@ ignore = []
 
 [redshift]
 # Specifies whether Redshift enforcement is enabled or not
-enabled = true
+enabled = false
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Deleted'. Redshift does not have a stop option
 # so instead the DB will be terminated with a snapshot taken which will be valid
@@ -289,7 +290,7 @@ enabled = false
 # states are: 'Stopped' and 'Deleted'.
 # Note: EMR does not support Stopping clusters, instead the cluster will be
 # deleted.
-target_state = "Stopped"
+target_state = "Deleted"
 # Defines which instance types are allowed, empty means allow any types
 allowed_instance_types = []
 # The following resources will be ignored from rule enforcement
@@ -337,12 +338,34 @@ ignore = []
     [emr.termination_protection]
     ignore = true
 
-# [glue]
-# enabled = true
-# target_state = "Deleted"
-# ignore = []
+[glue]
+# Specifies whether Glue enforcement is enabled or not.
+enabled = false
+# State to enfoce, if any of the following conditions are not met. Possible
+# states are: 'Stopped' and 'Deleted'.
+# Note: Glue does not support Stopping endpoints, instead the endpoint will be
+# deleted.
+target_state = "Deleted"
+# The following resources will be ignore from rule enforcement. Specify the
+# Dev Endpoints names.
+ignore = []
+# Clean up glue dev points if they are running for more than specified duration.
+older_than = "8 hours"
 
-#     # Delete the end point after max duration from start time
-#     [[glue.idle_rules]]
-#     enabled = true
-#     max_duration = "8 hours"
+    # Defines required tags on each instance.
+    [[glue.required_tags]]
+    name = "Name"
+    pattern = '^glue-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+    [[glue.required_tags]]
+    name = "Owner:Name"
+
+    [[glue.required_tags]]
+    name = "Owner:Email"
+    pattern = '^(.*)@(.*).com$'
+
+    [[glue.required_tags]]
+    name = "Purpose"
+
+    [[glue.required_tags]]
+    name = "Environment"

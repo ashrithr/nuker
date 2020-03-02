@@ -1,5 +1,4 @@
-use crate::config::RequiredTags;
-use crate::service::NTag;
+use crate::{config::RequiredTags, service::NTag};
 use log::debug;
 use std::collections::HashMap;
 

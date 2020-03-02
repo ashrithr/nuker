@@ -1,31 +1,28 @@
-use {
-    rusoto_ce::GetCostAndUsageError,
-    rusoto_core::region::ParseRegionError,
-    rusoto_core::request::TlsError,
-    rusoto_core::RusotoError,
-    rusoto_credential::CredentialsError,
-    rusoto_ec2::{
-        DeleteNetworkInterfaceError, DeleteSnapshotError, DeleteVolumeError,
-        DescribeAddressesError, DescribeInstanceAttributeError, DescribeInstancesError,
-        DescribeNetworkInterfacesError, DescribeSecurityGroupsError, DescribeSnapshotsError,
-        DescribeVolumesError, ModifyInstanceAttributeError, ReleaseAddressError,
-        StopInstancesError, TerminateInstancesError,
-    },
-    rusoto_emr::{
-        DescribeClusterError, ListClustersError, ListInstancesError, SetTerminationProtectionError,
-        TerminateJobFlowsError,
-    },
-    rusoto_rds::{
-        DeleteDBClusterError, DeleteDBInstanceError, DescribeDBClustersError,
-        DescribeDBInstancesError, ListTagsForResourceError, ModifyDBClusterError,
-        ModifyDBInstanceError, StopDBClusterError, StopDBInstanceError,
-    },
-    rusoto_redshift::{DeleteClusterError, DescribeClustersError},
-    rusoto_s3::{
-        DeleteBucketError, DeleteObjectsError, GetBucketTaggingError, ListBucketsError,
-        ListObjectVersionsError, ListObjectsV2Error,
-    },
+use rusoto_ce::GetCostAndUsageError;
+use rusoto_core::{region::ParseRegionError, request::TlsError, RusotoError};
+use rusoto_credential::CredentialsError;
+use rusoto_ec2::{
+    DeleteNetworkInterfaceError, DeleteSnapshotError, DeleteVolumeError, DescribeAddressesError,
+    DescribeInstanceAttributeError, DescribeInstancesError, DescribeNetworkInterfacesError,
+    DescribeSecurityGroupsError, DescribeSnapshotsError, DescribeVolumesError,
+    ModifyInstanceAttributeError, ReleaseAddressError, StopInstancesError, TerminateInstancesError,
 };
+use rusoto_emr::{
+    DescribeClusterError, ListClustersError, ListInstancesError, SetTerminationProtectionError,
+    TerminateJobFlowsError,
+};
+use rusoto_glue::{DeleteDevEndpointError, GetDevEndpointsError, GetTagsError};
+use rusoto_rds::{
+    DeleteDBClusterError, DeleteDBInstanceError, DescribeDBClustersError, DescribeDBInstancesError,
+    ListTagsForResourceError, ModifyDBClusterError, ModifyDBInstanceError, StopDBClusterError,
+    StopDBInstanceError,
+};
+use rusoto_redshift::{DeleteClusterError, DescribeClustersError};
+use rusoto_s3::{
+    DeleteBucketError, DeleteObjectsError, GetBucketTaggingError, ListBucketsError,
+    ListObjectVersionsError, ListObjectsV2Error,
+};
+use rusoto_sts::GetCallerIdentityError;
 
 #[derive(Debug, Fail, From)]
 pub enum Error {
@@ -184,6 +181,20 @@ pub enum Error {
     #[fail(display = "Issue querying Cost Explorer: {}", error)]
     CeError {
         error: RusotoError<GetCostAndUsageError>,
+    },
+    #[fail(display = "Issue decribing Glue Dev Endpoints: {}", error)]
+    DescribeDevEndpoints {
+        error: RusotoError<GetDevEndpointsError>,
+    },
+    #[fail(display = "Issue decribing Glue Tags: {}", error)]
+    DescribeTags { error: RusotoError<GetTagsError> },
+    #[fail(display = "Issue getting caller identity: {}", error)]
+    GetCallerIdentity {
+        error: RusotoError<GetCallerIdentityError>,
+    },
+    #[fail(display = "Failed deleting Glue Dev Endpoint: {}", error)]
+    DeleteDevEndpoint {
+        error: RusotoError<DeleteDevEndpointError>,
     },
     #[fail(display = "JSON Encoding/Decoding error: {}", error)]
     JsonError { error: serde_json::error::Error },

@@ -1,10 +1,14 @@
-use {
-    crate::{aws::AwsClient, config::Args, config::Config, error::Error as AwsError},
-    colored::*,
-    log::debug,
-    rusoto_core::Region,
-    std::str::FromStr,
+use crate::{
+    aws::AwsClient,
+    config::{Args, Config},
+    error::Error as AwsError,
 };
+use colored::*;
+use log::debug;
+use rusoto_core::Region;
+use std::io;
+use std::process::exit;
+use std::str::FromStr;
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
 
@@ -48,6 +52,13 @@ impl Nuke {
             println!("{}", "DRY RUN DISABLED".red().bold());
         }
 
+        if !self.args.dry_run && !self.args.force {
+            let input: String = self.get_input("Are you sure you want to continue?");
+            if &input.to_lowercase() != "yes" {
+                exit(1);
+            }
+        }
+
         if self.args.regions.is_empty() {
             for region in REGIONS.iter() {
                 clients.push(self.create_client(region.to_owned())?);
@@ -74,5 +85,15 @@ impl Nuke {
         let profile = &self.args.profile;
         let profile = profile.as_ref().map(|p| &**p);
         AwsClient::new(profile, region, &self.config, self.args.dry_run)
+    }
+
+    fn get_input(&self, prompt: &str) -> String {
+        println!("{}", prompt);
+        let mut input = String::new();
+        match io::stdin().read_line(&mut input) {
+            Ok(_) => {}
+            Err(_) => {}
+        }
+        input.trim().to_string()
     }
 }

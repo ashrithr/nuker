@@ -4,26 +4,30 @@ mod cloudwatch;
 mod ebs;
 mod ec2;
 mod emr;
+mod glue;
 mod rds;
 mod redshift;
 mod s3;
+mod sts;
 mod util;
 
-use crate::aws::ebs::EbsNukeClient;
-use {
-    crate::config::Config,
-    crate::error::Error as AwsError,
-    crate::service::{NukeService, Resource},
-    aurora::AuroraNukeClient,
-    ce::CeClient,
-    ec2::Ec2NukeClient,
-    emr::EmrNukeClient,
-    log::error,
-    rds::RdsNukeClient,
-    redshift::RedshiftNukeClient,
-    rusoto_core::Region,
-    s3::S3NukeClient,
+use crate::{
+    aws::ebs::EbsNukeClient,
+    config::Config,
+    error::Error as AwsError,
+    service::{NukeService, Resource},
 };
+use aurora::AuroraNukeClient;
+use ce::CeClient;
+use ec2::Ec2NukeClient;
+use emr::EmrNukeClient;
+use glue::GlueNukeClient;
+use log::error;
+use rds::RdsNukeClient;
+use redshift::RedshiftNukeClient;
+use rusoto_core::Region;
+use s3::S3NukeClient;
+use sts::StsNukeClient;
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
 
@@ -42,6 +46,7 @@ impl AwsClient {
         dry_run: bool,
     ) -> Result<AwsClient> {
         let mut clients: Vec<Box<dyn NukeService>> = Vec::new();
+        let sts_client = StsNukeClient::new(profile_name, region.clone())?;
 
         if config.ec2.enabled {
             clients.push(Box::new(Ec2NukeClient::new(
@@ -102,6 +107,16 @@ impl AwsClient {
                 profile_name,
                 region.clone(),
                 config.emr.clone(),
+                dry_run,
+            )?))
+        }
+
+        if config.glue.enabled {
+            clients.push(Box::new(GlueNukeClient::new(
+                profile_name,
+                region.clone(),
+                config.glue.clone(),
+                sts_client.get_account_number()?,
                 dry_run,
             )?))
         }
@@ -173,6 +188,10 @@ impl AwsClient {
             .iter()
             .filter(|r| r.resource_type.is_emr())
             .collect();
+        let glue_resources: Vec<&Resource> = resources
+            .iter()
+            .filter(|r| r.resource_type.is_glue())
+            .collect();
 
         for client in &self.clients {
             let ref_client = client.as_any();
@@ -191,6 +210,8 @@ impl AwsClient {
                 client.cleanup(&redshift_resources)?;
             } else if ref_client.is::<EmrNukeClient>() {
                 client.cleanup(&emr_resources)?;
+            } else if ref_client.is::<GlueNukeClient>() {
+                client.cleanup(&glue_resources)?;
             }
         }
 

@@ -1,15 +1,13 @@
-use {
-    crate::aws::cloudwatch::CwClient,
-    crate::aws::util,
-    crate::aws::Result,
-    crate::config::{RedshiftConfig, RequiredTags},
-    crate::service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
-    log::debug,
-    rusoto_core::{HttpClient, Region},
-    rusoto_credential::ProfileProvider,
-    rusoto_redshift::{
-        Cluster, DeleteClusterMessage, DescribeClustersMessage, Redshift, RedshiftClient, Tag,
-    },
+use crate::{
+    aws::{cloudwatch::CwClient, util, Result},
+    config::{RedshiftConfig, RequiredTags},
+    service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
+};
+use log::debug;
+use rusoto_core::{HttpClient, Region};
+use rusoto_credential::ProfileProvider;
+use rusoto_redshift::{
+    Cluster, DeleteClusterMessage, DescribeClustersMessage, Redshift, RedshiftClient, Tag,
 };
 
 pub struct RedshiftNukeClient {
@@ -98,8 +96,8 @@ impl RedshiftNukeClient {
     }
 
     fn resource_tags_does_not_match(&self, cluster: &Cluster) -> bool {
-        if !self.config.required_tags.is_empty() {
-            !self.check_tags(&cluster.tags, &self.config.required_tags)
+        if self.config.required_tags.is_some() {
+            !self.check_tags(&cluster.tags, &self.config.required_tags.as_ref().unwrap())
         } else {
             false
         }

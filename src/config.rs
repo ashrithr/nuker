@@ -3,9 +3,7 @@ use clap::{App, Arg};
 use log::warn;
 use regex::Regex;
 use serde::Deserialize;
-use std::fs::File;
-use std::io::Read;
-use std::time::Duration;
+use std::{fs::File, io::Read, time::Duration};
 
 const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
@@ -16,6 +14,7 @@ pub struct Args {
     pub profile: Option<String>,
     pub regions: Vec<String>,
     pub dry_run: bool,
+    pub force: bool,
     pub verbose: u64,
 }
 
@@ -33,6 +32,7 @@ pub struct Config {
     pub s3: S3Config,
     pub emr: EmrConfig,
     pub redshift: RedshiftConfig,
+    pub glue: GlueConfig,
 }
 
 #[derive(Debug, Deserialize, Clone, Eq, PartialEq)]
@@ -95,7 +95,7 @@ pub struct Eip {
 pub struct Ec2Config {
     pub enabled: bool,
     pub target_state: TargetState,
-    pub required_tags: Vec<RequiredTags>,
+    pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
     pub idle_rules: Vec<IdleRules>,
@@ -119,7 +119,7 @@ pub struct EbsConfig {
 pub struct EmrConfig {
     pub enabled: bool,
     pub target_state: TargetState,
-    pub required_tags: Vec<RequiredTags>,
+    pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
     pub idle_rules: Vec<IdleRules>,
@@ -131,7 +131,7 @@ pub struct EmrConfig {
 pub struct RdsConfig {
     pub enabled: bool,
     pub target_state: TargetState,
-    pub required_tags: Vec<RequiredTags>,
+    pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
     pub idle_rules: Vec<IdleRules>,
@@ -142,7 +142,7 @@ pub struct RdsConfig {
 pub struct AuroraConfig {
     pub enabled: bool,
     pub target_state: TargetState,
-    pub required_tags: Vec<RequiredTags>,
+    pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
     pub idle_rules: Vec<IdleRules>,
@@ -153,7 +153,7 @@ pub struct AuroraConfig {
 pub struct RedshiftConfig {
     pub enabled: bool,
     pub target_state: TargetState,
-    pub required_tags: Vec<RequiredTags>,
+    pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
     pub idle_rules: Vec<IdleRules>,
@@ -165,6 +165,16 @@ pub struct S3Config {
     pub target_state: TargetState,
     pub required_naming_prefix: String,
     pub ignore: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct GlueConfig {
+    pub enabled: bool,
+    pub target_state: TargetState,
+    pub required_tags: Option<Vec<RequiredTags>>,
+    pub ignore: Vec<String>,
+    #[serde(with = "humantime_serde")]
+    pub older_than: Duration,
 }
 
 /// Parse the command line arguments for nuker executable
@@ -209,6 +219,11 @@ pub fn parse_args() -> Args {
                     dry run behaviour and deletes the resources.",
         ))
         .arg(
+            Arg::with_name("force")
+                .long("force")
+                .help("Does not prompt for confirmation when dry run is disabled"),
+        )
+        .arg(
             Arg::with_name("verbose")
                 .short("v")
                 .multiple(true)
@@ -228,6 +243,12 @@ pub fn parse_args() -> Args {
         true
     };
 
+    let force = if args.is_present("force") {
+        true
+    } else {
+        false
+    };
+
     let regions: Vec<&str> = if args.is_present("region") {
         args.values_of("region").unwrap().collect()
     } else {
@@ -239,6 +260,7 @@ pub fn parse_args() -> Args {
         regions: regions.iter().map(|r| r.to_string()).collect(),
         profile: args.value_of("profile").map(|s| s.to_owned()),
         dry_run,
+        force,
         verbose,
     }
 }
@@ -259,33 +281,51 @@ pub fn parse_config(buffer: &str) -> Config {
     let mut config: Config = toml::from_str(buffer).expect("could not parse toml configuration");
 
     // Compile all regex expressions up front
-    for rt in &mut config.ec2.required_tags {
-        if rt.pattern.is_some() {
-            rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+    if config.ec2.required_tags.is_some() {
+        for rt in config.ec2.required_tags.as_mut().unwrap() {
+            if rt.pattern.is_some() {
+                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+            }
         }
     }
 
-    for rt in &mut config.rds.required_tags {
-        if rt.pattern.is_some() {
-            rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+    if config.rds.required_tags.is_some() {
+        for rt in config.rds.required_tags.as_mut().unwrap() {
+            if rt.pattern.is_some() {
+                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+            }
         }
     }
 
-    for rt in &mut config.aurora.required_tags {
-        if rt.pattern.is_some() {
-            rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+    if config.aurora.required_tags.is_some() {
+        for rt in config.aurora.required_tags.as_mut().unwrap() {
+            if rt.pattern.is_some() {
+                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+            }
         }
     }
 
-    for rt in &mut config.redshift.required_tags {
-        if rt.pattern.is_some() {
-            rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+    if config.redshift.required_tags.is_some() {
+        for rt in config.redshift.required_tags.as_mut().unwrap() {
+            if rt.pattern.is_some() {
+                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+            }
         }
     }
 
-    for rt in &mut config.emr.required_tags {
-        if rt.pattern.is_some() {
-            rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+    if config.emr.required_tags.is_some() {
+        for rt in config.emr.required_tags.as_mut().unwrap() {
+            if rt.pattern.is_some() {
+                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+            }
+        }
+    }
+
+    if config.glue.required_tags.is_some() {
+        for rt in config.glue.required_tags.as_mut().unwrap() {
+            if rt.pattern.is_some() {
+                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+            }
         }
     }
 
