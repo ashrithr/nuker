@@ -7,10 +7,16 @@ use log::{debug, error};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_s3::{
-    Bucket, Delete, DeleteBucketRequest, DeleteObjectsRequest, GetBucketAclOutput,
-    GetBucketAclRequest, GetBucketTaggingRequest, Grant, ListObjectVersionsRequest,
-    ListObjectsV2Request, ObjectIdentifier, S3Client, Tag, S3,
+    Bucket, Delete, DeleteBucketRequest, DeleteObjectsRequest, GetBucketAclRequest,
+    GetBucketPolicyStatusRequest, GetBucketTaggingRequest, GetPublicAccessBlockRequest, Grant,
+    ListObjectVersionsRequest, ListObjectsV2Request, ObjectIdentifier, PolicyStatus,
+    PublicAccessBlockConfiguration, S3Client, Tag, S3,
 };
+
+static S3_PUBLIC_GROUPS: [&str; 2] = [
+    "http://acs.amazonaws.com/groups/global/AuthenticatedUsers",
+    "http://acs.amazonaws.com/groups/global/AllUsers",
+];
 
 pub struct S3NukeClient {
     client: S3Client,
@@ -56,8 +62,13 @@ impl S3NukeClient {
                 if self.config.ignore.contains(&bucket_id) {
                     EnforcementState::SkipConfig
                 } else if self.resource_prefix_does_not_match(&bucket_id) {
+                    debug!("Bucket prefix does not match - {}", bucket_id);
                     EnforcementState::Delete
                 } else if self.resource_name_is_not_dns_compliant(&bucket_id) {
+                    debug!("Bucket name is not dns compliant - {}", bucket_id);
+                    EnforcementState::Delete
+                } else if self.is_bucket_public(&bucket_id) {
+                    debug!("Bucket is publicly accessible - {}", bucket_id);
                     EnforcementState::Delete
                 } else {
                     EnforcementState::Skip
@@ -94,26 +105,44 @@ impl S3NukeClient {
         }
     }
 
-    // fn is_bucket_public(&self, bucket_id: &str) -> bool {
-    //     let public_permissions = vec!["WRITE", "WRITE_ACP", "READ", "READ_ACP"];
-    //
-    //     if let Some(grants) = self.get_acls_for_bucket(bucket_id) {
-    //         for grant in grants {
-    //             if let Some(permission) = grant.permission {
-    //                 if public_permissions.contains(permission) {}
-    //             }
-    //             if let Some(grantee) = grant.grantee {
-    //                 if grantee.type_ == "Group".to_string()
-    //                     && grantee.uri
-    //                         == Some("http://acs.amazonaws.com/groups/global/AllUsers".to_string())
-    //                 {
-    //                 }
-    //             }
-    //         }
-    //     }
-    //
-    //     false
-    // }
+    fn is_bucket_public(&self, bucket_id: &str) -> bool {
+        if self.config.check_public_accessibility {
+            // 1. Check the Public Access Block
+            if let Some(public_access_block) = self.get_public_access_block(bucket_id) {
+                if public_access_block.block_public_acls == Some(true)
+                    && public_access_block.block_public_policy == Some(true)
+                {
+                    return true;
+                }
+            }
+
+            // 2. Check the Bucket Policy Status
+            if let Some(policy_status) = self.get_bucket_policy_status(bucket_id) {
+                if policy_status.is_public == Some(true) {
+                    return true;
+                }
+            }
+
+            // 3. Check the ACLs to see if grantee is AllUsers or AllAuthenticatedUsers
+            if let Some(grants) = self.get_acls_for_bucket(bucket_id) {
+                for grant in grants {
+                    if grant.grantee.is_some() && grant.permission.is_some() {
+                        let grantee = grant.grantee.as_ref().unwrap().clone();
+
+                        if grantee.type_ == "Group".to_string()
+                            && S3_PUBLIC_GROUPS.contains(&grantee.uri.unwrap().as_str())
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            false
+        } else {
+            false
+        }
+    }
 
     fn get_buckets(&self) -> Result<Vec<Bucket>> {
         let result = self.client.list_buckets().sync()?;
@@ -121,25 +150,65 @@ impl S3NukeClient {
         Ok(result.buckets.unwrap_or_default())
     }
 
-    // fn get_acls_for_bucket(&self, bucket_id: &str) -> Option<Vec<Grant>> {
-    //     match self
-    //         .client
-    //         .get_bucket_acl(GetBucketAclRequest {
-    //             bucket: bucket_id.to_string(),
-    //         })
-    //         .sync()
-    //     {
-    //         Ok(result) => result.grants,
-    //         Err(err) => {
-    //             error!(
-    //                 "Failed to get ACL Grants for bucket {} - {:?}",
-    //                 bucket_id, err
-    //             );
-    //
-    //             None
-    //         }
-    //     }
-    // }
+    fn get_acls_for_bucket(&self, bucket_id: &str) -> Option<Vec<Grant>> {
+        match self
+            .client
+            .get_bucket_acl(GetBucketAclRequest {
+                bucket: bucket_id.to_string(),
+            })
+            .sync()
+        {
+            Ok(result) => result.grants,
+            Err(err) => {
+                error!(
+                    "Failed to get ACL Grants for bucket {} - {:?}",
+                    bucket_id, err
+                );
+
+                None
+            }
+        }
+    }
+
+    fn get_public_access_block(&self, bucket_id: &str) -> Option<PublicAccessBlockConfiguration> {
+        match self
+            .client
+            .get_public_access_block(GetPublicAccessBlockRequest {
+                bucket: bucket_id.to_string(),
+            })
+            .sync()
+        {
+            Ok(result) => result.public_access_block_configuration,
+            Err(err) => {
+                error!(
+                    "Failed to get public_access_block for bucket {} - {:?}",
+                    bucket_id, err
+                );
+
+                None
+            }
+        }
+    }
+
+    fn get_bucket_policy_status(&self, bucket_id: &str) -> Option<PolicyStatus> {
+        match self
+            .client
+            .get_bucket_policy_status(GetBucketPolicyStatusRequest {
+                bucket: bucket_id.to_string(),
+            })
+            .sync()
+        {
+            Ok(result) => result.policy_status,
+            Err(err) => {
+                error!(
+                    "Failed to get bucket policy status for bucket {} - {:?}",
+                    bucket_id, err
+                );
+
+                None
+            }
+        }
+    }
 
     fn delete_objects_in_bucket(&self, bucket: &str) -> Result<()> {
         let mut next_token: Option<String> = None;

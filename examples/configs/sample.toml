@@ -278,7 +278,7 @@ ignore = []
     granularity = "1 hour"
 
 [s3]
-enabled = false
+enabled = true
 target_state = "Deleted"
 check_dns_compliant_naming = true
 required_naming_prefix = '^cw-(us-[a-z]*-[0-9]{1})-([0-9]{12})-(.*)$'
