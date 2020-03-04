@@ -164,11 +164,11 @@ pub struct RedshiftConfig {
 pub struct S3Config {
     pub enabled: bool,
     pub target_state: TargetState,
-    pub check_dns_compliant_naming: bool,
-    pub required_naming_prefix: String,
+    pub check_dns_compliant_naming: Option<bool>,
+    pub required_naming_prefix: Option<String>,
     #[serde(skip)]
     pub required_naming_regex: Option<Regex>,
-    pub check_public_accessibility: bool,
+    pub check_public_accessibility: Option<bool>,
     pub ignore: Vec<String>,
 }
 
@@ -345,8 +345,9 @@ pub fn parse_config(buffer: &str) -> Config {
         }
     }
 
-    if config.s3.enabled {
-        config.s3.required_naming_regex = compile_regex(&config.s3.required_naming_prefix);
+    if config.s3.enabled && config.s3.required_naming_prefix.is_some() {
+        config.s3.required_naming_regex =
+            compile_regex(&config.s3.required_naming_prefix.as_ref().unwrap());
     }
 
     config

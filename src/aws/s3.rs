@@ -3,14 +3,14 @@ use crate::{
     config::S3Config,
     service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
 };
-use log::{debug, error};
+use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_s3::{
     Bucket, Delete, DeleteBucketRequest, DeleteObjectsRequest, GetBucketAclRequest,
-    GetBucketPolicyStatusRequest, GetBucketTaggingRequest, GetPublicAccessBlockRequest, Grant,
-    ListObjectVersionsRequest, ListObjectsV2Request, ObjectIdentifier, PolicyStatus,
-    PublicAccessBlockConfiguration, S3Client, Tag, S3,
+    GetBucketLocationRequest, GetBucketPolicyStatusRequest, GetBucketTaggingRequest,
+    GetPublicAccessBlockRequest, Grant, ListObjectVersionsRequest, ListObjectsV2Request,
+    ObjectIdentifier, PolicyStatus, PublicAccessBlockConfiguration, S3Client, Tag, S3,
 };
 
 static S3_PUBLIC_GROUPS: [&str; 2] = [
@@ -58,6 +58,18 @@ impl S3NukeClient {
         for bucket in buckets {
             let bucket_id = bucket.name.unwrap();
 
+            // Check if the bucket belongs to specified region
+            let bucket_region = self.get_bucket_region(&bucket_id);
+            if bucket_region != self.region.name() {
+                trace!(
+                    "Bucket ({}) region ({}) is not part of region being enforced - [{}]",
+                    bucket_id,
+                    bucket_region,
+                    self.region.name()
+                );
+                continue;
+            }
+
             let enforcement_state: EnforcementState = {
                 if self.config.ignore.contains(&bucket_id) {
                     EnforcementState::SkipConfig
@@ -88,17 +100,41 @@ impl S3NukeClient {
         resources
     }
 
+    fn get_bucket_region(&self, bucket_id: &str) -> String {
+        if let Ok(result) = self
+            .client
+            .get_bucket_location(GetBucketLocationRequest {
+                bucket: bucket_id.to_string(),
+            })
+            .sync()
+        {
+            return if result.location_constraint.is_some()
+                && !result.location_constraint.as_ref().unwrap().is_empty()
+            {
+                result.location_constraint.unwrap()
+            } else {
+                Region::UsEast1.name().to_string()
+            };
+        }
+
+        Region::UsEast1.name().to_string()
+    }
+
     fn resource_prefix_does_not_match(&self, bucket_id: &str) -> bool {
-        !self
-            .config
-            .required_naming_regex
-            .as_ref()
-            .unwrap()
-            .is_match(bucket_id)
+        if self.config.required_naming_prefix.is_some() {
+            !self
+                .config
+                .required_naming_regex
+                .as_ref()
+                .unwrap()
+                .is_match(bucket_id)
+        } else {
+            false
+        }
     }
 
     fn resource_name_is_not_dns_compliant(&self, bucket_id: &str) -> bool {
-        if self.config.check_dns_compliant_naming {
+        if self.config.check_dns_compliant_naming.is_some() {
             bucket_id.contains('.')
         } else {
             false
@@ -106,25 +142,33 @@ impl S3NukeClient {
     }
 
     fn is_bucket_public(&self, bucket_id: &str) -> bool {
-        if self.config.check_public_accessibility {
+        // let mut pbc_is_public = false;
+        let mut ps_is_public = false;
+        let mut grants_is_public = false;
+
+        if self.config.check_public_accessibility.is_some() {
             // 1. Check the Public Access Block
-            if let Some(public_access_block) = self.get_public_access_block(bucket_id) {
-                if public_access_block.block_public_acls == Some(true)
-                    && public_access_block.block_public_policy == Some(true)
-                {
-                    return true;
-                }
-            }
+            // if let Some(public_access_block) = self.get_public_access_block(bucket_id) {
+            //     if public_access_block.block_public_acls == Some(false)
+            //         && public_access_block.block_public_policy == Some(false)
+            //     {
+            //         debug!("Bucket ({}) has open public access block", bucket_id);
+            //         pbc_is_public = true;
+            //     }
+            // }
 
             // 2. Check the Bucket Policy Status
             if let Some(policy_status) = self.get_bucket_policy_status(bucket_id) {
                 if policy_status.is_public == Some(true) {
-                    return true;
+                    debug!("Bucket ({}) policy status is public", bucket_id);
+                    ps_is_public = true;
                 }
             }
 
             // 3. Check the ACLs to see if grantee is AllUsers or AllAuthenticatedUsers
+            // TODO: https://github.com/rusoto/rusoto/issues/1703
             if let Some(grants) = self.get_acls_for_bucket(bucket_id) {
+                debug!("Bucket ({}) grants - {:?}", bucket_id, grants);
                 for grant in grants {
                     if grant.grantee.is_some() && grant.permission.is_some() {
                         let grantee = grant.grantee.as_ref().unwrap().clone();
@@ -132,13 +176,18 @@ impl S3NukeClient {
                         if grantee.type_ == "Group".to_string()
                             && S3_PUBLIC_GROUPS.contains(&grantee.uri.unwrap().as_str())
                         {
-                            return true;
+                            debug!("Bucket ({}) grants are public", bucket_id);
+                            grants_is_public = true;
                         }
                     }
                 }
             }
 
-            false
+            if ps_is_public || grants_is_public {
+                true
+            } else {
+                false
+            }
         } else {
             false
         }
@@ -160,9 +209,10 @@ impl S3NukeClient {
         {
             Ok(result) => result.grants,
             Err(err) => {
-                error!(
+                trace!(
                     "Failed to get ACL Grants for bucket {} - {:?}",
-                    bucket_id, err
+                    bucket_id,
+                    err
                 );
 
                 None
@@ -170,6 +220,7 @@ impl S3NukeClient {
         }
     }
 
+    #[allow(dead_code)]
     fn get_public_access_block(&self, bucket_id: &str) -> Option<PublicAccessBlockConfiguration> {
         match self
             .client
@@ -180,9 +231,10 @@ impl S3NukeClient {
         {
             Ok(result) => result.public_access_block_configuration,
             Err(err) => {
-                error!(
+                trace!(
                     "Failed to get public_access_block for bucket {} - {:?}",
-                    bucket_id, err
+                    bucket_id,
+                    err
                 );
 
                 None
@@ -200,9 +252,10 @@ impl S3NukeClient {
         {
             Ok(result) => result.policy_status,
             Err(err) => {
-                error!(
+                trace!(
                     "Failed to get bucket policy status for bucket {} - {:?}",
-                    bucket_id, err
+                    bucket_id,
+                    err
                 );
 
                 None
@@ -378,9 +431,9 @@ mod tests {
         S3Config {
             enabled: true,
             target_state: TargetState::Deleted,
-            check_dns_compliant_naming: false,
-            check_public_accessibility: false,
-            required_naming_prefix: S3_BUCKET_PREFIX.into(),
+            check_dns_compliant_naming: None,
+            check_public_accessibility: None,
+            required_naming_prefix: Some(S3_BUCKET_PREFIX.into()),
             required_naming_regex: Some(Regex::new(S3_BUCKET_PREFIX).unwrap()),
             ignore: Vec::new(),
         }
@@ -442,7 +495,7 @@ mod tests {
     #[test]
     fn check_package_resources_by_dns_complaint_name() {
         let mut s3_config = create_config();
-        s3_config.check_dns_compliant_naming = true;
+        s3_config.check_dns_compliant_naming = Some(true);
         let s3_client = create_s3_client(s3_config);
 
         let resources = s3_client.package_buckets_as_resources(get_s3_buckets());

@@ -19,8 +19,8 @@ use rusoto_rds::{
 };
 use rusoto_redshift::{DeleteClusterError, DescribeClustersError};
 use rusoto_s3::{
-    DeleteBucketError, DeleteObjectsError, GetBucketTaggingError, ListBucketsError,
-    ListObjectVersionsError, ListObjectsV2Error,
+    DeleteBucketError, DeleteObjectsError, GetBucketLocationError, GetBucketTaggingError,
+    ListBucketsError, ListObjectVersionsError, ListObjectsV2Error,
 };
 use rusoto_sagemaker::{
     DeleteNotebookInstanceError, ListNotebookInstancesError, ListTagsError,
@@ -173,6 +173,10 @@ pub enum Error {
     #[fail(display = "Failed deleting S3 bucket: {}", error)]
     DeleteS3Bucket {
         error: RusotoError<DeleteBucketError>,
+    },
+    #[fail(display = "Issue getting bucket location: {}", error)]
+    GetS3BucketLocation {
+        error: RusotoError<GetBucketLocationError>,
     },
     #[fail(display = "Failed listing S3 bucket tags: {}", error)]
     GetBucketTags {
