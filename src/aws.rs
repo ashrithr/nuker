@@ -1,5 +1,5 @@
 mod aurora;
-mod ce;
+// mod ce;
 mod cloudwatch;
 mod ebs;
 mod ec2;
@@ -12,47 +12,45 @@ mod sagemaker;
 mod sts;
 mod util;
 
-use crate::aws::sagemaker::SagemakerNukeClient;
+// use crate::aws::sagemaker::SagemakerNukeClient;
 use crate::{
-    aws::ebs::EbsNukeClient,
+    aws::{
+        aurora::AuroraService, ebs::EbsService, ec2::Ec2Service, emr::EmrService,
+        glue::GlueService, rds::RdsService, redshift::RedshiftService, s3::S3Service,
+        sagemaker::SagemakerService, sts::StsService,
+    },
     config::Config,
     error::Error as AwsError,
-    service::{NukeService, Resource},
+    resource::{self, Resource},
+    service::NukerService,
 };
-use aurora::AuroraNukeClient;
-use ce::CeClient;
-use ec2::Ec2NukeClient;
-use emr::EmrNukeClient;
-use glue::GlueNukeClient;
 use log::error;
-use rds::RdsNukeClient;
-use redshift::RedshiftNukeClient;
 use rusoto_core::Region;
-use s3::S3NukeClient;
-use sts::StsNukeClient;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
 
-pub struct AwsClient {
+/// AWS Nuker for nuking resources in AWS.
+pub struct AwsNuker {
     pub region: Region,
-    clients: Vec<Box<dyn NukeService>>,
-    ce_client: Option<CeClient>,
-    profile_name: Option<String>,
+    services: Vec<Box<dyn NukerService>>,
+    resources: Arc<Mutex<Vec<Resource>>>,
 }
 
-impl AwsClient {
-    pub fn new(
-        profile_name: Option<&str>,
+impl AwsNuker {
+    pub async fn new(
+        profile_name: Option<String>,
         region: Region,
         config: &Config,
         dry_run: bool,
-    ) -> Result<AwsClient> {
-        let mut clients: Vec<Box<dyn NukeService>> = Vec::new();
-        let sts_client = StsNukeClient::new(profile_name, region.clone())?;
+    ) -> Result<AwsNuker> {
+        let mut services: Vec<Box<dyn NukerService>> = Vec::new();
+        let sts_service = StsService::new(profile_name.clone(), region.clone())?;
 
         if config.ec2.enabled {
-            clients.push(Box::new(Ec2NukeClient::new(
-                profile_name,
+            services.push(Box::new(Ec2Service::new(
+                profile_name.clone(),
                 region.clone(),
                 config.ec2.clone(),
                 dry_run,
@@ -60,8 +58,8 @@ impl AwsClient {
         }
 
         if config.rds.enabled {
-            clients.push(Box::new(RdsNukeClient::new(
-                profile_name,
+            services.push(Box::new(RdsService::new(
+                profile_name.clone(),
                 region.clone(),
                 config.rds.clone(),
                 dry_run,
@@ -69,8 +67,8 @@ impl AwsClient {
         }
 
         if config.aurora.enabled {
-            clients.push(Box::new(AuroraNukeClient::new(
-                profile_name,
+            services.push(Box::new(AuroraService::new(
+                profile_name.clone(),
                 region.clone(),
                 config.aurora.clone(),
                 dry_run,
@@ -78,8 +76,8 @@ impl AwsClient {
         }
 
         if config.s3.enabled {
-            clients.push(Box::new(S3NukeClient::new(
-                profile_name,
+            services.push(Box::new(S3Service::new(
+                profile_name.clone(),
                 region.clone(),
                 config.s3.clone(),
                 dry_run,
@@ -87,8 +85,8 @@ impl AwsClient {
         }
 
         if config.redshift.enabled {
-            clients.push(Box::new(RedshiftNukeClient::new(
-                profile_name,
+            services.push(Box::new(RedshiftService::new(
+                profile_name.clone(),
                 region.clone(),
                 config.redshift.clone(),
                 dry_run,
@@ -96,8 +94,8 @@ impl AwsClient {
         }
 
         if config.ebs.enabled {
-            clients.push(Box::new(EbsNukeClient::new(
-                profile_name,
+            services.push(Box::new(EbsService::new(
+                profile_name.clone(),
                 region.clone(),
                 config.ebs.clone(),
                 dry_run,
@@ -105,8 +103,8 @@ impl AwsClient {
         }
 
         if config.emr.enabled {
-            clients.push(Box::new(EmrNukeClient::new(
-                profile_name,
+            services.push(Box::new(EmrService::new(
+                profile_name.clone(),
                 region.clone(),
                 config.emr.clone(),
                 dry_run,
@@ -114,132 +112,199 @@ impl AwsClient {
         }
 
         if config.glue.enabled {
-            clients.push(Box::new(GlueNukeClient::new(
-                profile_name,
+            services.push(Box::new(GlueService::new(
+                profile_name.clone(),
                 region.clone(),
                 config.glue.clone(),
-                sts_client.get_account_number()?,
+                sts_service.get_account_number().await?,
                 dry_run,
             )?))
         }
 
         if config.sagemaker.enabled {
-            clients.push(Box::new(SagemakerNukeClient::new(
-                profile_name,
+            services.push(Box::new(SagemakerService::new(
+                profile_name.clone(),
                 region.clone(),
                 config.sagemaker.clone(),
                 dry_run,
             )?))
         }
 
-        let ce_client = if config.print_usage {
-            Some(CeClient::new(profile_name, config.usage_days)?)
-        } else {
-            None
-        };
-
-        Ok(AwsClient {
+        Ok(AwsNuker {
             region,
-            clients,
-            ce_client,
-            profile_name: profile_name.map(|s| s.into()),
+            services,
+            resources: Arc::new(Mutex::new(Vec::new())),
         })
     }
 
-    pub fn locate_resources(&self) -> Result<Vec<Resource>> {
-        let mut resources: Vec<Resource> = Vec::new();
+    pub async fn locate_resources(&mut self) {
+        let mut handles = Vec::new();
 
-        for client in &self.clients {
-            match client.scan() {
-                Ok(rs) => {
-                    if !rs.is_empty() {
-                        for r in rs {
-                            resources.push(r);
+        for service in &self.services {
+            let service = dyn_clone::clone_box(&*service);
+            let resources = self.resources.clone();
+
+            handles.push(tokio::spawn(async move {
+                match service.scan().await {
+                    Ok(rs) => {
+                        if !rs.is_empty() {
+                            for r in rs {
+                                resources.lock().unwrap().push(r);
+                            }
                         }
                     }
+                    Err(err) => {
+                        error!("Error occurred locating resources: {}", err);
+                    }
                 }
-                Err(err) => {
-                    error!(
-                        "Error occurred locating resources in region: '{:?}' using profile: '{:?}'. {}",
-                        self.region, self.profile_name, err
-                    );
+            }));
+        }
+
+        futures::future::join_all(handles).await;
+    }
+
+    pub fn print_resources(&self) {
+        for resource in self.resources.lock().unwrap().iter() {
+            println!("{}", resource);
+        }
+    }
+
+    pub async fn cleanup_resources(&self) -> Result<()> {
+        let mut handles = Vec::new();
+        let mut resources: HashMap<String, Vec<Resource>> = HashMap::new();
+
+        for resource in self.resources.lock().unwrap().iter() {
+            let key = resource.resource_type.name().to_owned();
+            if !resources.contains_key(&key) {
+                resources.insert(key.clone(), vec![]);
+            }
+            resources.get_mut(&key).unwrap().push(resource.clone());
+        }
+
+        for service in &self.services {
+            let service = dyn_clone::clone_box(&*service);
+            let ref_client = service.as_any();
+
+            if ref_client.is::<Ec2Service>() {
+                if resources.get(resource::EC2_TYPE).is_some() {
+                    let ec2_resources = resources.get(resource::EC2_TYPE).unwrap().clone();
+
+                    handles.push(tokio::spawn(async move {
+                        match service.cleanup(ec2_resources).await {
+                            Ok(()) => {}
+                            Err(err) => error!("Error occurred cleaning up EC2 resources: {}", err),
+                        }
+                    }));
+                }
+            } else if ref_client.is::<EbsService>() {
+                if resources.get(resource::EBS_TYPE).is_some() {
+                    let ebs_resources = resources.get(resource::EBS_TYPE).unwrap().clone();
+
+                    handles.push(tokio::spawn(async move {
+                        match service.cleanup(ebs_resources).await {
+                            Ok(()) => {}
+                            Err(err) => error!("Error occurred cleaning up EBS resources: {}", err),
+                        }
+                    }));
+                }
+            } else if ref_client.is::<RdsService>() {
+                if resources.get(resource::RDS_TYPE).is_some() {
+                    let rds_resources = resources.get(resource::RDS_TYPE).unwrap().clone();
+
+                    handles.push(tokio::spawn(async move {
+                        match service.cleanup(rds_resources).await {
+                            Ok(()) => {}
+                            Err(err) => error!("Error occurred cleaning up RDS resources: {}", err),
+                        }
+                    }));
+                }
+            } else if ref_client.is::<AuroraService>() {
+                if resources.get(resource::AURORA_TYPE).is_some() {
+                    let aurora_resources = resources.get(resource::AURORA_TYPE).unwrap().clone();
+
+                    handles.push(tokio::spawn(async move {
+                        match service.cleanup(aurora_resources).await {
+                            Ok(()) => {}
+                            Err(err) => {
+                                error!("Error occurred cleaning up Aurora resources: {}", err)
+                            }
+                        }
+                    }));
+                }
+            } else if ref_client.is::<RedshiftService>() {
+                if resources.get(resource::REDSHIFT_TYPE).is_some() {
+                    let rs_resources = resources.get(resource::REDSHIFT_TYPE).unwrap().clone();
+
+                    handles.push(tokio::spawn(async move {
+                        match service.cleanup(rs_resources).await {
+                            Ok(()) => {}
+                            Err(err) => {
+                                error!("Error occurred cleaning up Aurora resources: {}", err)
+                            }
+                        }
+                    }));
+                }
+            } else if ref_client.is::<EmrService>() {
+                if resources.get(resource::EMR_TYPE).is_some() {
+                    let emr_resources = resources.get(resource::EMR_TYPE).unwrap().clone();
+
+                    handles.push(tokio::spawn(async move {
+                        match service.cleanup(emr_resources).await {
+                            Ok(()) => {}
+                            Err(err) => error!("Error occurred cleaning up EMR resources: {}", err),
+                        }
+                    }));
+                }
+            } else if ref_client.is::<GlueService>() {
+                if resources.get(resource::GLUE_TYPE).is_some() {
+                    let glue_resources = resources.get(resource::GLUE_TYPE).unwrap().clone();
+
+                    handles.push(tokio::spawn(async move {
+                        match service.cleanup(glue_resources).await {
+                            Ok(()) => {}
+                            Err(err) => {
+                                error!("Error occurred cleaning up Glue resources: {}", err)
+                            }
+                        }
+                    }));
+                }
+            } else if ref_client.is::<SagemakerService>() {
+                if resources.get(resource::SAGEMAKER_TYPE).is_some() {
+                    let sm_resources = resources.get(resource::SAGEMAKER_TYPE).unwrap().clone();
+
+                    handles.push(tokio::spawn(async move {
+                        match service.cleanup(sm_resources).await {
+                            Ok(()) => {}
+                            Err(err) => {
+                                error!("Error occurred cleaning up Sagemaker resources: {}", err)
+                            }
+                        }
+                    }));
+                }
+            } else if ref_client.is::<S3Service>() {
+                if resources.get(resource::S3_TYPE).is_some() {
+                    let s3_resources = resources.get(resource::S3_TYPE).unwrap().clone();
+
+                    handles.push(tokio::spawn(async move {
+                        match service.cleanup(s3_resources).await {
+                            Ok(()) => {}
+                            Err(err) => error!("Error occurred cleaning up S3 resources: {}", err),
+                        }
+                    }));
                 }
             }
         }
 
-        Ok(resources)
-    }
-
-    pub fn cleanup_resources(&self, resources: &[Resource]) -> Result<()> {
-        let ec2_resources: Vec<&Resource> = resources
-            .iter()
-            .filter(|r| r.resource_type.is_ec2())
-            .collect();
-        let ebs_resources: Vec<&Resource> = resources
-            .iter()
-            .filter(|r| r.resource_type.is_ebs())
-            .collect();
-        let rds_resources: Vec<&Resource> = resources
-            .iter()
-            .filter(|r| r.resource_type.is_rds())
-            .collect();
-        let aurora_resources: Vec<&Resource> = resources
-            .iter()
-            .filter(|r| r.resource_type.is_aurora())
-            .collect();
-        let s3_resources: Vec<&Resource> = resources
-            .iter()
-            .filter(|r| r.resource_type.is_s3())
-            .collect();
-        let redshift_resources: Vec<&Resource> = resources
-            .iter()
-            .filter(|r| r.resource_type.is_redshift())
-            .collect();
-        let emr_resources: Vec<&Resource> = resources
-            .iter()
-            .filter(|r| r.resource_type.is_emr())
-            .collect();
-        let glue_resources: Vec<&Resource> = resources
-            .iter()
-            .filter(|r| r.resource_type.is_glue())
-            .collect();
-        let sagemaker_resources: Vec<&Resource> = resources
-            .iter()
-            .filter(|r| r.resource_type.is_sagemaker())
-            .collect();
-
-        for client in &self.clients {
-            let ref_client = client.as_any();
-
-            if ref_client.is::<Ec2NukeClient>() {
-                client.cleanup(&ec2_resources)?;
-            } else if ref_client.is::<EbsNukeClient>() {
-                client.cleanup(&ebs_resources)?;
-            } else if ref_client.is::<RdsNukeClient>() {
-                client.cleanup(&rds_resources)?;
-            } else if ref_client.is::<AuroraNukeClient>() {
-                client.cleanup(&aurora_resources)?;
-            } else if ref_client.is::<S3NukeClient>() {
-                client.cleanup(&s3_resources)?;
-            } else if ref_client.is::<RedshiftNukeClient>() {
-                client.cleanup(&redshift_resources)?;
-            } else if ref_client.is::<EmrNukeClient>() {
-                client.cleanup(&emr_resources)?;
-            } else if ref_client.is::<GlueNukeClient>() {
-                client.cleanup(&glue_resources)?;
-            } else if ref_client.is::<SagemakerNukeClient>() {
-                client.cleanup(&sagemaker_resources)?;
-            }
-        }
+        futures::future::join_all(handles).await;
 
         Ok(())
     }
 
-    pub fn print_usage(&self) -> Result<()> {
-        if let Some(ce_client) = &self.ce_client {
-            ce_client.get_usage()?;
-        }
+    // pub fn print_usage(&self) -> Result<()> {
+    //     if let Some(ce_client) = &self.ce_client {
+    //         ce_client.get_usage()?;
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }

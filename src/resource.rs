@@ -1,0 +1,232 @@
+use crate::config::TargetState;
+use colored::*;
+use rusoto_core::Region;
+use std::fmt;
+
+pub const EC2_TYPE: &str = "ec2";
+pub const EBS_TYPE: &str = "ebs";
+pub const RDS_TYPE: &str = "rds";
+pub const AURORA_TYPE: &str = "aurora";
+pub const S3_TYPE: &str = "s3";
+pub const EMR_TYPE: &str = "emr";
+pub const GLUE_TYPE: &str = "glue";
+pub const SAGEMAKER_TYPE: &str = "sagemaker";
+pub const REDSHIFT_TYPE: &str = "redshift";
+
+#[derive(Display, Debug, Clone)]
+pub enum ResourceType {
+    Ec2Instance,
+    Ec2Interface,
+    Ec2Address,
+    EbsVolume,
+    EbsSnapshot,
+    RDS,
+    Aurora,
+    S3Bucket,
+    Redshift,
+    EmrCluster,
+    GlueDevEndpoint,
+    SagemakerNotebook,
+}
+
+impl ResourceType {
+    pub fn name(&self) -> &str {
+        match *self {
+            ResourceType::Ec2Instance | ResourceType::Ec2Interface | ResourceType::Ec2Address => {
+                EC2_TYPE
+            }
+            ResourceType::EbsVolume | ResourceType::EbsSnapshot => EBS_TYPE,
+            ResourceType::RDS => RDS_TYPE,
+            ResourceType::Aurora => AURORA_TYPE,
+            ResourceType::S3Bucket => S3_TYPE,
+            ResourceType::Redshift => REDSHIFT_TYPE,
+            ResourceType::EmrCluster => EMR_TYPE,
+            ResourceType::GlueDevEndpoint => GLUE_TYPE,
+            ResourceType::SagemakerNotebook => SAGEMAKER_TYPE,
+        }
+    }
+
+    pub fn is_ec2(&self) -> bool {
+        match *self {
+            ResourceType::Ec2Instance | ResourceType::Ec2Interface | ResourceType::Ec2Address => {
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn is_instance(&self) -> bool {
+        match *self {
+            ResourceType::Ec2Instance => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_volume(&self) -> bool {
+        match *self {
+            ResourceType::EbsVolume => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_snapshot(&self) -> bool {
+        match *self {
+            ResourceType::EbsSnapshot => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_ebs(&self) -> bool {
+        match *self {
+            ResourceType::EbsVolume | ResourceType::EbsSnapshot => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_eni(&self) -> bool {
+        match *self {
+            ResourceType::Ec2Interface => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_eip(&self) -> bool {
+        match *self {
+            ResourceType::Ec2Address => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_rds(&self) -> bool {
+        match *self {
+            ResourceType::RDS => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_aurora(&self) -> bool {
+        match *self {
+            ResourceType::Aurora => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_s3(&self) -> bool {
+        match *self {
+            ResourceType::S3Bucket => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_redshift(&self) -> bool {
+        match *self {
+            ResourceType::Redshift => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_emr(&self) -> bool {
+        match *self {
+            ResourceType::EmrCluster => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_glue(&self) -> bool {
+        match *self {
+            ResourceType::GlueDevEndpoint => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_sagemaker(&self) -> bool {
+        match *self {
+            ResourceType::SagemakerNotebook => true,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum EnforcementState {
+    Stop,
+    Delete,
+    Skip,
+    SkipConfig,
+    SkipStopped,
+}
+
+impl EnforcementState {
+    pub fn name(&self) -> colored::ColoredString {
+        match *self {
+            EnforcementState::Stop => "would be stopped".blue().bold(),
+            EnforcementState::Delete => "would be removed".blue().bold(),
+            EnforcementState::Skip => "skipped because of rules".yellow().bold(),
+            EnforcementState::SkipConfig => "skipped because of config".yellow().bold(),
+            EnforcementState::SkipStopped => "skipped as resource is not running".yellow().bold(),
+        }
+    }
+
+    pub fn from_target_state(target_state: &TargetState) -> Self {
+        if *target_state == TargetState::Deleted {
+            EnforcementState::Delete
+        } else {
+            EnforcementState::Stop
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Resource {
+    pub id: String,
+    pub resource_type: ResourceType,
+    pub region: Region,
+    pub tags: Option<Vec<NTag>>,
+    pub state: Option<String>,
+    pub enforcement_state: EnforcementState,
+}
+
+impl fmt::Display for Resource {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "[{}] - {} - {}",
+            self.region.name().bold(),
+            self.resource_type,
+            self.id.bold()
+        )?;
+
+        if self.tags.is_some() && !self.tags.as_ref().unwrap().is_empty() {
+            write!(f, " - {{")?;
+            for tag in self.tags.as_ref().unwrap() {
+                write!(f, "[{}]", tag)?;
+            }
+            write!(f, "}}")?;
+        }
+
+        write!(f, " - {}", self.enforcement_state.name())?;
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NTag {
+    pub key: Option<String>,
+    pub value: Option<String>,
+}
+
+impl fmt::Display for NTag {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.key.is_some() && self.value.is_some() {
+            write!(
+                f,
+                "{} -> {}",
+                self.key.as_ref().unwrap().on_white().black(),
+                self.value.as_ref().unwrap().on_white().black()
+            )
+        } else {
+            write!(f, "{:?} -> {:?}", self.key, self.value)
+        }
+    }
+}

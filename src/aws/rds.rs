@@ -1,9 +1,11 @@
 use crate::{
     aws::{cloudwatch::CwClient, util, Result},
     config::{RdsConfig, RequiredTags},
-    service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
+    resource::{EnforcementState, NTag, Resource, ResourceType},
+    service::NukerService,
 };
-use log::debug;
+use async_trait::async_trait;
+use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_rds::{
@@ -15,35 +17,44 @@ use rusoto_rds::{
 const AURORA_POSTGRES_ENGINE: &str = "aurora-postgresql";
 const AURORA_MYSQL_ENGINE: &str = "aurora-mysql";
 
-pub struct RdsNukeClient {
+#[derive(Clone)]
+pub struct RdsService {
     pub client: RdsClient,
-    pub cwclient: CwClient,
+    pub cw_client: CwClient,
     pub config: RdsConfig,
     pub region: Region,
     pub dry_run: bool,
 }
 
-impl RdsNukeClient {
+impl RdsService {
     pub fn new(
-        profile_name: Option<&str>,
+        profile_name: Option<String>,
         region: Region,
         config: RdsConfig,
         dry_run: bool,
     ) -> Result<Self> {
-        if let Some(profile) = profile_name {
+        if let Some(profile) = &profile_name {
             let mut pp = ProfileProvider::new()?;
             pp.set_profile(profile);
-            Ok(RdsNukeClient {
+            Ok(RdsService {
                 client: RdsClient::new_with(HttpClient::new()?, pp, region.clone()),
-                cwclient: CwClient::new(profile_name, region.clone(), config.clone().idle_rules)?,
+                cw_client: CwClient::new(
+                    profile_name.clone(),
+                    region.clone(),
+                    config.clone().idle_rules,
+                )?,
                 config,
                 region,
                 dry_run,
             })
         } else {
-            Ok(RdsNukeClient {
+            Ok(RdsService {
                 client: RdsClient::new(region.clone()),
-                cwclient: CwClient::new(profile_name, region.clone(), config.clone().idle_rules)?,
+                cw_client: CwClient::new(
+                    profile_name.clone(),
+                    region.clone(),
+                    config.clone().idle_rules,
+                )?,
                 config,
                 region,
                 dry_run,
@@ -62,7 +73,10 @@ impl RdsNukeClient {
         })
     }
 
-    fn package_instances_as_resources(&self, instances: Vec<DBInstance>) -> Result<Vec<Resource>> {
+    async fn package_instances_as_resources(
+        &self,
+        instances: Vec<DBInstance>,
+    ) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
 
         for instance in instances {
@@ -74,11 +88,11 @@ impl RdsNukeClient {
                 } else if instance.db_instance_status != Some("available".to_string()) {
                     EnforcementState::SkipStopped
                 } else {
-                    if self.resource_tags_does_not_match(&instance) {
+                    if self.resource_tags_does_not_match(&instance).await {
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.resource_types_does_not_match(&instance) {
                         EnforcementState::from_target_state(&self.config.target_state)
-                    } else if self.is_resource_idle(&instance) {
+                    } else if self.is_resource_idle(&instance).await {
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else {
                         EnforcementState::Skip
@@ -90,7 +104,8 @@ impl RdsNukeClient {
                 id: instance_id,
                 region: self.region.clone(),
                 resource_type: ResourceType::RDS,
-                tags: self.package_tags_as_ntags(self.list_tags(instance.db_instance_arn.clone())?),
+                tags: self
+                    .package_tags_as_ntags(self.list_tags(instance.db_instance_arn.clone()).await?),
                 state: instance.db_instance_status.clone(),
                 enforcement_state,
             });
@@ -99,11 +114,12 @@ impl RdsNukeClient {
         Ok(resources)
     }
 
-    fn resource_tags_does_not_match(&self, instance: &DBInstance) -> bool {
+    async fn resource_tags_does_not_match(&self, instance: &DBInstance) -> bool {
         if self.config.required_tags.is_some() {
             !self.check_tags(
                 &self
                     .list_tags(instance.db_instance_arn.clone())
+                    .await
                     .unwrap_or_default(),
                 &self.config.required_tags.as_ref().unwrap(),
             )
@@ -123,18 +139,19 @@ impl RdsNukeClient {
         }
     }
 
-    fn is_resource_idle(&self, instance: &DBInstance) -> bool {
+    async fn is_resource_idle(&self, instance: &DBInstance) -> bool {
         if !self.config.idle_rules.is_empty() {
             !self
-                .cwclient
+                .cw_client
                 .filter_db_instance(&instance.db_instance_identifier.as_ref().unwrap())
+                .await
                 .unwrap()
         } else {
             false
         }
     }
 
-    fn get_instances(&self, filter: Vec<Filter>) -> Result<Vec<DBInstance>> {
+    async fn get_instances(&self, filter: Vec<Filter>) -> Result<Vec<DBInstance>> {
         let mut next_token: Option<String> = None;
         let mut instances: Vec<DBInstance> = Vec::new();
 
@@ -146,7 +163,7 @@ impl RdsNukeClient {
                     marker: next_token,
                     ..Default::default()
                 })
-                .sync()?;
+                .await?;
 
             if let Some(db_instances) = result.db_instances {
                 let mut temp_instances: Vec<DBInstance> = db_instances
@@ -170,14 +187,14 @@ impl RdsNukeClient {
         Ok(instances)
     }
 
-    fn list_tags(&self, arn: Option<String>) -> Result<Option<Vec<Tag>>> {
+    async fn list_tags(&self, arn: Option<String>) -> Result<Option<Vec<Tag>>> {
         let result = self
             .client
             .list_tags_for_resource(ListTagsForResourceMessage {
                 resource_name: arn.unwrap(),
                 ..Default::default()
             })
-            .sync()?;
+            .await?;
         Ok(result.tag_list)
     }
 
@@ -186,7 +203,7 @@ impl RdsNukeClient {
         util::compare_tags(ntags, required_tags)
     }
 
-    fn disable_termination_protection(&self, instance_id: &str) -> Result<()> {
+    async fn disable_termination_protection(&self, instance_id: &str) -> Result<()> {
         // TODO: This call can be saved by saving the termination protection state in the
         // Resource struct, while scanning for instances.
         let resp = self
@@ -195,7 +212,7 @@ impl RdsNukeClient {
                 db_instance_identifier: Some(instance_id.to_owned()),
                 ..Default::default()
             })
-            .sync()?;
+            .await?;
 
         if resp.db_instances.is_some() {
             if resp
@@ -218,7 +235,7 @@ impl RdsNukeClient {
                             deletion_protection: Some(false),
                             ..Default::default()
                         })
-                        .sync()?;
+                        .await?;
                 }
             }
         }
@@ -226,12 +243,12 @@ impl RdsNukeClient {
         Ok(())
     }
 
-    fn terminate_resource(&self, instance_id: String) -> Result<()> {
+    async fn terminate_resource(&self, instance_id: String) -> Result<()> {
         debug!("Terminating instance: {:?}", instance_id);
 
         if !self.dry_run {
             if self.config.termination_protection.ignore {
-                self.disable_termination_protection(&instance_id)?;
+                self.disable_termination_protection(&instance_id).await?;
             }
 
             self.client
@@ -241,13 +258,13 @@ impl RdsNukeClient {
                     skip_final_snapshot: Some(true),
                     ..Default::default()
                 })
-                .sync()?;
+                .await?;
         }
 
         Ok(())
     }
 
-    fn stop_resource(&self, instance_id: String) -> Result<()> {
+    async fn stop_resource(&self, instance_id: String) -> Result<()> {
         debug!("Stopping instance: {:?}", instance_id);
 
         if !self.dry_run {
@@ -256,26 +273,31 @@ impl RdsNukeClient {
                     db_instance_identifier: instance_id,
                     ..Default::default()
                 })
-                .sync()?;
+                .await?;
         }
 
         Ok(())
     }
 }
 
-impl NukeService for RdsNukeClient {
-    fn scan(&self) -> Result<Vec<Resource>> {
-        let instances = self.get_instances(Vec::new())?;
+#[async_trait]
+impl NukerService for RdsService {
+    async fn scan(&self) -> Result<Vec<Resource>> {
+        trace!(
+            "Initialized RDS resource scanner for {:?} region",
+            self.region.name()
+        );
+        let instances = self.get_instances(Vec::new()).await?;
 
-        Ok(self.package_instances_as_resources(instances)?)
+        Ok(self.package_instances_as_resources(instances).await?)
     }
 
-    fn stop(&self, resource: &Resource) -> Result<()> {
-        self.stop_resource(resource.id.to_owned())
+    async fn stop(&self, resource: &Resource) -> Result<()> {
+        self.stop_resource(resource.id.to_owned()).await
     }
 
-    fn delete(&self, resource: &Resource) -> Result<()> {
-        self.terminate_resource(resource.id.to_owned())
+    async fn delete(&self, resource: &Resource) -> Result<()> {
+        self.terminate_resource(resource.id.to_owned()).await
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {

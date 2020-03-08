@@ -1,9 +1,11 @@
 use crate::{
     aws::{cloudwatch::CwClient, Result},
     config::EmrConfig,
-    service::{EnforcementState, NukeService, Resource, ResourceType},
+    resource::{EnforcementState, Resource, ResourceType},
+    service::NukerService,
 };
-use log::debug;
+use async_trait::async_trait;
+use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_ec2::{DescribeSecurityGroupsRequest, Ec2, Ec2Client, Filter};
@@ -12,29 +14,34 @@ use rusoto_emr::{
     SetTerminationProtectionInput, TerminateJobFlowsInput,
 };
 
-pub struct EmrNukeClient {
+#[derive(Clone)]
+pub struct EmrService {
     pub client: EmrClient,
-    pub cwclient: CwClient,
+    pub cw_client: CwClient,
     pub ec2_client: Option<Ec2Client>,
     pub config: EmrConfig,
     pub region: Region,
     pub dry_run: bool,
 }
 
-impl EmrNukeClient {
+impl EmrService {
     pub fn new(
-        profile_name: Option<&str>,
+        profile_name: Option<String>,
         region: Region,
         config: EmrConfig,
         dry_run: bool,
     ) -> Result<Self> {
-        if let Some(profile) = profile_name {
+        if let Some(profile) = &profile_name {
             let mut pp = ProfileProvider::new()?;
             pp.set_profile(profile);
 
-            Ok(EmrNukeClient {
+            Ok(EmrService {
                 client: EmrClient::new_with(HttpClient::new()?, pp.clone(), region.clone()),
-                cwclient: CwClient::new(profile_name, region.clone(), config.clone().idle_rules)?,
+                cw_client: CwClient::new(
+                    profile_name.clone(),
+                    region.clone(),
+                    config.clone().idle_rules,
+                )?,
                 ec2_client: if config.security_groups.enabled {
                     Some(Ec2Client::new_with(HttpClient::new()?, pp, region.clone()))
                 } else {
@@ -45,9 +52,13 @@ impl EmrNukeClient {
                 dry_run,
             })
         } else {
-            Ok(EmrNukeClient {
+            Ok(EmrService {
                 client: EmrClient::new(region.clone()),
-                cwclient: CwClient::new(profile_name, region.clone(), config.clone().idle_rules)?,
+                cw_client: CwClient::new(
+                    profile_name.clone(),
+                    region.clone(),
+                    config.clone().idle_rules,
+                )?,
                 ec2_client: if config.security_groups.enabled {
                     Some(Ec2Client::new(region.clone()))
                 } else {
@@ -60,7 +71,7 @@ impl EmrNukeClient {
         }
     }
 
-    fn package_clusters_as_resources(
+    async fn package_clusters_as_resources(
         &self,
         clusters: Vec<ClusterSummary>,
         sgs: Option<Vec<String>>,
@@ -81,10 +92,10 @@ impl EmrNukeClient {
                     if self.resource_tags_does_not_match(&cluster) {
                         debug!("Resource tags does not match - {}", cluster_id);
                         EnforcementState::from_target_state(&self.config.target_state)
-                    } else if self.resource_types_does_not_match(&cluster) {
+                    } else if self.resource_types_does_not_match(&cluster).await {
                         debug!("Resource types does not match - {}", cluster_id);
                         EnforcementState::from_target_state(&self.config.target_state)
-                    } else if self.is_resource_idle(&cluster) {
+                    } else if self.is_resource_idle(&cluster).await {
                         debug!("Resource is idle - {}", cluster_id);
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.is_resource_not_secure(&cluster, sgs.clone()) {
@@ -114,9 +125,10 @@ impl EmrNukeClient {
         false
     }
 
-    fn resource_types_does_not_match(&self, cluster: &ClusterSummary) -> bool {
+    async fn resource_types_does_not_match(&self, cluster: &ClusterSummary) -> bool {
         if !self.config.allowed_instance_types.is_empty() {
-            if let Ok(instance_types) = self.get_instance_types(cluster.id.as_ref().unwrap()) {
+            if let Ok(instance_types) = self.get_instance_types(cluster.id.as_ref().unwrap()).await
+            {
                 if instance_types
                     .iter()
                     .any(|it| self.config.allowed_instance_types.contains(&it))
@@ -130,11 +142,12 @@ impl EmrNukeClient {
         }
     }
 
-    fn is_resource_idle(&self, cluster: &ClusterSummary) -> bool {
+    async fn is_resource_idle(&self, cluster: &ClusterSummary) -> bool {
         if !self.config.idle_rules.is_empty() {
             !self
-                .cwclient
+                .cw_client
                 .filter_emr_cluster(&cluster.id.as_ref().unwrap())
+                .await
                 .unwrap()
         } else {
             false
@@ -178,7 +191,7 @@ impl EmrNukeClient {
         // }
     }
 
-    fn get_instance_types(&self, cluster_id: &str) -> Result<Vec<String>> {
+    async fn get_instance_types(&self, cluster_id: &str) -> Result<Vec<String>> {
         let mut instance_types = Vec::new();
         let result = self
             .client
@@ -186,7 +199,7 @@ impl EmrNukeClient {
                 cluster_id: cluster_id.to_owned(),
                 ..Default::default()
             })
-            .sync()?;
+            .await?;
 
         for instance in result.instances.unwrap_or_default() {
             if let Some(it) = instance.instance_type {
@@ -197,7 +210,7 @@ impl EmrNukeClient {
         Ok(instance_types)
     }
 
-    fn get_clusters(&self) -> Result<Vec<ClusterSummary>> {
+    async fn get_clusters(&self) -> Result<Vec<ClusterSummary>> {
         let mut next_token: Option<String> = None;
         let mut clusters: Vec<ClusterSummary> = Vec::new();
 
@@ -208,7 +221,7 @@ impl EmrNukeClient {
                     marker: next_token,
                     ..Default::default()
                 })
-                .sync()?;
+                .await?;
 
             if let Some(cs) = result.clusters {
                 for c in cs {
@@ -220,7 +233,7 @@ impl EmrNukeClient {
                     //         .describe_cluster(DescribeClusterInput {
                     //             cluster_id: c.id.unwrap_or_default(),
                     //         })
-                    //         .sync()
+                    //         .await
                     //     {
                     //         Ok(result) => {
                     //             if let Some(cluster) = result.cluster {
@@ -244,24 +257,25 @@ impl EmrNukeClient {
         Ok(clusters)
     }
 
-    fn disable_termination_protection(&self, cluster_ids: Vec<String>) -> Result<()> {
+    async fn disable_termination_protection(&self, cluster_ids: Vec<String>) -> Result<()> {
         if !self.dry_run && !cluster_ids.is_empty() {
             self.client
                 .set_termination_protection(SetTerminationProtectionInput {
                     job_flow_ids: cluster_ids,
                     termination_protected: false,
                 })
-                .sync()?
+                .await?
         }
 
         Ok(())
     }
 
-    fn terminate_resources(&self, cluster_ids: &Vec<String>) -> Result<()> {
+    async fn terminate_resources(&self, cluster_ids: &Vec<String>) -> Result<()> {
         debug!("Terminating the clusters: {:?}", cluster_ids);
 
         if self.config.termination_protection.ignore {
-            self.disable_termination_protection(cluster_ids.to_owned())?;
+            self.disable_termination_protection(cluster_ids.to_owned())
+                .await?;
         }
 
         if !self.dry_run && !cluster_ids.is_empty() {
@@ -269,13 +283,13 @@ impl EmrNukeClient {
                 .terminate_job_flows(TerminateJobFlowsInput {
                     job_flow_ids: cluster_ids.to_owned(),
                 })
-                .sync()?;
+                .await?;
         }
 
         Ok(())
     }
 
-    fn get_security_groups(&self) -> Result<Vec<String>> {
+    async fn get_security_groups(&self) -> Result<Vec<String>> {
         let mut next_token: Option<String> = None;
         let mut security_groups: Vec<String> = Vec::new();
         let ec2_client = self.ec2_client.as_ref().unwrap();
@@ -300,7 +314,7 @@ impl EmrNukeClient {
                     next_token,
                     ..Default::default()
                 })
-                .sync()?;
+                .await?;
 
             if let Some(sgs) = result.security_groups {
                 for sg in sgs {
@@ -319,24 +333,32 @@ impl EmrNukeClient {
     }
 }
 
-impl NukeService for EmrNukeClient {
-    fn scan(&self) -> Result<Vec<Resource>> {
-        let clusters = self.get_clusters()?;
+#[async_trait]
+impl NukerService for EmrService {
+    async fn scan(&self) -> Result<Vec<Resource>> {
+        trace!(
+            "Initialized Emr resource scanner for {:?} region",
+            self.region.name()
+        );
+
+        let clusters = self.get_clusters().await?;
         let sgs = if self.config.security_groups.enabled {
-            Some(self.get_security_groups()?)
+            Some(self.get_security_groups().await?)
         } else {
             None
         };
 
-        Ok(self.package_clusters_as_resources(clusters, sgs)?)
+        Ok(self.package_clusters_as_resources(clusters, sgs).await?)
     }
 
-    fn stop(&self, resource: &Resource) -> Result<()> {
+    async fn stop(&self, resource: &Resource) -> Result<()> {
         self.terminate_resources(vec![resource.id.to_owned()].as_ref())
+            .await
     }
 
-    fn delete(&self, resource: &Resource) -> Result<()> {
+    async fn delete(&self, resource: &Resource) -> Result<()> {
         self.terminate_resources(vec![resource.id.to_owned()].as_ref())
+            .await
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {

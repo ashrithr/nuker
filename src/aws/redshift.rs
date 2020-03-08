@@ -1,45 +1,56 @@
 use crate::{
     aws::{cloudwatch::CwClient, util, Result},
     config::{RedshiftConfig, RequiredTags},
-    service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
+    resource::{EnforcementState, NTag, Resource, ResourceType},
+    service::NukerService,
 };
-use log::debug;
+use async_trait::async_trait;
+use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_redshift::{
     Cluster, DeleteClusterMessage, DescribeClustersMessage, Redshift, RedshiftClient, Tag,
 };
 
-pub struct RedshiftNukeClient {
+#[derive(Clone)]
+pub struct RedshiftService {
     pub client: RedshiftClient,
-    pub cwclient: CwClient,
+    pub cw_client: CwClient,
     pub config: RedshiftConfig,
     pub region: Region,
     pub dry_run: bool,
 }
 
-impl RedshiftNukeClient {
+impl RedshiftService {
     pub fn new(
-        profile_name: Option<&str>,
+        profile_name: Option<String>,
         region: Region,
         config: RedshiftConfig,
         dry_run: bool,
     ) -> Result<Self> {
-        if let Some(profile) = profile_name {
+        if let Some(profile) = &profile_name {
             let mut pp = ProfileProvider::new()?;
             pp.set_profile(profile);
 
-            Ok(RedshiftNukeClient {
+            Ok(RedshiftService {
                 client: RedshiftClient::new_with(HttpClient::new()?, pp, region.clone()),
-                cwclient: CwClient::new(profile_name, region.clone(), config.clone().idle_rules)?,
+                cw_client: CwClient::new(
+                    profile_name.clone(),
+                    region.clone(),
+                    config.clone().idle_rules,
+                )?,
                 config,
                 region,
                 dry_run,
             })
         } else {
-            Ok(RedshiftNukeClient {
+            Ok(RedshiftService {
                 client: RedshiftClient::new(region.clone()),
-                cwclient: CwClient::new(profile_name, region.clone(), config.clone().idle_rules)?,
+                cw_client: CwClient::new(
+                    profile_name.clone(),
+                    region.clone(),
+                    config.clone().idle_rules,
+                )?,
                 config,
                 region,
                 dry_run,
@@ -58,7 +69,7 @@ impl RedshiftNukeClient {
         })
     }
 
-    fn package_clusters_as_resources(&self, clusters: Vec<Cluster>) -> Result<Vec<Resource>> {
+    async fn package_clusters_as_resources(&self, clusters: Vec<Cluster>) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
 
         for cluster in clusters {
@@ -74,7 +85,7 @@ impl RedshiftNukeClient {
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.resource_types_does_not_match(&cluster) {
                         EnforcementState::from_target_state(&self.config.target_state)
-                    } else if self.is_resource_idle(&cluster) {
+                    } else if self.is_resource_idle(&cluster).await {
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else {
                         EnforcementState::Skip
@@ -114,18 +125,19 @@ impl RedshiftNukeClient {
         }
     }
 
-    fn is_resource_idle(&self, cluster: &Cluster) -> bool {
+    async fn is_resource_idle(&self, cluster: &Cluster) -> bool {
         if !self.config.idle_rules.is_empty() {
             !self
-                .cwclient
+                .cw_client
                 .filter_rs_cluster(&cluster.cluster_identifier.as_ref().unwrap())
+                .await
                 .unwrap()
         } else {
             false
         }
     }
 
-    fn get_clusters(&self) -> Result<Vec<Cluster>> {
+    async fn get_clusters(&self) -> Result<Vec<Cluster>> {
         let mut next_token: Option<String> = None;
         let mut clusters: Vec<Cluster> = Vec::new();
 
@@ -136,7 +148,7 @@ impl RedshiftNukeClient {
                     marker: next_token,
                     ..Default::default()
                 })
-                .sync()?;
+                .await?;
 
             if let Some(cls) = result.clusters {
                 for c in cls {
@@ -169,14 +181,14 @@ impl RedshiftNukeClient {
         util::compare_tags(ntags, required_tags)
     }
 
-    fn terminate_resource(&self, cluster_id: String) -> Result<()> {
+    async fn terminate_resource(&self, cluster_id: String) -> Result<()> {
         if !self.dry_run {
             self.client
                 .delete_cluster(DeleteClusterMessage {
                     cluster_identifier: cluster_id,
                     ..Default::default()
                 })
-                .sync()?;
+                .await?;
         }
 
         Ok(())
@@ -185,7 +197,7 @@ impl RedshiftNukeClient {
     // Redshift does not have a Stop option, next closest option available is
     // to delete the cluster by taking a snapshot of the cluster and then restore
     // when needed.
-    fn stop_resource(&self, cluster_id: String) -> Result<()> {
+    async fn stop_resource(&self, cluster_id: String) -> Result<()> {
         if !self.dry_run {
             self.client
                 .delete_cluster(DeleteClusterMessage {
@@ -194,26 +206,31 @@ impl RedshiftNukeClient {
                     final_cluster_snapshot_retention_period: Some(7), // retain for 7 days
                     ..Default::default()
                 })
-                .sync()?;
+                .await?;
         }
 
         Ok(())
     }
 }
 
-impl NukeService for RedshiftNukeClient {
-    fn scan(&self) -> Result<Vec<Resource>> {
-        let clusters = self.get_clusters()?;
+#[async_trait]
+impl NukerService for RedshiftService {
+    async fn scan(&self) -> Result<Vec<Resource>> {
+        trace!(
+            "Initialized Redshift resource scanner for {:?} region",
+            self.region.name()
+        );
+        let clusters = self.get_clusters().await?;
 
-        Ok(self.package_clusters_as_resources(clusters)?)
+        Ok(self.package_clusters_as_resources(clusters).await?)
     }
 
-    fn stop(&self, resource: &Resource) -> Result<()> {
-        self.stop_resource(resource.id.to_owned())
+    async fn stop(&self, resource: &Resource) -> Result<()> {
+        self.stop_resource(resource.id.to_owned()).await
     }
 
-    fn delete(&self, resource: &Resource) -> Result<()> {
-        self.terminate_resource(resource.id.to_owned())
+    async fn delete(&self, resource: &Resource) -> Result<()> {
+        self.terminate_resource(resource.id.to_owned()).await
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {

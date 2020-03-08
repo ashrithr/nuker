@@ -3,9 +3,11 @@ use fern::{
     colors::{Color, ColoredLevelConfig},
 };
 use log::debug;
-use nuker::{config, nuke};
+use nuker::config;
+use nuker::nuke;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = config::parse_args();
     let config = config::parse_config_file(&args.config);
 
@@ -13,7 +15,9 @@ fn main() {
 
     debug!("{:?}", config);
 
-    nuke::Nuke::new(config, args).run().unwrap()
+    let nuker = nuke::Nuker::new(config, args);
+
+    let _ = tokio::join!(nuker.run());
 }
 
 fn setup_logging(verbose: u64) {
@@ -48,13 +52,15 @@ fn setup_logging(verbose: u64) {
             ))
         })
         .level(level)
-        .level_for("rustls", log::LevelFilter::Info)
-        .level_for("tokio_reactor", log::LevelFilter::Info)
+        .level_for("h2", log::LevelFilter::Info)
         .level_for("hyper", log::LevelFilter::Info)
+        .level_for("mio", log::LevelFilter::Info)
         .level_for("rusoto_core", log::LevelFilter::Info)
         .level_for("rusoto_signature::signature", log::LevelFilter::Info)
+        .level_for("rustls", log::LevelFilter::Info)
+        .level_for("tokio_reactor", log::LevelFilter::Info)
         .level_for("tokio_threadpool", log::LevelFilter::Info)
-        .level_for("mio", log::LevelFilter::Info)
+        .level_for("tokio_util", log::LevelFilter::Info)
         .level_for("want", log::LevelFilter::Info)
         .chain(std::io::stdout())
         .apply()

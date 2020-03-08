@@ -2,6 +2,7 @@ pub mod aws;
 pub mod config;
 mod error;
 pub mod nuke;
+mod resource;
 mod service;
 
 #[macro_use]

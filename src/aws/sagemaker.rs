@@ -1,10 +1,12 @@
 use crate::{
     aws::{util, Result},
     config::{RequiredTags, SagemakerConfig},
-    service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
+    resource::{EnforcementState, NTag, Resource, ResourceType},
+    service::NukerService,
 };
+use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
-use log::debug;
+use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_sagemaker::{
@@ -12,32 +14,33 @@ use rusoto_sagemaker::{
     NotebookInstanceSummary, SageMaker, SageMakerClient, StopNotebookInstanceInput, Tag,
 };
 
-pub struct SagemakerNukeClient {
+#[derive(Clone)]
+pub struct SagemakerService {
     pub client: SageMakerClient,
     pub config: SagemakerConfig,
     pub region: Region,
     pub dry_run: bool,
 }
 
-impl SagemakerNukeClient {
+impl SagemakerService {
     pub fn new(
-        profile_name: Option<&str>,
+        profile_name: Option<String>,
         region: Region,
         config: SagemakerConfig,
         dry_run: bool,
     ) -> Result<Self> {
-        if let Some(profile) = profile_name {
+        if let Some(profile) = &profile_name {
             let mut pp = ProfileProvider::new()?;
             pp.set_profile(profile);
 
-            Ok(SagemakerNukeClient {
+            Ok(SagemakerService {
                 client: SageMakerClient::new_with(HttpClient::new()?, pp, region.clone()),
                 config,
                 region,
                 dry_run,
             })
         } else {
-            Ok(SagemakerNukeClient {
+            Ok(SagemakerService {
                 client: SageMakerClient::new(region.clone()),
                 config,
                 region,
@@ -46,7 +49,7 @@ impl SagemakerNukeClient {
         }
     }
 
-    fn get_notebooks(&self) -> Result<Vec<NotebookInstanceSummary>> {
+    async fn get_notebooks(&self) -> Result<Vec<NotebookInstanceSummary>> {
         let mut next_token: Option<String> = None;
         let mut notebooks: Vec<NotebookInstanceSummary> = Vec::new();
 
@@ -57,7 +60,7 @@ impl SagemakerNukeClient {
                     next_token,
                     ..Default::default()
                 })
-                .sync()?;
+                .await?;
 
             if let Some(ns) = result.notebook_instances {
                 for n in ns {
@@ -75,7 +78,7 @@ impl SagemakerNukeClient {
         Ok(notebooks)
     }
 
-    fn package_notebooks_as_resources(
+    async fn package_notebooks_as_resources(
         &self,
         notebooks: Vec<NotebookInstanceSummary>,
     ) -> Result<Vec<Resource>> {
@@ -83,7 +86,7 @@ impl SagemakerNukeClient {
 
         for notebook in notebooks {
             let notebook_id = notebook.notebook_instance_name.clone();
-            let tags = self.get_tags(&notebook)?;
+            let tags = self.get_tags(&notebook).await?;
             let ntags = self.package_tags_as_ntags(tags);
 
             let enforcement_state: EnforcementState = {
@@ -170,14 +173,14 @@ impl SagemakerNukeClient {
         })
     }
 
-    fn get_tags(&self, notebook: &NotebookInstanceSummary) -> Result<Option<Vec<Tag>>> {
+    async fn get_tags(&self, notebook: &NotebookInstanceSummary) -> Result<Option<Vec<Tag>>> {
         let result = self
             .client
             .list_tags(ListTagsInput {
                 resource_arn: notebook.notebook_instance_arn.clone(),
                 ..Default::default()
             })
-            .sync()?;
+            .await?;
 
         Ok(result.tags)
     }
@@ -186,7 +189,7 @@ impl SagemakerNukeClient {
         util::compare_tags(ntags, required_tags)
     }
 
-    fn delete_notebook(&self, notebook_id: &str) -> Result<()> {
+    async fn delete_notebook(&self, notebook_id: &str) -> Result<()> {
         debug!("Deleting the Sagemaker notebook instance: {}", notebook_id);
 
         if !self.dry_run {
@@ -194,13 +197,13 @@ impl SagemakerNukeClient {
                 .delete_notebook_instance(DeleteNotebookInstanceInput {
                     notebook_instance_name: notebook_id.to_owned(),
                 })
-                .sync()?;
+                .await?;
         }
 
         Ok(())
     }
 
-    fn stop_notebook(&self, notebook_id: &str) -> Result<()> {
+    async fn stop_notebook(&self, notebook_id: &str) -> Result<()> {
         debug!("Stopping the Sagemaker notebook instance: {}", notebook_id);
 
         if !self.dry_run {
@@ -208,31 +211,37 @@ impl SagemakerNukeClient {
                 .stop_notebook_instance(StopNotebookInstanceInput {
                     notebook_instance_name: notebook_id.to_owned(),
                 })
-                .sync()?;
+                .await?;
         }
 
         Ok(())
     }
 }
 
-impl NukeService for SagemakerNukeClient {
-    fn scan(&self) -> Result<Vec<Resource>> {
-        let notebooks = self.get_notebooks()?;
+#[async_trait]
+impl NukerService for SagemakerService {
+    async fn scan(&self) -> Result<Vec<Resource>> {
+        trace!(
+            "Initialized Sagemaker resource scanner for {:?} region",
+            self.region.name()
+        );
 
-        Ok(self.package_notebooks_as_resources(notebooks)?)
+        let notebooks = self.get_notebooks().await?;
+
+        Ok(self.package_notebooks_as_resources(notebooks).await?)
     }
 
-    fn stop(&self, resource: &Resource) -> Result<()> {
-        self.stop_notebook(resource.id.as_ref())
+    async fn stop(&self, resource: &Resource) -> Result<()> {
+        self.stop_notebook(resource.id.as_ref()).await
     }
 
-    fn delete(&self, resource: &Resource) -> Result<()> {
+    async fn delete(&self, resource: &Resource) -> Result<()> {
         if resource.state == Some("Stopped".to_string())
             || resource.state == Some("Failed".to_string())
         {
-            self.delete_notebook(resource.id.as_ref())
+            self.delete_notebook(resource.id.as_ref()).await
         } else {
-            self.stop(resource)
+            self.stop(resource).await
         }
     }
 

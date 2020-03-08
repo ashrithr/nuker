@@ -1,9 +1,11 @@
 use crate::{
     aws::{cloudwatch::CwClient, util, Result},
     config::{AuroraConfig, RequiredTags},
-    service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
+    resource::{EnforcementState, NTag, Resource, ResourceType},
+    service::NukerService,
 };
-use log::debug;
+use async_trait::async_trait;
+use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_rds::{
@@ -12,36 +14,45 @@ use rusoto_rds::{
     StopDBClusterMessage, Tag,
 };
 
-pub struct AuroraNukeClient {
+#[derive(Clone)]
+pub struct AuroraService {
     pub client: RdsClient,
-    pub cwclient: CwClient,
+    pub cw_client: CwClient,
     pub config: AuroraConfig,
     pub region: Region,
     pub dry_run: bool,
 }
 
-impl AuroraNukeClient {
+impl AuroraService {
     pub fn new(
-        profile_name: Option<&str>,
+        profile_name: Option<String>,
         region: Region,
         config: AuroraConfig,
         dry_run: bool,
     ) -> Result<Self> {
-        if let Some(profile) = profile_name {
+        if let Some(profile) = &profile_name {
             let mut pp = ProfileProvider::new()?;
             pp.set_profile(profile);
 
-            Ok(AuroraNukeClient {
+            Ok(AuroraService {
                 client: RdsClient::new_with(HttpClient::new()?, pp, region.clone()),
-                cwclient: CwClient::new(profile_name, region.clone(), config.clone().idle_rules)?,
+                cw_client: CwClient::new(
+                    profile_name.clone(),
+                    region.clone(),
+                    config.clone().idle_rules,
+                )?,
                 config,
                 region,
                 dry_run,
             })
         } else {
-            Ok(AuroraNukeClient {
+            Ok(AuroraService {
                 client: RdsClient::new(region.clone()),
-                cwclient: CwClient::new(profile_name, region.clone(), config.clone().idle_rules)?,
+                cw_client: CwClient::new(
+                    profile_name.clone(),
+                    region.clone(),
+                    config.clone().idle_rules,
+                )?,
                 config,
                 region,
                 dry_run,
@@ -60,7 +71,10 @@ impl AuroraNukeClient {
         })
     }
 
-    fn package_clusters_as_resources(&self, clusters: Vec<DBCluster>) -> Result<Vec<Resource>> {
+    async fn package_clusters_as_resources(
+        &self,
+        clusters: Vec<DBCluster>,
+    ) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
 
         for cluster in clusters {
@@ -72,11 +86,11 @@ impl AuroraNukeClient {
                 } else if cluster.status != Some("available".to_string()) {
                     EnforcementState::SkipStopped
                 } else {
-                    if self.resource_tags_does_not_match(&cluster) {
+                    if self.resource_tags_does_not_match(&cluster).await {
                         EnforcementState::from_target_state(&self.config.target_state)
-                    } else if self.resource_types_does_not_match(&cluster) {
+                    } else if self.resource_types_does_not_match(&cluster).await {
                         EnforcementState::from_target_state(&self.config.target_state)
-                    } else if self.is_resource_idle(&cluster) {
+                    } else if self.is_resource_idle(&cluster).await {
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else {
                         EnforcementState::Skip
@@ -88,7 +102,8 @@ impl AuroraNukeClient {
                 id: cluster_id,
                 region: self.region.clone(),
                 resource_type: ResourceType::Aurora,
-                tags: self.package_tags_as_ntags(self.list_tags(cluster.db_cluster_arn.clone())?),
+                tags: self
+                    .package_tags_as_ntags(self.list_tags(cluster.db_cluster_arn.clone()).await?),
                 state: cluster.status.clone(),
                 enforcement_state,
             });
@@ -97,11 +112,12 @@ impl AuroraNukeClient {
         Ok(resources)
     }
 
-    fn resource_tags_does_not_match(&self, cluster: &DBCluster) -> bool {
+    async fn resource_tags_does_not_match(&self, cluster: &DBCluster) -> bool {
         if self.config.required_tags.is_some() {
             !self.check_tags(
                 &self
                     .list_tags(cluster.db_cluster_arn.clone())
+                    .await
                     .unwrap_or_default(),
                 &self.config.required_tags.as_ref().unwrap(),
             )
@@ -110,9 +126,9 @@ impl AuroraNukeClient {
         }
     }
 
-    fn resource_types_does_not_match(&self, cluster: &DBCluster) -> bool {
+    async fn resource_types_does_not_match(&self, cluster: &DBCluster) -> bool {
         if !self.config.allowed_instance_types.is_empty() {
-            if let Ok(instance_types) = self.get_instance_types(cluster) {
+            if let Ok(instance_types) = self.get_instance_types(cluster).await {
                 if instance_types
                     .iter()
                     .any(|it| self.config.allowed_instance_types.contains(&it))
@@ -126,18 +142,19 @@ impl AuroraNukeClient {
         }
     }
 
-    fn is_resource_idle(&self, cluster: &DBCluster) -> bool {
+    async fn is_resource_idle(&self, cluster: &DBCluster) -> bool {
         if !self.config.idle_rules.is_empty() {
             !self
-                .cwclient
+                .cw_client
                 .filter_db_cluster(&cluster.db_cluster_identifier.as_ref().unwrap())
+                .await
                 .unwrap()
         } else {
             false
         }
     }
 
-    fn get_clusters(&self, filter: Vec<Filter>) -> Result<Vec<DBCluster>> {
+    async fn get_clusters(&self, filter: Vec<Filter>) -> Result<Vec<DBCluster>> {
         let mut next_token: Option<String> = None;
         let mut clusters: Vec<DBCluster> = Vec::new();
 
@@ -149,7 +166,7 @@ impl AuroraNukeClient {
                     marker: next_token,
                     ..Default::default()
                 })
-                .sync()?;
+                .await?;
 
             if let Some(db_clusters) = result.db_clusters {
                 let mut temp_clusters: Vec<DBCluster> = db_clusters.into_iter().collect();
@@ -177,14 +194,14 @@ impl AuroraNukeClient {
         Ok(clusters)
     }
 
-    fn list_tags(&self, arn: Option<String>) -> Result<Option<Vec<Tag>>> {
+    async fn list_tags(&self, arn: Option<String>) -> Result<Option<Vec<Tag>>> {
         let result = self
             .client
             .list_tags_for_resource(ListTagsForResourceMessage {
                 resource_name: arn.unwrap(),
                 ..Default::default()
             })
-            .sync()?;
+            .await?;
         Ok(result.tag_list)
     }
 
@@ -194,7 +211,7 @@ impl AuroraNukeClient {
     }
 
     /// Fetch the instance types of each DBInstance which are part of the DBCluster
-    fn get_instance_types(&self, db_cluster_identifier: &DBCluster) -> Result<Vec<String>> {
+    async fn get_instance_types(&self, db_cluster_identifier: &DBCluster) -> Result<Vec<String>> {
         let mut instance_types: Vec<String> = Vec::new();
 
         if let Some(db_cluster_members) = &db_cluster_identifier.db_cluster_members {
@@ -205,7 +222,7 @@ impl AuroraNukeClient {
                         db_instance_identifier: db_member.db_instance_identifier.clone(),
                         ..Default::default()
                     })
-                    .sync()?;
+                    .await?;
 
                 if let Some(instance) = result.db_instances {
                     instance_types.push(
@@ -224,14 +241,14 @@ impl AuroraNukeClient {
         Ok(instance_types)
     }
 
-    fn disable_termination_protection(&self, cluster_id: &str) -> Result<()> {
+    async fn disable_termination_protection(&self, cluster_id: &str) -> Result<()> {
         let resp = self
             .client
             .describe_db_clusters(DescribeDBClustersMessage {
                 db_cluster_identifier: Some(cluster_id.to_owned()),
                 ..Default::default()
             })
-            .sync()?;
+            .await?;
 
         if resp.db_clusters.is_some() {
             if resp
@@ -255,7 +272,7 @@ impl AuroraNukeClient {
                             apply_immediately: Some(true),
                             ..Default::default()
                         })
-                        .sync()?;
+                        .await?;
                 }
             }
         }
@@ -263,7 +280,7 @@ impl AuroraNukeClient {
         Ok(())
     }
 
-    fn stop_resource(&self, cluster_id: String) -> Result<()> {
+    async fn stop_resource(&self, cluster_id: String) -> Result<()> {
         debug!("Stopping cluster: {:?}", cluster_id);
 
         if !self.dry_run {
@@ -271,18 +288,18 @@ impl AuroraNukeClient {
                 .stop_db_cluster(StopDBClusterMessage {
                     db_cluster_identifier: cluster_id,
                 })
-                .sync()?;
+                .await?;
         }
 
         Ok(())
     }
 
-    fn terminate_resource(&self, cluster_id: String) -> Result<()> {
+    async fn terminate_resource(&self, cluster_id: String) -> Result<()> {
         debug!("Terminating instances: {:?}", cluster_id);
 
         if !self.dry_run {
             if self.config.termination_protection.ignore {
-                self.disable_termination_protection(&cluster_id)?;
+                self.disable_termination_protection(&cluster_id).await?;
             }
 
             self.client
@@ -290,26 +307,31 @@ impl AuroraNukeClient {
                     db_cluster_identifier: cluster_id,
                     ..Default::default()
                 })
-                .sync()?;
+                .await?;
         }
 
         Ok(())
     }
 }
 
-impl NukeService for AuroraNukeClient {
-    fn scan(&self) -> Result<Vec<Resource>> {
-        let clusters = self.get_clusters(Vec::new())?;
+#[async_trait]
+impl NukerService for AuroraService {
+    async fn scan(&self) -> Result<Vec<Resource>> {
+        trace!(
+            "Initialized Aurora resource scanner for {:?} region",
+            self.region.name()
+        );
+        let clusters = self.get_clusters(Vec::new()).await?;
 
-        Ok(self.package_clusters_as_resources(clusters)?)
+        Ok(self.package_clusters_as_resources(clusters).await?)
     }
 
-    fn stop(&self, resource: &Resource) -> Result<()> {
-        self.stop_resource(resource.id.to_owned())
+    async fn stop(&self, resource: &Resource) -> Result<()> {
+        self.stop_resource(resource.id.to_owned()).await
     }
 
-    fn delete(&self, resource: &Resource) -> Result<()> {
-        self.terminate_resource(resource.id.to_owned())
+    async fn delete(&self, resource: &Resource) -> Result<()> {
+        self.terminate_resource(resource.id.to_owned()).await
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {

@@ -1,8 +1,10 @@
 use crate::{
     aws::Result,
     config::S3Config,
-    service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
+    resource::{EnforcementState, NTag, Resource, ResourceType},
+    service::NukerService,
 };
+use async_trait::async_trait;
 use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
@@ -18,32 +20,33 @@ static S3_PUBLIC_GROUPS: [&str; 2] = [
     "http://acs.amazonaws.com/groups/global/AllUsers",
 ];
 
-pub struct S3NukeClient {
+#[derive(Clone)]
+pub struct S3Service {
     client: S3Client,
     config: S3Config,
     region: Region,
     dry_run: bool,
 }
 
-impl S3NukeClient {
+impl S3Service {
     pub fn new(
-        profile_name: Option<&str>,
+        profile_name: Option<String>,
         region: Region,
         config: S3Config,
         dry_run: bool,
     ) -> Result<Self> {
-        if let Some(profile) = profile_name {
+        if let Some(profile) = &profile_name {
             let mut pp = ProfileProvider::new()?;
             pp.set_profile(profile);
 
-            Ok(S3NukeClient {
+            Ok(S3Service {
                 client: S3Client::new_with(HttpClient::new()?, pp, region.clone()),
                 config,
                 region,
                 dry_run,
             })
         } else {
-            Ok(S3NukeClient {
+            Ok(S3Service {
                 client: S3Client::new(region.clone()),
                 config,
                 region,
@@ -52,14 +55,14 @@ impl S3NukeClient {
         }
     }
 
-    fn package_buckets_as_resources(&self, buckets: Vec<Bucket>) -> Vec<Resource> {
+    async fn package_buckets_as_resources(&self, buckets: Vec<Bucket>) -> Vec<Resource> {
         let mut resources: Vec<Resource> = Vec::new();
 
         for bucket in buckets {
             let bucket_id = bucket.name.unwrap();
 
             // Check if the bucket belongs to specified region
-            let bucket_region = self.get_bucket_region(&bucket_id);
+            let bucket_region = self.get_bucket_region(&bucket_id).await;
             if bucket_region != self.region.name() {
                 trace!(
                     "Bucket ({}) region ({}) is not part of region being enforced - [{}]",
@@ -79,7 +82,7 @@ impl S3NukeClient {
                 } else if self.resource_name_is_not_dns_compliant(&bucket_id) {
                     debug!("Bucket name is not dns compliant - {}", bucket_id);
                     EnforcementState::Delete
-                } else if self.is_bucket_public(&bucket_id) {
+                } else if self.is_bucket_public(&bucket_id).await {
                     debug!("Bucket is publicly accessible - {}", bucket_id);
                     EnforcementState::Delete
                 } else {
@@ -91,7 +94,7 @@ impl S3NukeClient {
                 id: bucket_id.clone(),
                 region: self.region.clone(),
                 resource_type: ResourceType::S3Bucket,
-                tags: self.package_tags_as_ntags(self.get_tags_for_bucket(&bucket_id)),
+                tags: self.package_tags_as_ntags(self.get_tags_for_bucket(&bucket_id).await),
                 state: Some("Available".to_string()),
                 enforcement_state,
             })
@@ -100,13 +103,13 @@ impl S3NukeClient {
         resources
     }
 
-    fn get_bucket_region(&self, bucket_id: &str) -> String {
+    async fn get_bucket_region(&self, bucket_id: &str) -> String {
         if let Ok(result) = self
             .client
             .get_bucket_location(GetBucketLocationRequest {
                 bucket: bucket_id.to_string(),
             })
-            .sync()
+            .await
         {
             return if result.location_constraint.is_some()
                 && !result.location_constraint.as_ref().unwrap().is_empty()
@@ -141,7 +144,7 @@ impl S3NukeClient {
         }
     }
 
-    fn is_bucket_public(&self, bucket_id: &str) -> bool {
+    async fn is_bucket_public(&self, bucket_id: &str) -> bool {
         // let mut pbc_is_public = false;
         let mut ps_is_public = false;
         let mut grants_is_public = false;
@@ -158,7 +161,7 @@ impl S3NukeClient {
             // }
 
             // 2. Check the Bucket Policy Status
-            if let Some(policy_status) = self.get_bucket_policy_status(bucket_id) {
+            if let Some(policy_status) = self.get_bucket_policy_status(bucket_id).await {
                 if policy_status.is_public == Some(true) {
                     debug!("Bucket ({}) policy status is public", bucket_id);
                     ps_is_public = true;
@@ -167,7 +170,7 @@ impl S3NukeClient {
 
             // 3. Check the ACLs to see if grantee is AllUsers or AllAuthenticatedUsers
             // TODO: https://github.com/rusoto/rusoto/issues/1703
-            if let Some(grants) = self.get_acls_for_bucket(bucket_id) {
+            if let Some(grants) = self.get_acls_for_bucket(bucket_id).await {
                 debug!("Bucket ({}) grants - {:?}", bucket_id, grants);
                 for grant in grants {
                     if grant.grantee.is_some() && grant.permission.is_some() {
@@ -193,19 +196,19 @@ impl S3NukeClient {
         }
     }
 
-    fn get_buckets(&self) -> Result<Vec<Bucket>> {
-        let result = self.client.list_buckets().sync()?;
+    async fn get_buckets(&self) -> Result<Vec<Bucket>> {
+        let result = self.client.list_buckets().await?;
 
         Ok(result.buckets.unwrap_or_default())
     }
 
-    fn get_acls_for_bucket(&self, bucket_id: &str) -> Option<Vec<Grant>> {
+    async fn get_acls_for_bucket(&self, bucket_id: &str) -> Option<Vec<Grant>> {
         match self
             .client
             .get_bucket_acl(GetBucketAclRequest {
                 bucket: bucket_id.to_string(),
             })
-            .sync()
+            .await
         {
             Ok(result) => result.grants,
             Err(err) => {
@@ -221,13 +224,16 @@ impl S3NukeClient {
     }
 
     #[allow(dead_code)]
-    fn get_public_access_block(&self, bucket_id: &str) -> Option<PublicAccessBlockConfiguration> {
+    async fn get_public_access_block(
+        &self,
+        bucket_id: &str,
+    ) -> Option<PublicAccessBlockConfiguration> {
         match self
             .client
             .get_public_access_block(GetPublicAccessBlockRequest {
                 bucket: bucket_id.to_string(),
             })
-            .sync()
+            .await
         {
             Ok(result) => result.public_access_block_configuration,
             Err(err) => {
@@ -242,13 +248,13 @@ impl S3NukeClient {
         }
     }
 
-    fn get_bucket_policy_status(&self, bucket_id: &str) -> Option<PolicyStatus> {
+    async fn get_bucket_policy_status(&self, bucket_id: &str) -> Option<PolicyStatus> {
         match self
             .client
             .get_bucket_policy_status(GetBucketPolicyStatusRequest {
                 bucket: bucket_id.to_string(),
             })
-            .sync()
+            .await
         {
             Ok(result) => result.policy_status,
             Err(err) => {
@@ -263,7 +269,7 @@ impl S3NukeClient {
         }
     }
 
-    fn delete_objects_in_bucket(&self, bucket: &str) -> Result<()> {
+    async fn delete_objects_in_bucket(&self, bucket: &str) -> Result<()> {
         let mut next_token: Option<String> = None;
 
         // Delete all objects from the bucket
@@ -275,7 +281,7 @@ impl S3NukeClient {
                     continuation_token: next_token,
                     ..Default::default()
                 })
-                .sync()?;
+                .await?;
 
             if let Some(objects) = result.contents {
                 self.client
@@ -294,7 +300,7 @@ impl S3NukeClient {
                         },
                         ..Default::default()
                     })
-                    .sync()?;
+                    .await?;
             }
 
             if result.next_continuation_token.is_none() {
@@ -307,7 +313,7 @@ impl S3NukeClient {
         Ok(())
     }
 
-    fn delete_versions_in_bucket(&self, bucket: &str) -> Result<()> {
+    async fn delete_versions_in_bucket(&self, bucket: &str) -> Result<()> {
         // Delete all object versions(required for versioned buckets)
         let mut next_key_token: Option<String> = None;
         let mut next_version_token: Option<String> = None;
@@ -320,7 +326,7 @@ impl S3NukeClient {
                     version_id_marker: next_version_token,
                     ..Default::default()
                 })
-                .sync()?;
+                .await?;
 
             if let Some(versions) = result.versions {
                 self.client
@@ -340,7 +346,7 @@ impl S3NukeClient {
                         },
                         ..Default::default()
                     })
-                    .sync()?;
+                    .await?;
             }
 
             if result.is_truncated.is_none() {
@@ -354,17 +360,17 @@ impl S3NukeClient {
         Ok(())
     }
 
-    fn delete_bucket<'a>(&self, bucket: &str) -> Result<()> {
+    async fn delete_bucket<'a>(&self, bucket: &str) -> Result<()> {
         debug!("Deleting bucket and its contents: {:?}", bucket);
 
         if !self.dry_run {
-            if let Ok(()) = self.delete_objects_in_bucket(bucket) {
-                if let Ok(()) = self.delete_versions_in_bucket(bucket) {
+            if let Ok(()) = self.delete_objects_in_bucket(bucket).await {
+                if let Ok(()) = self.delete_versions_in_bucket(bucket).await {
                     self.client
                         .delete_bucket(DeleteBucketRequest {
                             bucket: bucket.to_owned(),
                         })
-                        .sync()?;
+                        .await?;
                 }
             }
         }
@@ -372,13 +378,13 @@ impl S3NukeClient {
         Ok(())
     }
 
-    fn get_tags_for_bucket(&self, bucket: &str) -> Option<Vec<Tag>> {
+    async fn get_tags_for_bucket(&self, bucket: &str) -> Option<Vec<Tag>> {
         let result = self
             .client
             .get_bucket_tagging(GetBucketTaggingRequest {
                 bucket: bucket.to_owned(),
             })
-            .sync();
+            .await;
 
         if let Ok(tags_output) = result {
             Some(tags_output.tag_set)
@@ -399,18 +405,19 @@ impl S3NukeClient {
     }
 }
 
-impl NukeService for S3NukeClient {
-    fn scan(&self) -> Result<Vec<Resource>> {
-        let buckets = self.get_buckets()?;
-        Ok(self.package_buckets_as_resources(buckets))
+#[async_trait]
+impl NukerService for S3Service {
+    async fn scan(&self) -> Result<Vec<Resource>> {
+        let buckets = self.get_buckets().await?;
+        Ok(self.package_buckets_as_resources(buckets).await)
     }
 
-    fn stop(&self, resource: &Resource) -> Result<()> {
-        self.delete_bucket(&resource.id)
+    async fn stop(&self, resource: &Resource) -> Result<()> {
+        self.delete_bucket(&resource.id).await
     }
 
-    fn delete(&self, resource: &Resource) -> Result<()> {
-        self.delete_bucket(&resource.id)
+    async fn delete(&self, resource: &Resource) -> Result<()> {
+        self.delete_bucket(&resource.id).await
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {
@@ -439,8 +446,8 @@ mod tests {
         }
     }
 
-    fn create_s3_client(s3_config: S3Config) -> S3NukeClient {
-        S3NukeClient {
+    fn create_s3_client(s3_config: S3Config) -> S3Service {
+        S3Service {
             client: S3Client::new_with(
                 MockRequestDispatcher::default(),
                 MockCredentialsProvider,
@@ -480,25 +487,29 @@ mod tests {
             .collect()
     }
 
-    #[test]
-    fn check_package_resources_by_naming() {
+    #[tokio::test]
+    async fn check_package_resources_by_naming() {
         let s3_config = create_config();
         let s3_client = create_s3_client(s3_config);
 
-        let resources = s3_client.package_buckets_as_resources(get_s3_buckets());
+        let resources = s3_client
+            .package_buckets_as_resources(get_s3_buckets())
+            .await;
         let result = filter_resources(resources);
         let expected: Vec<String> = vec!["random-bucket-name".to_string()];
 
         assert_eq!(expected, result)
     }
 
-    #[test]
-    fn check_package_resources_by_dns_complaint_name() {
+    #[tokio::test]
+    async fn check_package_resources_by_dns_complaint_name() {
         let mut s3_config = create_config();
         s3_config.check_dns_compliant_naming = Some(true);
         let s3_client = create_s3_client(s3_config);
 
-        let resources = s3_client.package_buckets_as_resources(get_s3_buckets());
+        let resources = s3_client
+            .package_buckets_as_resources(get_s3_buckets())
+            .await;
         let mut result = filter_resources(resources);
         let mut expected: Vec<String> = vec![
             "random-bucket-name".to_string(),
