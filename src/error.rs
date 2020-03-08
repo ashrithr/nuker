@@ -220,4 +220,6 @@ pub enum Error {
     },
     #[fail(display = "JSON Encoding/Decoding error: {}", error)]
     JsonError { error: serde_json::error::Error },
+    #[fail(display = "Encountered Tokio IO error: {}", error)]
+    TokioError { error: tokio::io::Error },
 }

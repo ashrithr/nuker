@@ -1,17 +1,20 @@
 use crate::{
     aws::{util, Result},
     config::{GlueConfig, RequiredTags},
-    service::{EnforcementState, NTag, NukeService, Resource, ResourceType},
+    resource::{EnforcementState, NTag, Resource, ResourceType},
+    service::NukerService,
 };
+use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
-use log::debug;
+use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_glue::{
     DeleteDevEndpointRequest, DevEndpoint, GetDevEndpointsRequest, GetTagsRequest, Glue, GlueClient,
 };
 
-pub struct GlueNukeClient {
+#[derive(Clone)]
+pub struct GlueService {
     pub client: GlueClient,
     pub config: GlueConfig,
     pub region: Region,
@@ -19,19 +22,19 @@ pub struct GlueNukeClient {
     pub dry_run: bool,
 }
 
-impl GlueNukeClient {
+impl GlueService {
     pub fn new(
-        profile_name: Option<&str>,
+        profile_name: Option<String>,
         region: Region,
         config: GlueConfig,
         account_num: String,
         dry_run: bool,
     ) -> Result<Self> {
-        if let Some(profile) = profile_name {
+        if let Some(profile) = &profile_name {
             let mut pp = ProfileProvider::new()?;
             pp.set_profile(profile);
 
-            Ok(GlueNukeClient {
+            Ok(GlueService {
                 client: GlueClient::new_with(HttpClient::new()?, pp, region.clone()),
                 config,
                 region,
@@ -39,7 +42,7 @@ impl GlueNukeClient {
                 dry_run,
             })
         } else {
-            Ok(GlueNukeClient {
+            Ok(GlueService {
                 client: GlueClient::new(region.clone()),
                 config,
                 region,
@@ -49,7 +52,7 @@ impl GlueNukeClient {
         }
     }
 
-    fn get_dev_endpoints(&self) -> Result<Vec<DevEndpoint>> {
+    async fn get_dev_endpoints(&self) -> Result<Vec<DevEndpoint>> {
         let mut next_token: Option<String> = None;
         let mut dev_endpoints: Vec<DevEndpoint> = Vec::new();
 
@@ -60,7 +63,7 @@ impl GlueNukeClient {
                     next_token,
                     ..Default::default()
                 })
-                .sync()?;
+                .await?;
 
             if let Some(de) = result.dev_endpoints {
                 for e in de {
@@ -82,7 +85,7 @@ impl GlueNukeClient {
         Ok(dev_endpoints)
     }
 
-    fn package_endpoints_as_resources(
+    async fn package_endpoints_as_resources(
         &self,
         dev_endpoints: Vec<DevEndpoint>,
     ) -> Result<Vec<Resource>> {
@@ -90,7 +93,7 @@ impl GlueNukeClient {
 
         for endpoint in dev_endpoints {
             let endpoint_id = endpoint.endpoint_name.as_ref().unwrap().to_string();
-            let ntags = self.get_tags(&endpoint)?;
+            let ntags = self.get_tags(&endpoint).await?;
 
             let enforcement_state: EnforcementState = {
                 if self.config.ignore.contains(&endpoint_id) {
@@ -152,7 +155,7 @@ impl GlueNukeClient {
         }
     }
 
-    fn get_tags(&self, endpoint: &DevEndpoint) -> Result<Vec<NTag>> {
+    async fn get_tags(&self, endpoint: &DevEndpoint) -> Result<Vec<NTag>> {
         let mut ntags: Vec<NTag> = Vec::new();
 
         let result = self
@@ -165,7 +168,7 @@ impl GlueNukeClient {
                     endpoint.endpoint_name.as_ref().unwrap()
                 ),
             })
-            .sync()?;
+            .await?;
 
         for (key, value) in result.tags.unwrap_or_default() {
             ntags.push(NTag {
@@ -181,7 +184,7 @@ impl GlueNukeClient {
         util::compare_tags(Some(ntags), required_tags)
     }
 
-    fn delete_endpoint(&self, endpoint_name: &str) -> Result<()> {
+    async fn delete_endpoint(&self, endpoint_name: &str) -> Result<()> {
         debug!("Deleting Glue DevEndpoint - {}", endpoint_name);
 
         if !self.dry_run {
@@ -189,26 +192,32 @@ impl GlueNukeClient {
                 .delete_dev_endpoint(DeleteDevEndpointRequest {
                     endpoint_name: endpoint_name.into(),
                 })
-                .sync()?;
+                .await?;
         }
 
         Ok(())
     }
 }
 
-impl NukeService for GlueNukeClient {
-    fn scan(&self) -> Result<Vec<Resource>> {
-        let dev_endpoints = self.get_dev_endpoints()?;
+#[async_trait]
+impl NukerService for GlueService {
+    async fn scan(&self) -> Result<Vec<Resource>> {
+        trace!(
+            "Initialized Glue resource scanner for {:?} region",
+            self.region.name()
+        );
 
-        Ok(self.package_endpoints_as_resources(dev_endpoints)?)
+        let dev_endpoints = self.get_dev_endpoints().await?;
+
+        Ok(self.package_endpoints_as_resources(dev_endpoints).await?)
     }
 
-    fn stop(&self, resource: &Resource) -> Result<()> {
-        self.delete(resource)
+    async fn stop(&self, resource: &Resource) -> Result<()> {
+        self.delete(resource).await
     }
 
-    fn delete(&self, resource: &Resource) -> Result<()> {
-        self.delete_endpoint(resource.id.as_ref())
+    async fn delete(&self, resource: &Resource) -> Result<()> {
+        self.delete_endpoint(resource.id.as_ref()).await
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {

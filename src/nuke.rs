@@ -1,5 +1,5 @@
 use crate::{
-    aws::AwsClient,
+    aws::AwsNuker,
     config::{Args, Config},
     error::Error as AwsError,
 };
@@ -33,18 +33,19 @@ static REGIONS: &'static [Region] = &[
     Region::UsWest2,
 ];
 
-pub struct Nuke {
+pub struct Nuker {
     args: Args,
     config: Config,
 }
 
-impl Nuke {
+impl Nuker {
     pub fn new(config: Config, args: Args) -> Self {
-        Nuke { args, config }
+        Nuker { args, config }
     }
 
-    pub fn run(&self) -> Result<()> {
-        let mut clients: Vec<AwsClient> = Vec::new();
+    pub async fn run(&self) -> Result<()> {
+        let mut clients: Vec<AwsNuker> = Vec::new();
+        let mut handles = Vec::new();
 
         if self.args.dry_run {
             println!("{}", "DRY RUN ENABLED".blue().bold());
@@ -61,30 +62,43 @@ impl Nuke {
 
         if self.args.regions.is_empty() {
             for region in REGIONS.iter() {
-                clients.push(self.create_client(region.to_owned())?);
+                clients.push(
+                    AwsNuker::new(
+                        self.args.profile.clone(),
+                        region.to_owned(),
+                        &self.config,
+                        self.args.dry_run,
+                    )
+                    .await?,
+                );
             }
         } else {
             for region in &self.args.regions {
-                clients.push(self.create_client(Region::from_str(region)?)?);
+                clients.push(
+                    AwsNuker::new(
+                        self.args.profile.clone(),
+                        Region::from_str(region)?,
+                        &self.config,
+                        self.args.dry_run,
+                    )
+                    .await?,
+                );
             }
         }
 
-        for client in clients {
+        for mut client in clients {
             debug!("REGION: {}", client.region.name().blue().bold());
 
-            client.print_usage()?;
-            let resources = client.locate_resources()?;
-
-            client.cleanup_resources(&resources[..])?;
+            handles.push(tokio::spawn(async move {
+                client.locate_resources().await;
+                client.print_resources();
+                let _ = client.cleanup_resources().await;
+            }));
         }
 
-        Ok(())
-    }
+        futures::future::join_all(handles).await;
 
-    fn create_client(&self, region: Region) -> Result<AwsClient> {
-        let profile = &self.args.profile;
-        let profile = profile.as_ref().map(|p| &**p);
-        AwsClient::new(profile, region, &self.config, self.args.dry_run)
+        Ok(())
     }
 
     fn get_input(&self, prompt: &str) -> String {

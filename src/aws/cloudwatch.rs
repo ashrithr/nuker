@@ -11,6 +11,7 @@ use std::time::Duration;
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
 
+#[derive(Clone)]
 pub struct CwClient {
     pub client: CloudWatchClient,
     pub idle_rules: Vec<IdleRules>,
@@ -18,7 +19,7 @@ pub struct CwClient {
 
 impl CwClient {
     pub fn new(
-        profile_name: Option<&str>,
+        profile_name: Option<String>,
         region: Region,
         idle_rules: Vec<IdleRules>,
     ) -> Result<Self> {
@@ -38,7 +39,7 @@ impl CwClient {
         }
     }
 
-    fn get_metric_statistics_maximum(
+    async fn get_metric_statistics_maximum(
         &self,
         dimension_name: String,
         dimension_value: String,
@@ -65,13 +66,13 @@ impl CwClient {
 
         self.client
             .get_metric_statistics(req)
-            .sync()
+            .await
             .map_err(|err| AwsError::CloudWatchError {
                 error: err.to_string(),
             })
     }
 
-    fn filter_resource(&self, resource_id: &str, dimension: &str) -> Result<bool> {
+    async fn filter_resource(&self, resource_id: &str, dimension: &str) -> Result<bool> {
         let mut result = false;
 
         for idle_rule in &self.idle_rules {
@@ -83,7 +84,8 @@ impl CwClient {
                     idle_rule.metric.to_string(),
                     idle_rule.duration,
                     idle_rule.granularity,
-                )?
+                )
+                .await?
                 .datapoints
                 .unwrap_or_default();
 
@@ -94,27 +96,29 @@ impl CwClient {
         Ok(result)
     }
 
-    pub fn filter_instance(&self, instance_id: &str) -> Result<bool> {
-        self.filter_resource(instance_id, "InstanceId")
+    pub async fn filter_instance(&self, instance_id: &str) -> Result<bool> {
+        self.filter_resource(instance_id, "InstanceId").await
     }
 
-    pub fn filter_volume(&self, volume_id: &str) -> Result<bool> {
-        self.filter_resource(volume_id, "VolumeId")
+    pub async fn filter_volume(&self, volume_id: &str) -> Result<bool> {
+        self.filter_resource(volume_id, "VolumeId").await
     }
 
-    pub fn filter_db_instance(&self, instance_name: &str) -> Result<bool> {
+    pub async fn filter_db_instance(&self, instance_name: &str) -> Result<bool> {
         self.filter_resource(instance_name, "DBInstanceIdentifier")
+            .await
     }
 
-    pub fn filter_db_cluster(&self, cluster_identifier: &str) -> Result<bool> {
+    pub async fn filter_db_cluster(&self, cluster_identifier: &str) -> Result<bool> {
         self.filter_resource(cluster_identifier, "DBClusterIdentifier")
+            .await
     }
 
-    pub fn filter_rs_cluster(&self, cluster_id: &String) -> Result<bool> {
-        self.filter_resource(cluster_id, "ClusterIdentifier")
+    pub async fn filter_rs_cluster(&self, cluster_id: &String) -> Result<bool> {
+        self.filter_resource(cluster_id, "ClusterIdentifier").await
     }
 
-    pub fn filter_emr_cluster(&self, cluster_id: &String) -> Result<bool> {
+    pub async fn filter_emr_cluster(&self, cluster_id: &String) -> Result<bool> {
         // FIXME: make this code generic
         let mut result = false;
 
@@ -127,7 +131,8 @@ impl CwClient {
                     idle_rule.metric.to_string(),
                     idle_rule.duration,
                     idle_rule.granularity,
-                )?
+                )
+                .await?
                 .datapoints
                 .unwrap_or_default();
 
