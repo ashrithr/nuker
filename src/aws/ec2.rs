@@ -540,7 +540,6 @@ impl NukerService for Ec2Service {
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -657,8 +656,8 @@ mod tests {
             .collect()
     }
 
-    #[test]
-    fn check_package_resources_by_single_tag() {
+    #[tokio::test]
+    async fn check_package_resources_by_single_tag() {
         let mut ec2_config = create_config();
         ec2_config.required_tags = Some(vec![RequiredTags {
             name: "Name".to_string(),
@@ -669,6 +668,7 @@ mod tests {
         let ec2_client = create_ec2_client(ec2_config);
         let resources = ec2_client
             .package_instances_as_resources(get_ec2_instances(), None)
+            .await
             .unwrap();
 
         let expected = vec!["i-abc1234567".to_string()];
@@ -677,8 +677,8 @@ mod tests {
         assert_eq!(expected, result)
     }
 
-    #[test]
-    fn check_package_resources_by_multiple_tags() {
+    #[tokio::test]
+    async fn check_package_resources_by_multiple_tags() {
         let mut ec2_config = create_config();
         ec2_config.required_tags = Some(vec![
             RequiredTags {
@@ -696,6 +696,7 @@ mod tests {
         let ec2_client = create_ec2_client(ec2_config);
         let resources = ec2_client
             .package_instances_as_resources(get_ec2_instances(), None)
+            .await
             .unwrap();
         let expected = vec!["i-abc1234567".to_string(), "i-def89012345".to_string()];
         let result: Vec<String> = filter_resources(resources);
@@ -703,14 +704,15 @@ mod tests {
         assert_eq!(expected, result)
     }
 
-    #[test]
-    fn check_package_resources_by_types() {
+    #[tokio::test]
+    async fn check_package_resources_by_types() {
         let mut ec2_config = create_config();
         ec2_config.allowed_instance_types = vec!["t2.2xlarge".to_string(), "t2.xlarge".to_string()];
 
         let ec2_client = create_ec2_client(ec2_config);
         let resources = ec2_client
             .package_instances_as_resources(get_ec2_instances(), None)
+            .await
             .unwrap();
         let expected = vec!["i-abc1234567".to_string()];
         let result: Vec<String> = filter_resources(resources);
@@ -718,8 +720,8 @@ mod tests {
         assert_eq!(expected, result)
     }
 
-    #[test]
-    fn check_package_resources_by_sgs() {
+    #[tokio::test]
+    async fn check_package_resources_by_sgs() {
         let mut ec2_config = create_config();
         ec2_config.security_groups.enabled = true;
         let open_sgs = vec!["sg-xxxxxxxx".to_string()];
@@ -727,6 +729,7 @@ mod tests {
         let ec2_client = create_ec2_client(ec2_config);
         let resources = ec2_client
             .package_instances_as_resources(get_ec2_instances(), Some(open_sgs))
+            .await
             .unwrap();
         println!("{:?}", resources);
         let expected = vec!["i-def89012345".to_string()];
@@ -735,8 +738,8 @@ mod tests {
         assert_eq!(expected, result)
     }
 
-    #[test]
-    fn check_packaged_resources_by_all() {
+    #[tokio::test]
+    async fn check_packaged_resources_by_all() {
         let mut ec2_config = create_config();
         ec2_config.required_tags = Some(vec![
             RequiredTags {
@@ -757,6 +760,7 @@ mod tests {
         let ec2_client = create_ec2_client(ec2_config);
         let resources = ec2_client
             .package_instances_as_resources(get_ec2_instances(), Some(open_sgs))
+            .await
             .unwrap();
         println!("{:?}", resources);
         let mut expected = vec!["i-def89012345".to_string(), "i-abc1234567".to_string()];
@@ -765,4 +769,3 @@ mod tests {
         assert_eq!(expected.sort(), result.sort())
     }
 }
-*/
