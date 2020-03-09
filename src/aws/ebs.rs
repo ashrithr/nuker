@@ -75,8 +75,12 @@ impl EbsService {
                 } else if volume.state == Some("available".to_string()) {
                     debug!("Resource is idle (available) - {}", volume_id);
                     EnforcementState::from_target_state(&self.config.target_state)
-                } else if self.is_resource_idle(&volume).await {
+                } else if self.is_resource_idle(&volume).await
+                    && volume.state == Some("available".to_string())
+                {
                     // TODO: identify non-root volumes
+                    // TODO: Detach the volume before attempting to delete it, remove the above
+                    // condition
                     debug!("Resource is idle - {}", volume_id);
                     EnforcementState::from_target_state(&self.config.target_state)
                 } else {

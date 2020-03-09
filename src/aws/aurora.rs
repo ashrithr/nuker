@@ -9,9 +9,9 @@ use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_rds::{
-    DBCluster, DeleteDBClusterMessage, DescribeDBClustersMessage, DescribeDBInstancesMessage,
-    Filter, ListTagsForResourceMessage, ModifyDBClusterMessage, Rds, RdsClient,
-    StopDBClusterMessage, Tag,
+    DBCluster, DeleteDBClusterMessage, DeleteDBInstanceMessage, DescribeDBClustersMessage,
+    DescribeDBInstancesMessage, Filter, ListTagsForResourceMessage, ModifyDBClusterMessage, Rds,
+    RdsClient, StopDBClusterMessage, Tag,
 };
 
 #[derive(Clone)]
@@ -294,17 +294,54 @@ impl AuroraService {
         Ok(())
     }
 
+    async fn terminate_db_instance(&self, instance_id: Option<String>) -> Result<()> {
+        debug!("Terminate db cluster instance: {:?}", instance_id);
+
+        if !self.dry_run && instance_id.is_some() {
+            self.client
+                .delete_db_instance(DeleteDBInstanceMessage {
+                    db_instance_identifier: instance_id.unwrap(),
+                    skip_final_snapshot: Some(true),
+                    ..Default::default()
+                })
+                .await?;
+        }
+
+        Ok(())
+    }
+
     async fn terminate_resource(&self, cluster_id: String) -> Result<()> {
-        debug!("Terminating instances: {:?}", cluster_id);
+        debug!("Terminating cluster: {:?}", cluster_id);
 
         if !self.dry_run {
             if self.config.termination_protection.ignore {
                 self.disable_termination_protection(&cluster_id).await?;
             }
 
+            // Delete all cluster members
+            if let Some(db_clusters) = self
+                .client
+                .describe_db_clusters(DescribeDBClustersMessage {
+                    db_cluster_identifier: Some(cluster_id.clone()),
+                    ..Default::default()
+                })
+                .await?
+                .db_clusters
+            {
+                for db_cluster in db_clusters {
+                    if let Some(cluster_members) = db_cluster.db_cluster_members {
+                        for member in cluster_members {
+                            self.terminate_db_instance(member.db_instance_identifier)
+                                .await?
+                        }
+                    }
+                }
+            }
+
             self.client
                 .delete_db_cluster(DeleteDBClusterMessage {
                     db_cluster_identifier: cluster_id,
+                    skip_final_snapshot: Some(true),
                     ..Default::default()
                 })
                 .await?;
