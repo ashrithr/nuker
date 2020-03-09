@@ -10,27 +10,36 @@ Cleans up AWS resources based on configurable Rules. This project is a WIP.
     - Clean up based on Tags
     - Clean up based on Allowed Instance Types
     - Clean up Idle Instances based on CloudWatch metrics
-    - Clean up based on Security Group rules
-    - Clean up idle EBS volumes
+    - Clean up based on open Security Group rules
+    - Clean up unassociated elastic IP addresses
+    - Clean up unused elastic network interfaces
+* EBS
+    - Clean up unused volumes
+    - Clean up snapshots that are older than configured duration
+    - Enforce use of gp2 volumes over io1
 * RDS
     - Clean up based on Tags
     - Clean up based on Allowed Instance Types
-    - Clean up based in Idle Instances based on CloudWatch metrics
-* RDS Aurora
-    - Clean up based on Tags
-    - Clean up based on Allowed Instance Types
-    - Clean up Idle Instances based on CloudWatch metrics
+    - Clean up based in Idle Instances/Clusters based on CloudWatch metrics
 * Redshift
     - Clean up based on Tags
     - Clean up based on Allowed Instance Types
-    - Clean up Idle Instances based on Cloudwatch metrics
+    - Clean up Idle Clusters based on Cloudwatch metrics
 * S3
     - Clean up based on bucket naming prefix
+    - Clean up publicly exposed buckets
+    - Enforce DNS compliant naming
 * EMR
     - Clean up based on Tags
     - Clean up based on allowed Instance types
     - Clean up Idle Instances based on Cloudwatch metrics
-    - Clean up based on Security Group rules
+    - Clean up based on open Security Group rules
+* Glue
+    - Clean up Glue Dev Endpoints based on Tags
+    - Enforce using Glue Dev Endpoints for specified duration
+* Sagemaker
+    - Clean up Sagemaker Notebooks based on Tags
+    - Enforce using Sagemaker Notebooks for specified duration
 
 ## Configuration
 
@@ -74,6 +83,10 @@ nuker can be built using Docker:
 docker build -t nuker .
 ```
 
+sample run commands:
+
+1. Run nuker with specified AWS Access Key and Secret Access Key
+
 ```
 docker run --rm -it \
 -v "$PWD/examples/configs/sample.toml":/home/nuker/config.toml \
@@ -83,7 +96,7 @@ ashrithr/nuker:latest \
 --config /home/nuker/config.toml
 ```
 
-or
+2. Run nuker by mounting aws credentials directory to Docker container
 
 ```
 docker run --rm -it \
