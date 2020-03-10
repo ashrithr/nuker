@@ -4,11 +4,12 @@ use crate::{
     error::Error as AwsError,
 };
 use colored::*;
-use log::debug;
 use rusoto_core::Region;
 use std::io;
 use std::process::exit;
 use std::str::FromStr;
+use tracing::debug;
+use tracing_futures::Instrument;
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
 
@@ -61,38 +62,41 @@ impl Nuker {
         }
 
         if self.args.regions.is_empty() {
+            debug!("Scanning for resources across all regions - {:?}", REGIONS);
+
             for region in REGIONS.iter() {
-                clients.push(
-                    AwsNuker::new(
-                        self.args.profile.clone(),
-                        region.to_owned(),
-                        &self.config,
-                        self.args.dry_run,
-                    )
-                    .await?,
-                );
+                clients.push(AwsNuker::new(
+                    self.args.profile.clone(),
+                    region.to_owned(),
+                    &self.config,
+                    self.args.dry_run,
+                )?);
             }
         } else {
+            debug!("Scanning for resources in regions: {:?}", self.args.regions);
+
             for region in &self.args.regions {
-                clients.push(
-                    AwsNuker::new(
-                        self.args.profile.clone(),
-                        Region::from_str(region)?,
-                        &self.config,
-                        self.args.dry_run,
-                    )
-                    .await?,
-                );
+                clients.push(AwsNuker::new(
+                    self.args.profile.clone(),
+                    Region::from_str(region)?,
+                    &self.config,
+                    self.args.dry_run,
+                )?);
             }
         }
 
         for mut client in clients {
-            debug!("REGION: {}", client.region.name().blue().bold());
-
             handles.push(tokio::spawn(async move {
-                client.locate_resources().await;
+                let region = client.region.name().to_string();
+                client
+                    .locate_resources()
+                    .instrument(tracing::trace_span!("aws-nuker", region = region.as_str()))
+                    .await;
                 client.print_resources();
-                let _ = client.cleanup_resources().await;
+                let _ = client
+                    .cleanup_resources()
+                    .instrument(tracing::trace_span!("aws-nuker", region = region.as_str()))
+                    .await;
             }));
         }
 

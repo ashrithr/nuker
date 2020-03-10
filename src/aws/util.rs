@@ -1,6 +1,6 @@
 use crate::{config::RequiredTags, resource::NTag};
-use log::debug;
 use std::collections::HashMap;
+use tracing::debug;
 
 /// Compares resource tags against required tags
 pub fn compare_tags(tags: Option<Vec<NTag>>, required_tags: &Vec<RequiredTags>) -> bool {

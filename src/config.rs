@@ -1,9 +1,9 @@
 //! Configuration Parser
 use clap::{App, Arg};
-use log::warn;
 use regex::Regex;
 use serde::Deserialize;
 use std::{fs::File, io::Read, time::Duration};
+use tracing::warn;
 
 const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 

@@ -6,12 +6,12 @@ use crate::{
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use log::{debug, trace};
 use rusoto_core::{credential::ProfileProvider, HttpClient, Region};
 use rusoto_ec2::{
     DeleteSnapshotRequest, DeleteVolumeRequest, DescribeSnapshotsRequest, DescribeVolumesRequest,
     Ec2, Ec2Client, Filter, Snapshot, Tag, Volume,
 };
+use tracing::{debug, trace};
 
 #[derive(Clone)]
 pub struct EbsService {
@@ -67,13 +67,22 @@ impl EbsService {
 
             let enforcement_state: EnforcementState = {
                 if self.config.ignore.contains(&volume_id) {
-                    debug!("Skipping resource from ignore list - {}", volume_id);
+                    debug!(
+                        resource = volume_id.as_str(),
+                        "Skipping resource from ignore list"
+                    );
                     EnforcementState::SkipConfig
                 } else if volume.volume_type != Some("gp2".to_string()) {
-                    debug!("Resource is not a gp2 type volume - {}", volume_id);
+                    debug!(
+                        resource = volume_id.as_str(),
+                        "Resource is not a gp2 type volume"
+                    );
                     EnforcementState::from_target_state(&self.config.target_state)
                 } else if volume.state == Some("available".to_string()) {
-                    debug!("Resource is idle (available) - {}", volume_id);
+                    debug!(
+                        resource = volume_id.as_str(),
+                        "Resource is idle (available)"
+                    );
                     EnforcementState::from_target_state(&self.config.target_state)
                 } else if self.is_resource_idle(&volume).await
                     && volume.state == Some("available".to_string())
@@ -81,7 +90,7 @@ impl EbsService {
                     // TODO: identify non-root volumes
                     // TODO: Detach the volume before attempting to delete it, remove the above
                     // condition
-                    debug!("Resource is idle - {}", volume_id);
+                    debug!(resource = volume_id.as_str(), "Resource is idle");
                     EnforcementState::from_target_state(&self.config.target_state)
                 } else {
                     EnforcementState::Skip
@@ -267,10 +276,7 @@ impl EbsService {
 #[async_trait]
 impl NukerService for EbsService {
     async fn scan(&self) -> Result<Vec<Resource>> {
-        trace!(
-            "Initialized EBS resource scanner for {:?} region",
-            self.region.name()
-        );
+        trace!("Initialized EBS resource scanner");
         let mut resources: Vec<Resource> = Vec::new();
 
         let volumes = self.get_volumes().await?;

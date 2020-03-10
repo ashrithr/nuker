@@ -12,24 +12,75 @@ mod sagemaker;
 mod sts;
 mod util;
 
-// use crate::aws::sagemaker::SagemakerNukeClient;
 use crate::{
     aws::{
         aurora::AuroraService, ebs::EbsService, ec2::Ec2Service, emr::EmrService,
         glue::GlueService, rds::RdsService, redshift::RedshiftService, s3::S3Service,
-        sagemaker::SagemakerService, sts::StsService,
+        sagemaker::SagemakerService,
     },
     config::Config,
     error::Error as AwsError,
     resource::{self, Resource},
     service::NukerService,
 };
-use log::error;
 use rusoto_core::Region;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use tracing::{error, trace};
+use tracing_futures::Instrument;
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
+
+macro_rules! cleanup_resources {
+    ($resource_type:expr, $resources:expr, $handles:expr, $service:expr, $region:expr) => {
+        if $resources.get($resource_type).is_some() {
+            let meta_resources = $resources.get($resource_type).unwrap().clone();
+
+            $handles.push(tokio::spawn(async move {
+                match $service
+                    .cleanup(meta_resources)
+                    .instrument(tracing::trace_span!(
+                        $resource_type,
+                        region = $region.as_str()
+                    ))
+                    .await
+                {
+                    Ok(()) => {}
+                    Err(err) => error!(
+                        "Error occurred cleaning up {} resources: {}",
+                        $resource_type, err
+                    ),
+                }
+            }));
+        }
+    };
+}
+
+macro_rules! scan_resources {
+    ($resource_type:expr, $resources:expr, $handles:expr, $service:expr, $region:expr) => {
+        $handles.push(tokio::spawn(async move {
+            match $service
+                .scan()
+                .instrument(tracing::trace_span!(
+                    $resource_type,
+                    region = $region.as_str()
+                ))
+                .await
+            {
+                Ok(rs) => {
+                    if !rs.is_empty() {
+                        for r in rs {
+                            $resources.lock().unwrap().push(r);
+                        }
+                    }
+                }
+                Err(err) => {
+                    error!("Error occurred locating resources: {}", err);
+                }
+            }
+        }));
+    };
+}
 
 /// AWS Nuker for nuking resources in AWS.
 pub struct AwsNuker {
@@ -39,14 +90,13 @@ pub struct AwsNuker {
 }
 
 impl AwsNuker {
-    pub async fn new(
+    pub fn new(
         profile_name: Option<String>,
         region: Region,
         config: &Config,
         dry_run: bool,
     ) -> Result<AwsNuker> {
         let mut services: Vec<Box<dyn NukerService>> = Vec::new();
-        let sts_service = StsService::new(profile_name.clone(), region.clone())?;
 
         if config.ec2.enabled {
             services.push(Box::new(Ec2Service::new(
@@ -116,7 +166,6 @@ impl AwsNuker {
                 profile_name.clone(),
                 region.clone(),
                 config.glue.clone(),
-                sts_service.get_account_number().await?,
                 dry_run,
             )?))
         }
@@ -138,26 +187,41 @@ impl AwsNuker {
     }
 
     pub async fn locate_resources(&mut self) {
+        trace!("Init locate_resources");
+
         let mut handles = Vec::new();
 
         for service in &self.services {
             let service = dyn_clone::clone_box(&*service);
             let resources = self.resources.clone();
+            let ref_client = service.as_any();
+            let region = self.region.name().to_string();
 
-            handles.push(tokio::spawn(async move {
-                match service.scan().await {
-                    Ok(rs) => {
-                        if !rs.is_empty() {
-                            for r in rs {
-                                resources.lock().unwrap().push(r);
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        error!("Error occurred locating resources: {}", err);
-                    }
-                }
-            }));
+            if ref_client.is::<Ec2Service>() {
+                scan_resources!(resource::EC2_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<EbsService>() {
+                scan_resources!(resource::EBS_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<RdsService>() {
+                scan_resources!(resource::RDS_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<AuroraService>() {
+                scan_resources!(resource::AURORA_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<RedshiftService>() {
+                scan_resources!(resource::REDSHIFT_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<EmrService>() {
+                scan_resources!(resource::EMR_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<GlueService>() {
+                scan_resources!(resource::GLUE_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<SagemakerService>() {
+                scan_resources!(
+                    resource::SAGEMAKER_TYPE,
+                    resources,
+                    handles,
+                    service,
+                    region
+                );
+            } else if ref_client.is::<S3Service>() {
+                scan_resources!(resource::S3_TYPE, resources, handles, service, region);
+            }
         }
 
         futures::future::join_all(handles).await;
@@ -170,6 +234,7 @@ impl AwsNuker {
     }
 
     pub async fn cleanup_resources(&self) -> Result<()> {
+        trace!("Init cleanup resources");
         let mut handles = Vec::new();
         let mut resources: HashMap<String, Vec<Resource>> = HashMap::new();
 
@@ -184,114 +249,32 @@ impl AwsNuker {
         for service in &self.services {
             let service = dyn_clone::clone_box(&*service);
             let ref_client = service.as_any();
+            let region = self.region.name().to_string();
 
             if ref_client.is::<Ec2Service>() {
-                if resources.get(resource::EC2_TYPE).is_some() {
-                    let ec2_resources = resources.get(resource::EC2_TYPE).unwrap().clone();
-
-                    handles.push(tokio::spawn(async move {
-                        match service.cleanup(ec2_resources).await {
-                            Ok(()) => {}
-                            Err(err) => error!("Error occurred cleaning up EC2 resources: {}", err),
-                        }
-                    }));
-                }
+                cleanup_resources!(resource::EC2_TYPE, resources, handles, service, region);
             } else if ref_client.is::<EbsService>() {
-                if resources.get(resource::EBS_TYPE).is_some() {
-                    let ebs_resources = resources.get(resource::EBS_TYPE).unwrap().clone();
-
-                    handles.push(tokio::spawn(async move {
-                        match service.cleanup(ebs_resources).await {
-                            Ok(()) => {}
-                            Err(err) => error!("Error occurred cleaning up EBS resources: {}", err),
-                        }
-                    }));
-                }
+                cleanup_resources!(resource::EBS_TYPE, resources, handles, service, region);
             } else if ref_client.is::<RdsService>() {
-                if resources.get(resource::RDS_TYPE).is_some() {
-                    let rds_resources = resources.get(resource::RDS_TYPE).unwrap().clone();
-
-                    handles.push(tokio::spawn(async move {
-                        match service.cleanup(rds_resources).await {
-                            Ok(()) => {}
-                            Err(err) => error!("Error occurred cleaning up RDS resources: {}", err),
-                        }
-                    }));
-                }
+                cleanup_resources!(resource::RDS_TYPE, resources, handles, service, region);
             } else if ref_client.is::<AuroraService>() {
-                if resources.get(resource::AURORA_TYPE).is_some() {
-                    let aurora_resources = resources.get(resource::AURORA_TYPE).unwrap().clone();
-
-                    handles.push(tokio::spawn(async move {
-                        match service.cleanup(aurora_resources).await {
-                            Ok(()) => {}
-                            Err(err) => {
-                                error!("Error occurred cleaning up Aurora resources: {}", err)
-                            }
-                        }
-                    }));
-                }
+                cleanup_resources!(resource::AURORA_TYPE, resources, handles, service, region);
             } else if ref_client.is::<RedshiftService>() {
-                if resources.get(resource::REDSHIFT_TYPE).is_some() {
-                    let rs_resources = resources.get(resource::REDSHIFT_TYPE).unwrap().clone();
-
-                    handles.push(tokio::spawn(async move {
-                        match service.cleanup(rs_resources).await {
-                            Ok(()) => {}
-                            Err(err) => {
-                                error!("Error occurred cleaning up Aurora resources: {}", err)
-                            }
-                        }
-                    }));
-                }
+                cleanup_resources!(resource::REDSHIFT_TYPE, resources, handles, service, region);
             } else if ref_client.is::<EmrService>() {
-                if resources.get(resource::EMR_TYPE).is_some() {
-                    let emr_resources = resources.get(resource::EMR_TYPE).unwrap().clone();
-
-                    handles.push(tokio::spawn(async move {
-                        match service.cleanup(emr_resources).await {
-                            Ok(()) => {}
-                            Err(err) => error!("Error occurred cleaning up EMR resources: {}", err),
-                        }
-                    }));
-                }
+                cleanup_resources!(resource::EMR_TYPE, resources, handles, service, region);
             } else if ref_client.is::<GlueService>() {
-                if resources.get(resource::GLUE_TYPE).is_some() {
-                    let glue_resources = resources.get(resource::GLUE_TYPE).unwrap().clone();
-
-                    handles.push(tokio::spawn(async move {
-                        match service.cleanup(glue_resources).await {
-                            Ok(()) => {}
-                            Err(err) => {
-                                error!("Error occurred cleaning up Glue resources: {}", err)
-                            }
-                        }
-                    }));
-                }
+                cleanup_resources!(resource::GLUE_TYPE, resources, handles, service, region);
             } else if ref_client.is::<SagemakerService>() {
-                if resources.get(resource::SAGEMAKER_TYPE).is_some() {
-                    let sm_resources = resources.get(resource::SAGEMAKER_TYPE).unwrap().clone();
-
-                    handles.push(tokio::spawn(async move {
-                        match service.cleanup(sm_resources).await {
-                            Ok(()) => {}
-                            Err(err) => {
-                                error!("Error occurred cleaning up Sagemaker resources: {}", err)
-                            }
-                        }
-                    }));
-                }
+                cleanup_resources!(
+                    resource::SAGEMAKER_TYPE,
+                    resources,
+                    handles,
+                    service,
+                    region
+                );
             } else if ref_client.is::<S3Service>() {
-                if resources.get(resource::S3_TYPE).is_some() {
-                    let s3_resources = resources.get(resource::S3_TYPE).unwrap().clone();
-
-                    handles.push(tokio::spawn(async move {
-                        match service.cleanup(s3_resources).await {
-                            Ok(()) => {}
-                            Err(err) => error!("Error occurred cleaning up S3 resources: {}", err),
-                        }
-                    }));
-                }
+                cleanup_resources!(resource::S3_TYPE, resources, handles, service, region);
             }
         }
 
@@ -299,12 +282,4 @@ impl AwsNuker {
 
         Ok(())
     }
-
-    // pub fn print_usage(&self) -> Result<()> {
-    //     if let Some(ce_client) = &self.ce_client {
-    //         ce_client.get_usage()?;
-    //     }
-
-    //     Ok(())
-    // }
 }

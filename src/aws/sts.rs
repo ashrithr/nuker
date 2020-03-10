@@ -3,6 +3,7 @@ use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_sts::{GetCallerIdentityRequest, Sts, StsClient};
 
+#[derive(Clone)]
 pub struct StsService {
     pub client: StsClient,
     pub region: Region,

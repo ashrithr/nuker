@@ -6,13 +6,13 @@ use crate::{
 };
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
-use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_sagemaker::{
     DeleteNotebookInstanceInput, ListNotebookInstancesInput, ListTagsInput,
     NotebookInstanceSummary, SageMaker, SageMakerClient, StopNotebookInstanceInput, Tag,
 };
+use tracing::{debug, trace};
 
 #[derive(Clone)]
 pub struct SagemakerService {
@@ -91,22 +91,35 @@ impl SagemakerService {
 
             let enforcement_state: EnforcementState = {
                 if self.config.ignore.contains(&notebook_id) {
-                    debug!("Skipping resource from ignore list - {}", notebook_id);
+                    debug!(
+                        resource = notebook_id.as_str(),
+                        "Skipping notebook from ignore list"
+                    );
                     EnforcementState::SkipConfig
                 } else if notebook.notebook_instance_status != Some("InService".to_string()) {
-                    debug!("Skipping resource is not running - {}", notebook_id);
+                    debug!(
+                        resource = notebook_id.as_str(),
+                        "Skipping notebook is not running"
+                    );
                     EnforcementState::SkipStopped
                 } else {
                     if self.resource_tags_does_not_match(ntags.clone()) {
-                        debug!("Resource tags does not match - {}", notebook_id);
+                        debug!(
+                            resource = notebook_id.as_str(),
+                            "Notebook tags does not match"
+                        );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.resource_types_does_not_match(&notebook) {
-                        debug!("Resource types does not match - {}", notebook_id);
+                        debug!(
+                            resource = notebook_id.as_str(),
+                            "Notebook types does not match"
+                        );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.resource_allowed_run_time(&notebook) {
                         debug!(
-                            "Resource is running beyond allowed run time ({:?}) - {}",
-                            self.config.older_than, notebook_id
+                            resource = notebook_id.as_str(),
+                            "Notebook is running beyond allowed run time ({:?})",
+                            self.config.older_than,
                         );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else {
@@ -221,10 +234,7 @@ impl SagemakerService {
 #[async_trait]
 impl NukerService for SagemakerService {
     async fn scan(&self) -> Result<Vec<Resource>> {
-        trace!(
-            "Initialized Sagemaker resource scanner for {:?} region",
-            self.region.name()
-        );
+        trace!("Initialized Sagemaker resource scanner");
 
         let notebooks = self.get_notebooks().await?;
 

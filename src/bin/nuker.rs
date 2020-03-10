@@ -1,70 +1,41 @@
-use fern::{
-    self,
-    colors::{Color, ColoredLevelConfig},
-};
-use log::debug;
 use nuker::config;
 use nuker::nuke;
+use tracing::{error, trace};
+use tracing_futures::Instrument;
 
 #[tokio::main]
 async fn main() {
     let args = config::parse_args();
     let config = config::parse_config_file(&args.config);
 
-    setup_logging(args.verbose);
+    setup_tracing(args.verbose);
 
-    debug!("{:?}", config);
+    trace!("{:?}", config);
 
     let nuker = nuke::Nuker::new(config, args);
 
-    let _ = tokio::join!(nuker.run());
+    match tokio::try_join!(nuker.run().instrument(tracing::trace_span!("nuke"))) {
+        Ok(_) => {}
+        Err(err) => error!("Encountered error: {:?}", err),
+    }
 }
 
-fn setup_logging(verbose: u64) {
+fn setup_tracing(verbose: u64) {
+    use tracing::Level;
+    use tracing_subscriber::FmtSubscriber;
+
     let level = match verbose {
-        0 => log::LevelFilter::Error,
-        1 => log::LevelFilter::Warn,
-        2 => log::LevelFilter::Info,
-        3 => log::LevelFilter::Debug,
-        _ => log::LevelFilter::Trace,
+        0 => Level::ERROR,
+        1 => Level::WARN,
+        2 => Level::INFO,
+        3 => Level::DEBUG,
+        _ => Level::TRACE,
     };
 
-    let colors_line = ColoredLevelConfig::new()
-        .error(Color::Red)
-        .warn(Color::Yellow)
-        .debug(Color::BrightBlack)
-        .trace(Color::BrightBlack);
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(level)
+        .with_target(false)
+        .finish();
 
-    let colors_level = colors_line.clone().info(Color::Blue);
-
-    fern::Dispatch::new()
-        .format(move |out, message, record| {
-            out.finish(format_args!(
-                "{color_line}[{date}][{target}][{level}{color_line}] {message}\x1B[0m",
-                color_line = format_args!(
-                    "\x1B[{}m",
-                    colors_line.get_color(&record.level()).to_fg_str()
-                ),
-                date = chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
-                target = record.target(),
-                level = colors_level.color(record.level()),
-                message = message,
-            ))
-        })
-        .level(level)
-        .level_for("h2", log::LevelFilter::Info)
-        .level_for("hyper", log::LevelFilter::Info)
-        .level_for("mio", log::LevelFilter::Info)
-        .level_for("rusoto_core", log::LevelFilter::Info)
-        .level_for("rusoto_signature::signature", log::LevelFilter::Info)
-        .level_for("rustls", log::LevelFilter::Info)
-        .level_for("tokio_reactor", log::LevelFilter::Info)
-        .level_for("tokio_threadpool", log::LevelFilter::Info)
-        .level_for("tokio_util", log::LevelFilter::Info)
-        .level_for("want", log::LevelFilter::Info)
-        .chain(std::io::stdout())
-        .apply()
-        .expect("could not set up logging");
-
-    debug!("finished setting up logging!");
+    tracing::subscriber::set_global_default(subscriber).expect("Setting default subscriber failed");
 }

@@ -1,6 +1,5 @@
 use crate::{config::IdleRules, error::Error as AwsError};
 use chrono::{DateTime, TimeZone, Utc};
-use log::trace;
 use rusoto_cloudwatch::{
     CloudWatch, CloudWatchClient, Datapoint, Dimension, GetMetricStatisticsInput,
     GetMetricStatisticsOutput,
@@ -8,6 +7,7 @@ use rusoto_cloudwatch::{
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use std::time::Duration;
+use tracing::trace;
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
 
