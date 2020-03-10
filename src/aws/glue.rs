@@ -1,24 +1,24 @@
 use crate::{
-    aws::{util, Result},
+    aws::{sts::StsService, util, Result},
     config::{GlueConfig, RequiredTags},
     resource::{EnforcementState, NTag, Resource, ResourceType},
     service::NukerService,
 };
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
-use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_glue::{
     DeleteDevEndpointRequest, DevEndpoint, GetDevEndpointsRequest, GetTagsRequest, Glue, GlueClient,
 };
+use tracing::{debug, trace};
 
 #[derive(Clone)]
 pub struct GlueService {
     pub client: GlueClient,
     pub config: GlueConfig,
     pub region: Region,
-    pub account_num: String,
+    pub sts_service: StsService,
     pub dry_run: bool,
 }
 
@@ -27,7 +27,6 @@ impl GlueService {
         profile_name: Option<String>,
         region: Region,
         config: GlueConfig,
-        account_num: String,
         dry_run: bool,
     ) -> Result<Self> {
         if let Some(profile) = &profile_name {
@@ -37,16 +36,16 @@ impl GlueService {
             Ok(GlueService {
                 client: GlueClient::new_with(HttpClient::new()?, pp, region.clone()),
                 config,
-                region,
-                account_num,
+                region: region.clone(),
+                sts_service: StsService::new(Some(profile.to_string()), region)?,
                 dry_run,
             })
         } else {
             Ok(GlueService {
                 client: GlueClient::new(region.clone()),
                 config,
-                region,
-                account_num,
+                region: region.clone(),
+                sts_service: StsService::new(None, region)?,
                 dry_run,
             })
         }
@@ -97,19 +96,28 @@ impl GlueService {
 
             let enforcement_state: EnforcementState = {
                 if self.config.ignore.contains(&endpoint_id) {
-                    debug!("Skipping resource from ignore list - {}", endpoint_id);
+                    debug!(
+                        resource = endpoint_id.as_str(),
+                        "Skipping endpoint from ignore list"
+                    );
                     EnforcementState::SkipConfig
                 } else if endpoint.status != Some("READY".to_string()) {
-                    debug!("Skipping as resource is not running - {}", endpoint_id);
+                    debug!(
+                        resource = endpoint_id.as_str(),
+                        "Skipping as endpoint is not running"
+                    );
                     EnforcementState::SkipStopped
                 } else {
                     if self.resource_tags_does_not_match(ntags.clone()) {
-                        debug!("Resource tags does not match - {}", endpoint_id);
+                        debug!(
+                            resource = endpoint_id.as_str(),
+                            "Endpoint tags does not match"
+                        );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.resource_allowed_run_time(&endpoint) {
                         debug!(
-                            "Resource is running beyond max time ({:?}) - {}",
-                            self.config.older_than, endpoint_id
+                            resource = endpoint_id.as_str(),
+                            "Endpoint is running beyond max time ({:?})", self.config.older_than
                         );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else {
@@ -164,7 +172,7 @@ impl GlueService {
                 resource_arn: format!(
                     "arn:aws:glue:{}:{}:devEndpoint/{}",
                     self.region.name(),
-                    self.account_num,
+                    self.sts_service.get_account_number().await?,
                     endpoint.endpoint_name.as_ref().unwrap()
                 ),
             })
@@ -202,10 +210,7 @@ impl GlueService {
 #[async_trait]
 impl NukerService for GlueService {
     async fn scan(&self) -> Result<Vec<Resource>> {
-        trace!(
-            "Initialized Glue resource scanner for {:?} region",
-            self.region.name()
-        );
+        trace!("Initialized Glue resource scanner");
 
         let dev_endpoints = self.get_dev_endpoints().await?;
 

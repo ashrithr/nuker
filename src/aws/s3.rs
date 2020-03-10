@@ -5,7 +5,6 @@ use crate::{
     service::NukerService,
 };
 use async_trait::async_trait;
-use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_s3::{
@@ -14,6 +13,7 @@ use rusoto_s3::{
     GetPublicAccessBlockRequest, Grant, ListObjectVersionsRequest, ListObjectsV2Request,
     ObjectIdentifier, PolicyStatus, PublicAccessBlockConfiguration, S3Client, Tag, S3,
 };
+use tracing::{debug, trace};
 
 static S3_PUBLIC_GROUPS: [&str; 2] = [
     "http://acs.amazonaws.com/groups/global/AuthenticatedUsers",
@@ -77,13 +77,22 @@ impl S3Service {
                 if self.config.ignore.contains(&bucket_id) {
                     EnforcementState::SkipConfig
                 } else if self.resource_prefix_does_not_match(&bucket_id) {
-                    debug!("Bucket prefix does not match - {}", bucket_id);
+                    debug!(
+                        resource = bucket_id.as_str(),
+                        "Bucket prefix does not match"
+                    );
                     EnforcementState::Delete
                 } else if self.resource_name_is_not_dns_compliant(&bucket_id) {
-                    debug!("Bucket name is not dns compliant - {}", bucket_id);
+                    debug!(
+                        resource = bucket_id.as_str(),
+                        "Bucket name is not dns compliant"
+                    );
                     EnforcementState::Delete
                 } else if self.is_bucket_public(&bucket_id).await {
-                    debug!("Bucket is publicly accessible - {}", bucket_id);
+                    debug!(
+                        resource = bucket_id.as_str(),
+                        "Bucket is publicly accessible"
+                    );
                     EnforcementState::Delete
                 } else {
                     EnforcementState::Skip

@@ -5,7 +5,6 @@ use crate::{
     service::NukerService,
 };
 use async_trait::async_trait;
-use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_ec2::{
@@ -15,6 +14,7 @@ use rusoto_ec2::{
     Instance, ModifyInstanceAttributeRequest, NetworkInterface, ReleaseAddressRequest,
     StopInstancesRequest, Tag, TerminateInstancesRequest,
 };
+use tracing::{debug, trace};
 
 #[derive(Clone)]
 pub struct Ec2Service {
@@ -86,24 +86,36 @@ impl Ec2Service {
             let enforcement_state: EnforcementState = {
                 if self.config.ignore.contains(&instance_id) {
                     // Instance not in ignore list
-                    debug!("Skipping resource from ignore list - {}", instance_id);
+                    debug!(
+                        resource = instance_id.as_str(),
+                        "Skipping instance from ignore list"
+                    );
                     EnforcementState::SkipConfig
                 } else if instance.state.as_ref().unwrap().code != Some(16) {
                     // Instance not in running state
-                    debug!("Skipping as instance is not running - {}", instance_id);
+                    debug!(
+                        resource = instance_id.as_str(),
+                        "Skipping as instance is not running"
+                    );
                     EnforcementState::SkipStopped
                 } else {
                     if self.resource_tags_does_not_match(&instance) {
-                        debug!("Resource tags does not match - {}", instance_id);
+                        debug!(
+                            resource = instance_id.as_str(),
+                            "Instance tags does not match"
+                        );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.resource_types_does_not_match(&instance) {
-                        debug!("Resource types does not match - {}", instance_id);
+                        debug!(
+                            resource = instance_id.as_str(),
+                            "Instance types does not match"
+                        );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.is_resource_idle(&instance).await {
-                        debug!("Resource is idle - {}", instance_id);
+                        debug!(resource = instance_id.as_str(), "Instance is idle");
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.is_resource_not_secure(&instance, sgs.clone()) {
-                        debug!("Resource is not secure - {}", instance_id);
+                        debug!(resource = instance_id.as_str(), "Instance is not secure");
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else {
                         EnforcementState::Skip
@@ -494,10 +506,7 @@ impl Ec2Service {
 #[async_trait]
 impl NukerService for Ec2Service {
     async fn scan(&self) -> Result<Vec<Resource>> {
-        trace!(
-            "Initialized EC2 resource scanner for {:?} region",
-            self.region.name()
-        );
+        trace!("Initialized EC2 resource scanner");
         let mut resources: Vec<Resource> = Vec::new();
 
         let instances = self.get_instances(Vec::new()).await?;

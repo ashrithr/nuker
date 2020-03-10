@@ -5,7 +5,6 @@ use crate::{
     service::NukerService,
 };
 use async_trait::async_trait;
-use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_rds::{
@@ -13,6 +12,7 @@ use rusoto_rds::{
     DescribeDBInstancesMessage, Filter, ListTagsForResourceMessage, ModifyDBClusterMessage, Rds,
     RdsClient, StopDBClusterMessage, Tag,
 };
+use tracing::{debug, trace};
 
 #[derive(Clone)]
 pub struct AuroraService {
@@ -87,10 +87,19 @@ impl AuroraService {
                     EnforcementState::SkipStopped
                 } else {
                     if self.resource_tags_does_not_match(&cluster).await {
+                        debug!(
+                            resource = cluster_id.as_str(),
+                            "Cluster tags does not match"
+                        );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.resource_types_does_not_match(&cluster).await {
+                        debug!(
+                            resource = cluster_id.as_str(),
+                            "Cluster types does not match"
+                        );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.is_resource_idle(&cluster).await {
+                        debug!(resource = cluster_id.as_str(), "Cluster is idle");
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else {
                         EnforcementState::Skip
@@ -354,10 +363,7 @@ impl AuroraService {
 #[async_trait]
 impl NukerService for AuroraService {
     async fn scan(&self) -> Result<Vec<Resource>> {
-        trace!(
-            "Initialized Aurora resource scanner for {:?} region",
-            self.region.name()
-        );
+        trace!("Initialized Aurora resource scanner");
         let clusters = self.get_clusters(Vec::new()).await?;
 
         Ok(self.package_clusters_as_resources(clusters).await?)

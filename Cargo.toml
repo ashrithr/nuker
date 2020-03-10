@@ -30,9 +30,9 @@ failure_derive = "0.1.6"
 # Logging
 chrono = "0.4"
 colored = "1.9"
-log = "0.4"
-fern = { version = "0.5", features = ["colored"] }
-prettytable-rs = "0.8"
+tracing = "0.1"
+tracing-subscriber = "0.2.3"
+tracing-futures = "0.2.3"
 # Parsing Cli
 clap = "2.33"
 # Parsing Config

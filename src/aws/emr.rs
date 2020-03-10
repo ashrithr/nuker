@@ -5,7 +5,6 @@ use crate::{
     service::NukerService,
 };
 use async_trait::async_trait;
-use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_ec2::{DescribeSecurityGroupsRequest, Ec2, Ec2Client, Filter};
@@ -13,6 +12,7 @@ use rusoto_emr::{
     ClusterSummary, Emr, EmrClient, ListClustersInput, ListInstancesInput,
     SetTerminationProtectionInput, TerminateJobFlowsInput,
 };
+use tracing::{debug, trace};
 
 #[derive(Clone)]
 pub struct EmrService {
@@ -83,23 +83,35 @@ impl EmrService {
 
             let enforcement_state = {
                 if self.config.ignore.contains(&cluster_id) {
-                    debug!("Skipping resource from ignore list - {}", cluster_id);
+                    debug!(
+                        resource = cluster_id.as_str(),
+                        "Skipping resource from ignore list"
+                    );
                     EnforcementState::SkipConfig
                 } else if cluster.status.as_ref().unwrap().state != Some("RUNNING".to_string()) {
-                    debug!("Skipping resource as its not running - {}", cluster_id);
+                    debug!(
+                        resource = cluster_id.as_str(),
+                        "Skipping resource as its not running"
+                    );
                     EnforcementState::SkipStopped
                 } else {
                     if self.resource_tags_does_not_match(&cluster) {
-                        debug!("Resource tags does not match - {}", cluster_id);
+                        debug!(
+                            resource = cluster_id.as_str(),
+                            "Resource tags does not match"
+                        );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.resource_types_does_not_match(&cluster).await {
-                        debug!("Resource types does not match - {}", cluster_id);
+                        debug!(
+                            resource = cluster_id.as_str(),
+                            "Resource types does not match"
+                        );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.is_resource_idle(&cluster).await {
-                        debug!("Resource is idle - {}", cluster_id);
+                        debug!(resource = cluster_id.as_str(), "Resource is idle");
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.is_resource_not_secure(&cluster, sgs.clone()) {
-                        debug!("Resource is not secure - {}", cluster_id);
+                        debug!(resource = cluster_id.as_str(), "Resource is not secure");
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else {
                         EnforcementState::Skip
@@ -336,10 +348,7 @@ impl EmrService {
 #[async_trait]
 impl NukerService for EmrService {
     async fn scan(&self) -> Result<Vec<Resource>> {
-        trace!(
-            "Initialized Emr resource scanner for {:?} region",
-            self.region.name()
-        );
+        trace!("Initialized Emr resource scanner");
 
         let clusters = self.get_clusters().await?;
         let sgs = if self.config.security_groups.enabled {

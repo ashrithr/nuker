@@ -5,7 +5,6 @@ use crate::{
     service::NukerService,
 };
 use async_trait::async_trait;
-use log::{debug, trace};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_rds::{
@@ -13,6 +12,7 @@ use rusoto_rds::{
     ListTagsForResourceMessage, ModifyDBInstanceMessage, Rds, RdsClient, StopDBInstanceMessage,
     Tag,
 };
+use tracing::{debug, trace};
 
 const AURORA_POSTGRES_ENGINE: &str = "aurora-postgresql";
 const AURORA_MYSQL_ENGINE: &str = "aurora-mysql";
@@ -89,10 +89,19 @@ impl RdsService {
                     EnforcementState::SkipStopped
                 } else {
                     if self.resource_tags_does_not_match(&instance).await {
+                        debug!(
+                            resource = instance_id.as_str(),
+                            "DB Instance tags does not match"
+                        );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.resource_types_does_not_match(&instance) {
+                        debug!(
+                            resource = instance_id.as_str(),
+                            "DB Instance types does not match"
+                        );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.is_resource_idle(&instance).await {
+                        debug!(resource = instance_id.as_str(), "DB Instance is Idle");
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else {
                         EnforcementState::Skip
@@ -283,10 +292,7 @@ impl RdsService {
 #[async_trait]
 impl NukerService for RdsService {
     async fn scan(&self) -> Result<Vec<Resource>> {
-        trace!(
-            "Initialized RDS resource scanner for {:?} region",
-            self.region.name()
-        );
+        trace!("Initialized RDS resource scanner");
         let instances = self.get_instances(Vec::new()).await?;
 
         Ok(self.package_instances_as_resources(instances).await?)
