@@ -4,7 +4,7 @@ use rusoto_credential::CredentialsError;
 use rusoto_ec2::{
     DeleteNetworkInterfaceError, DeleteSnapshotError, DeleteVolumeError, DescribeAddressesError,
     DescribeInstanceAttributeError, DescribeInstancesError, DescribeNetworkInterfacesError,
-    DescribeSecurityGroupsError, DescribeSnapshotsError, DescribeVolumesError,
+    DescribeSecurityGroupsError, DescribeSnapshotsError, DescribeVolumesError, DetachVolumeError,
     ModifyInstanceAttributeError, ReleaseAddressError, StopInstancesError, TerminateInstancesError,
 };
 use rusoto_emr::{
@@ -48,6 +48,10 @@ pub enum Error {
     #[fail(display = "Issue deleting Volume: {}", error)]
     VolumeDelete {
         error: RusotoError<DeleteVolumeError>,
+    },
+    #[fail(display = "Failed detaching Volume: {}", error)]
+    VolumeDetach {
+        error: RusotoError<DetachVolumeError>,
     },
     #[fail(display = "Issue describing Snapshots: {}", error)]
     SnapshotsDescribe {

@@ -9,7 +9,7 @@ use chrono::{DateTime, Utc};
 use rusoto_core::{credential::ProfileProvider, HttpClient, Region};
 use rusoto_ec2::{
     DeleteSnapshotRequest, DeleteVolumeRequest, DescribeSnapshotsRequest, DescribeVolumesRequest,
-    Ec2, Ec2Client, Filter, Snapshot, Tag, Volume,
+    DetachVolumeRequest, Ec2, Ec2Client, Filter, Snapshot, Tag, Volume,
 };
 use tracing::{debug, trace};
 
@@ -84,12 +84,7 @@ impl EbsService {
                         "Resource is idle (available)"
                     );
                     EnforcementState::from_target_state(&self.config.target_state)
-                } else if self.is_resource_idle(&volume).await
-                    && volume.state == Some("available".to_string())
-                {
-                    // TODO: identify non-root volumes
-                    // TODO: Detach the volume before attempting to delete it, remove the above
-                    // condition
+                } else if self.is_resource_idle(&volume).await && !self.is_root_volume(&volume) {
                     debug!(resource = volume_id.as_str(), "Resource is idle");
                     EnforcementState::from_target_state(&self.config.target_state)
                 } else {
@@ -180,6 +175,21 @@ impl EbsService {
         }
     }
 
+    fn is_root_volume(&self, volume: &Volume) -> bool {
+        let root_attachments = vec!["/dev/sda1", "/dev/xvda"];
+        if let Some(ref attachments) = volume.attachments {
+            attachments.iter().any(|vol_att| {
+                if let Some(ref device) = vol_att.device {
+                    root_attachments.contains(&device.as_str())
+                } else {
+                    false
+                }
+            })
+        } else {
+            false
+        }
+    }
+
     async fn get_volumes(&self) -> Result<Vec<Volume>> {
         let mut next_token: Option<String> = None;
         let mut volumes: Vec<Volume> = Vec::new();
@@ -242,10 +252,27 @@ impl EbsService {
         Ok(snapshots)
     }
 
+    async fn detach_volume(&self, volume_id: &String) -> Result<()> {
+        debug!("Detaching Volume: {}", volume_id);
+
+        if !self.dry_run {
+            self.client
+                .detach_volume(DetachVolumeRequest {
+                    volume_id: volume_id.to_string(),
+                    ..Default::default()
+                })
+                .await?;
+        }
+
+        Ok(())
+    }
+
     async fn delete_volume(&self, volume_id: String) -> Result<()> {
         debug!("Deleting Volume: {}", volume_id);
 
         if !self.dry_run {
+            self.detach_volume(&volume_id).await?;
+
             self.client
                 .delete_volume(DeleteVolumeRequest {
                     volume_id: volume_id.to_owned(),
