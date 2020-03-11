@@ -12,6 +12,7 @@ pub const EMR_TYPE: &str = "emr";
 pub const GLUE_TYPE: &str = "glue";
 pub const SAGEMAKER_TYPE: &str = "sagemaker";
 pub const REDSHIFT_TYPE: &str = "redshift";
+pub const ES_TYPE: &str = "es";
 
 #[derive(Display, Debug, Clone)]
 pub enum ResourceType {
@@ -27,6 +28,7 @@ pub enum ResourceType {
     EmrCluster,
     GlueDevEndpoint,
     SagemakerNotebook,
+    EsDomain,
 }
 
 impl ResourceType {
@@ -43,6 +45,7 @@ impl ResourceType {
             ResourceType::EmrCluster => EMR_TYPE,
             ResourceType::GlueDevEndpoint => GLUE_TYPE,
             ResourceType::SagemakerNotebook => SAGEMAKER_TYPE,
+            ResourceType::EsDomain => ES_TYPE,
         }
     }
 
@@ -142,6 +145,13 @@ impl ResourceType {
     pub fn is_sagemaker(&self) -> bool {
         match *self {
             ResourceType::SagemakerNotebook => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_es(&self) -> bool {
+        match *self {
+            ResourceType::EsDomain => true,
             _ => false,
         }
     }
