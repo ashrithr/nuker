@@ -751,7 +751,7 @@ dependencies = [
 
 [[package]]
 name = "nuker"
-version = "0.1.0"
+version = "0.8.3"
 dependencies = [
  "async-trait 0.1.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -772,6 +772,7 @@ dependencies = [
  "rusoto_credential 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_ec2 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_emr 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_es 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_glue 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_iam 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_mock 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1154,6 +1155,20 @@ dependencies = [
  "futures 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_core 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.90 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.39 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "rusoto_es"
+version = "0.43.0-beta.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "async-trait 0.1.24 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bytes 0.5.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_core 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.90 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_derive 1.0.90 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.39 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -2148,6 +2163,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum rusoto_credential 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)" = "c981690595b685c0df4c8f695cbe2e3ed4cd7269bcbcf1e5db2e8e5afc043cfb"
 "checksum rusoto_ec2 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)" = "66dd7776849ff7fc3f329fb12f1f0d7f576bbff3845d2f8504ed1107cf3e340f"
 "checksum rusoto_emr 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)" = "4e8e4d0bdfb45e8375b2e7aa26e4e82b1a2be049496b971c477c3b39f6a451b0"
+"checksum rusoto_es 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)" = "01689b7f019ebad66cbd1702865d6efa223cc7a4468f0c040a7bffac02a1e948"
 "checksum rusoto_glue 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)" = "72f60016c77d83421d053c41301dbf3eba1af79b9ea63d2d48a1b5d206e64554"
 "checksum rusoto_iam 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)" = "f6acce1c73f56533974121ee9bd82a80cb2b4738327174ed74bd53b6e9dec221"
 "checksum rusoto_mock 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)" = "836fe268edcb6c9d0df99c9980c76cbec398111eb1745428a8b4b71e915c9ce6"

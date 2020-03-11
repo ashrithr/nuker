@@ -11,6 +11,9 @@ use rusoto_emr::{
     DescribeClusterError, ListClustersError, ListInstancesError, SetTerminationProtectionError,
     TerminateJobFlowsError,
 };
+use rusoto_es::{
+    DeleteElasticsearchDomainError, DescribeElasticsearchDomainError, ListDomainNamesError,
+};
 use rusoto_glue::{DeleteDevEndpointError, GetDevEndpointsError, GetTagsError};
 use rusoto_rds::{
     DeleteDBClusterError, DeleteDBInstanceError, DescribeDBClustersError, DescribeDBInstancesError,
@@ -217,6 +220,22 @@ pub enum Error {
     #[fail(display = "Failed stopping Sagemaker Notebook: {}", error)]
     StopSagemakerNotebook {
         error: RusotoError<StopNotebookInstanceError>,
+    },
+    #[fail(display = "Failed listing Elastic Domains: {}", error)]
+    DescribeElasticDomains {
+        error: RusotoError<ListDomainNamesError>,
+    },
+    #[fail(display = "Failed describing Elastic domain config: {}", error)]
+    DescribeElasticDomain {
+        error: RusotoError<DescribeElasticsearchDomainError>,
+    },
+    #[fail(display = "Failed describing tags for Elastic domain: {}", error)]
+    DescribeElasticTags {
+        error: RusotoError<rusoto_es::ListTagsError>,
+    },
+    #[fail(display = "Failed deleting Elastic domain: {}", error)]
+    DeleteElasticDomain {
+        error: RusotoError<DeleteElasticsearchDomainError>,
     },
     #[fail(display = "JSON Encoding/Decoding error: {}", error)]
     JsonError { error: serde_json::error::Error },

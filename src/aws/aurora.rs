@@ -140,7 +140,7 @@ impl AuroraService {
             if let Ok(instance_types) = self.get_instance_types(cluster).await {
                 if instance_types
                     .iter()
-                    .any(|it| self.config.allowed_instance_types.contains(&it))
+                    .any(|it| !self.config.allowed_instance_types.contains(&it))
                 {
                     return true;
                 }

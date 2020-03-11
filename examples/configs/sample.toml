@@ -409,3 +409,49 @@ older_than = "8 hours"
     [[sagemaker.required_tags]]
     name = "Environment"
 
+[es]
+# Specifies whether ElasticSearch enforcement is enabled or not.
+enabled = true
+# State to enfoce, if any of the following conditions are not met. Possible
+# states are: 'Stopped' and 'Deleted'.
+# Note: Elastic Search Service does not support stopping.
+target_state = "Deleted"
+# Defines which instance types are allowed, empty means allow any types
+allowed_instance_types = []
+# The following resources will be ignore from rule enforcement. Specify the
+# ES Cluster IDs.
+ignore = []
+
+    # Defines required tags on each cluster.
+    [[es.required_tags]]
+    name = "Name"
+    pattern = '^es-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+    [[es.required_tags]]
+    name = "Owner:Name"
+
+    [[es.required_tags]]
+    name = "Owner:Email"
+    pattern = '^(.*)@(.*).com$'
+
+    [[es.required_tags]]
+    name = "Purpose"
+
+    [[es.required_tags]]
+    name = "Environment"
+
+    # Identify any ES cluster that appear to be idle based on the following
+    # rules.
+    [[es.idle_rules]]
+    namespace = "AWS/ES"
+    metric = "CPUUtilization"
+    minimum = 5
+    duration = "1 day"
+    granularity = "1 hour"
+
+    [[es.idle_rules]]
+    namespace = "AWS/ES"
+    metric = "ElasticsearchRequests"
+    minimum = 1
+    duration = "1 day"
+    granularity = "1 hour"

@@ -16,6 +16,7 @@ pub struct Args {
     pub dry_run: bool,
     pub force: bool,
     pub verbose: u64,
+    pub version: String,
 }
 
 /// Configuration struct for nuker executable
@@ -34,6 +35,7 @@ pub struct Config {
     pub redshift: RedshiftConfig,
     pub glue: GlueConfig,
     pub sagemaker: SagemakerConfig,
+    pub es: EsConfig,
 }
 
 #[derive(Debug, Deserialize, Clone, Eq, PartialEq)]
@@ -193,6 +195,16 @@ pub struct SagemakerConfig {
     pub older_than: Duration,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct EsConfig {
+    pub enabled: bool,
+    pub target_state: TargetState,
+    pub required_tags: Option<Vec<RequiredTags>>,
+    pub allowed_instance_types: Vec<String>,
+    pub ignore: Vec<String>,
+    pub idle_rules: Vec<IdleRules>,
+}
+
 /// Parse the command line arguments for nuker executable
 pub fn parse_args() -> Args {
     let args = App::new("nuker")
@@ -278,6 +290,7 @@ pub fn parse_args() -> Args {
         dry_run,
         force,
         verbose,
+        version: VERSION.unwrap_or("unknown").to_string(),
     }
 }
 

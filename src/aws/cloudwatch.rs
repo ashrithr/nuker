@@ -118,6 +118,10 @@ impl CwClient {
         self.filter_resource(cluster_id, "ClusterIdentifier").await
     }
 
+    pub async fn filter_es_domain(&self, domain_name: &String) -> Result<bool> {
+        self.filter_resource(domain_name, "DomainName").await
+    }
+
     pub async fn filter_emr_cluster(&self, cluster_id: &String) -> Result<bool> {
         // FIXME: make this code generic
         let mut result = false;

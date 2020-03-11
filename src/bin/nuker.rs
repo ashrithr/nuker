@@ -1,6 +1,6 @@
 use nuker::config;
 use nuker::nuke;
-use tracing::{error, trace};
+use tracing::{error, info, trace};
 use tracing_futures::Instrument;
 
 #[tokio::main]
@@ -9,6 +9,11 @@ async fn main() {
     let config = config::parse_config_file(&args.config);
 
     setup_tracing(args.verbose);
+
+    info!(
+        message = "Nuker is starting",
+        version = args.version.as_str()
+    );
 
     trace!("{:?}", config);
 

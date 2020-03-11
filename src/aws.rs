@@ -4,6 +4,7 @@ mod cloudwatch;
 mod ebs;
 mod ec2;
 mod emr;
+mod es;
 mod glue;
 mod rds;
 mod redshift;
@@ -14,7 +15,7 @@ mod util;
 
 use crate::{
     aws::{
-        aurora::AuroraService, ebs::EbsService, ec2::Ec2Service, emr::EmrService,
+        aurora::AuroraService, ebs::EbsService, ec2::Ec2Service, emr::EmrService, es::EsService,
         glue::GlueService, rds::RdsService, redshift::RedshiftService, s3::S3Service,
         sagemaker::SagemakerService,
     },
@@ -179,6 +180,15 @@ impl AwsNuker {
             )?))
         }
 
+        if config.es.enabled {
+            services.push(Box::new(EsService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.es.clone(),
+                dry_run,
+            )?))
+        }
+
         Ok(AwsNuker {
             region,
             services,
@@ -221,6 +231,8 @@ impl AwsNuker {
                 );
             } else if ref_client.is::<S3Service>() {
                 scan_resources!(resource::S3_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<EsService>() {
+                scan_resources!(resource::ES_TYPE, resources, handles, service, region);
             }
         }
 
@@ -275,6 +287,8 @@ impl AwsNuker {
                 );
             } else if ref_client.is::<S3Service>() {
                 cleanup_resources!(resource::S3_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<EsService>() {
+                cleanup_resources!(resource::ES_TYPE, resources, handles, service, region);
             }
         }
 
