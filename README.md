@@ -40,6 +40,10 @@ Cleans up AWS resources based on configurable Rules. This project is a WIP.
 * Sagemaker
     - Clean up Sagemaker Notebooks based on Tags
     - Enforce using Sagemaker Notebooks for specified duration
+* ElasticSearch
+    - Clean up ES Domains based on Tags
+    - Clean up based on allowed Instance Types
+    - Clean up Idle Domains based on Cloudwatch metrics
 
 ## Configuration
 
