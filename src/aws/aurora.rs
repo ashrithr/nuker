@@ -12,12 +12,13 @@ use rusoto_rds::{
     DescribeDBInstancesMessage, Filter, ListTagsForResourceMessage, ModifyDBClusterMessage, Rds,
     RdsClient, StopDBClusterMessage, Tag,
 };
+use std::sync::Arc;
 use tracing::{debug, trace};
 
 #[derive(Clone)]
 pub struct AuroraService {
     pub client: RdsClient,
-    pub cw_client: CwClient,
+    pub cw_client: Arc<Box<CwClient>>,
     pub config: AuroraConfig,
     pub region: Region,
     pub dry_run: bool,
@@ -28,6 +29,7 @@ impl AuroraService {
         profile_name: Option<String>,
         region: Region,
         config: AuroraConfig,
+        cw_client: Arc<Box<CwClient>>,
         dry_run: bool,
     ) -> Result<Self> {
         if let Some(profile) = &profile_name {
@@ -36,11 +38,7 @@ impl AuroraService {
 
             Ok(AuroraService {
                 client: RdsClient::new_with(HttpClient::new()?, pp, region.clone()),
-                cw_client: CwClient::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.clone().idle_rules,
-                )?,
+                cw_client,
                 config,
                 region,
                 dry_run,
@@ -48,11 +46,7 @@ impl AuroraService {
         } else {
             Ok(AuroraService {
                 client: RdsClient::new(region.clone()),
-                cw_client: CwClient::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.clone().idle_rules,
-                )?,
+                cw_client,
                 config,
                 region,
                 dry_run,
@@ -109,6 +103,7 @@ impl AuroraService {
 
             resources.push(Resource {
                 id: cluster_id,
+                arn: cluster.db_cluster_arn.clone(),
                 region: self.region.clone(),
                 resource_type: ResourceType::Aurora,
                 tags: self
@@ -152,7 +147,7 @@ impl AuroraService {
     }
 
     async fn is_resource_idle(&self, cluster: &DBCluster) -> bool {
-        if !self.config.idle_rules.is_empty() {
+        if self.config.idle_rules.is_some() {
             !self
                 .cw_client
                 .filter_db_cluster(&cluster.db_cluster_identifier.as_ref().unwrap())
@@ -290,7 +285,7 @@ impl AuroraService {
     }
 
     async fn stop_resource(&self, cluster_id: String) -> Result<()> {
-        debug!("Stopping cluster: {:?}", cluster_id);
+        debug!(resource = cluster_id.as_str(), "Stopping");
 
         if !self.dry_run {
             self.client
@@ -304,7 +299,10 @@ impl AuroraService {
     }
 
     async fn terminate_db_instance(&self, instance_id: Option<String>) -> Result<()> {
-        debug!("Terminate db cluster instance: {:?}", instance_id);
+        debug!(
+            resource = instance_id.as_ref().unwrap().as_str(),
+            "Deleting"
+        );
 
         if !self.dry_run && instance_id.is_some() {
             self.client
@@ -320,7 +318,7 @@ impl AuroraService {
     }
 
     async fn terminate_resource(&self, cluster_id: String) -> Result<()> {
-        debug!("Terminating cluster: {:?}", cluster_id);
+        debug!(resource = cluster_id.as_str(), "Deleting");
 
         if !self.dry_run {
             if self.config.termination_protection.ignore {

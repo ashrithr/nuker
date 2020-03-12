@@ -7,6 +7,7 @@ use rusoto_ec2::{
     DescribeSecurityGroupsError, DescribeSnapshotsError, DescribeVolumesError, DetachVolumeError,
     ModifyInstanceAttributeError, ReleaseAddressError, StopInstancesError, TerminateInstancesError,
 };
+use rusoto_elbv2::{DeleteLoadBalancerError, DescribeLoadBalancersError};
 use rusoto_emr::{
     DescribeClusterError, ListClustersError, ListInstancesError, SetTerminationProtectionError,
     TerminateJobFlowsError,
@@ -191,8 +192,6 @@ pub enum Error {
     },
     #[fail(display = "Failed parsing the region: {}", error)]
     RegionParseError { error: ParseRegionError },
-    #[fail(display = "Cloudwatch Error: {}", error)]
-    CloudWatchError { error: String },
     #[fail(display = "Issue querying Cost Explorer: {}", error)]
     CeError {
         error: RusotoError<GetCostAndUsageError>,
@@ -241,8 +240,22 @@ pub enum Error {
     DeleteElasticDomain {
         error: RusotoError<DeleteElasticsearchDomainError>,
     },
+    #[fail(display = "Failed describing tags for ELB: {}", error)]
+    DescribeElbTags {
+        error: RusotoError<rusoto_elbv2::DescribeTagsError>,
+    },
+    #[fail(display = "Failed describing load balancers: {}", error)]
+    DescribeElbs {
+        error: RusotoError<DescribeLoadBalancersError>,
+    },
+    #[fail(display = "Failed deleting load balancer: {}", error)]
+    DeleteElb {
+        error: RusotoError<DeleteLoadBalancerError>,
+    },
     #[fail(display = "JSON Encoding/Decoding error: {}", error)]
     JsonError { error: serde_json::error::Error },
     #[fail(display = "Encountered Tokio IO error: {}", error)]
     TokioError { error: tokio::io::Error },
+    #[fail(display = "Internal Error: {}", error)]
+    Internal { error: String },
 }

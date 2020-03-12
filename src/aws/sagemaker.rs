@@ -130,6 +130,7 @@ impl SagemakerService {
 
             resources.push(Resource {
                 id: notebook_id,
+                arn: Some(notebook.notebook_instance_arn),
                 resource_type: ResourceType::SagemakerNotebook,
                 region: self.region.clone(),
                 tags: ntags,
@@ -203,7 +204,7 @@ impl SagemakerService {
     }
 
     async fn delete_notebook(&self, notebook_id: &str) -> Result<()> {
-        debug!("Deleting the Sagemaker notebook instance: {}", notebook_id);
+        debug!(resource = notebook_id, "Deleting");
 
         if !self.dry_run {
             self.client
@@ -217,7 +218,7 @@ impl SagemakerService {
     }
 
     async fn stop_notebook(&self, notebook_id: &str) -> Result<()> {
-        debug!("Stopping the Sagemaker notebook instance: {}", notebook_id);
+        debug!(resource = notebook_id, "Stopping");
 
         if !self.dry_run {
             self.client

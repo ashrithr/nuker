@@ -17,10 +17,13 @@ Cleans up AWS resources based on configurable Rules. This project is a WIP.
     - Clean up unused volumes
     - Clean up snapshots that are older than configured duration
     - Enforce use of gp2 volumes over io1
+* ELB
+    - Clean up based on Tags
+    - Clean up Idle Load Balancers based on CloudWatch metrics
 * RDS
     - Clean up based on Tags
     - Clean up based on Allowed Instance Types
-    - Clean up based in Idle Instances/Clusters based on CloudWatch metrics
+    - Clean up Idle Instances/Clusters based on CloudWatch metrics
 * Redshift
     - Clean up based on Tags
     - Clean up based on Allowed Instance Types

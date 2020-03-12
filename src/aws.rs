@@ -3,6 +3,7 @@ mod aurora;
 mod cloudwatch;
 mod ebs;
 mod ec2;
+mod elb;
 mod emr;
 mod es;
 mod glue;
@@ -13,11 +14,12 @@ mod sagemaker;
 mod sts;
 mod util;
 
+use crate::aws::cloudwatch::CwClient;
 use crate::{
     aws::{
-        aurora::AuroraService, ebs::EbsService, ec2::Ec2Service, emr::EmrService, es::EsService,
-        glue::GlueService, rds::RdsService, redshift::RedshiftService, s3::S3Service,
-        sagemaker::SagemakerService,
+        aurora::AuroraService, ebs::EbsService, ec2::Ec2Service, elb::ElbService, emr::EmrService,
+        es::EsService, glue::GlueService, rds::RdsService, redshift::RedshiftService,
+        s3::S3Service, sagemaker::SagemakerService,
     },
     config::Config,
     error::Error as AwsError,
@@ -98,12 +100,14 @@ impl AwsNuker {
         dry_run: bool,
     ) -> Result<AwsNuker> {
         let mut services: Vec<Box<dyn NukerService>> = Vec::new();
+        let cw_client = create_cw_client(&profile_name, &region, config)?;
 
         if config.ec2.enabled {
             services.push(Box::new(Ec2Service::new(
                 profile_name.clone(),
                 region.clone(),
                 config.ec2.clone(),
+                cw_client.clone(),
                 dry_run,
             )?));
         }
@@ -113,6 +117,7 @@ impl AwsNuker {
                 profile_name.clone(),
                 region.clone(),
                 config.rds.clone(),
+                cw_client.clone(),
                 dry_run,
             )?));
         }
@@ -122,6 +127,7 @@ impl AwsNuker {
                 profile_name.clone(),
                 region.clone(),
                 config.aurora.clone(),
+                cw_client.clone(),
                 dry_run,
             )?))
         }
@@ -140,6 +146,7 @@ impl AwsNuker {
                 profile_name.clone(),
                 region.clone(),
                 config.redshift.clone(),
+                cw_client.clone(),
                 dry_run,
             )?))
         }
@@ -149,6 +156,7 @@ impl AwsNuker {
                 profile_name.clone(),
                 region.clone(),
                 config.ebs.clone(),
+                cw_client.clone(),
                 dry_run,
             )?))
         }
@@ -158,6 +166,7 @@ impl AwsNuker {
                 profile_name.clone(),
                 region.clone(),
                 config.emr.clone(),
+                cw_client.clone(),
                 dry_run,
             )?))
         }
@@ -185,6 +194,17 @@ impl AwsNuker {
                 profile_name.clone(),
                 region.clone(),
                 config.es.clone(),
+                cw_client.clone(),
+                dry_run,
+            )?))
+        }
+
+        if config.elb.enabled {
+            services.push(Box::new(ElbService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.elb.clone(),
+                cw_client.clone(),
                 dry_run,
             )?))
         }
@@ -233,6 +253,8 @@ impl AwsNuker {
                 scan_resources!(resource::S3_TYPE, resources, handles, service, region);
             } else if ref_client.is::<EsService>() {
                 scan_resources!(resource::ES_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<ElbService>() {
+                scan_resources!(resource::ELB_TYPE, resources, handles, service, region);
             }
         }
 
@@ -289,6 +311,8 @@ impl AwsNuker {
                 cleanup_resources!(resource::S3_TYPE, resources, handles, service, region);
             } else if ref_client.is::<EsService>() {
                 cleanup_resources!(resource::ES_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<ElbService>() {
+                cleanup_resources!(resource::ELB_TYPE, resources, handles, service, region);
             }
         }
 
@@ -296,4 +320,36 @@ impl AwsNuker {
 
         Ok(())
     }
+}
+
+fn create_cw_client(
+    profile_name: &Option<String>,
+    region: &Region,
+    config: &Config,
+) -> Result<Arc<Box<CwClient>>> {
+    let cw_client: rusoto_cloudwatch::CloudWatchClient = if let Some(profile) = profile_name {
+        let mut pp = rusoto_credential::ProfileProvider::new()?;
+        pp.set_profile(profile);
+
+        rusoto_cloudwatch::CloudWatchClient::new_with(
+            rusoto_core::HttpClient::new()?,
+            pp,
+            region.to_owned(),
+        )
+    } else {
+        rusoto_cloudwatch::CloudWatchClient::new(region.to_owned())
+    };
+
+    Ok(Arc::new(Box::new(CwClient {
+        client: cw_client,
+        ec2_idle_rules: config.ec2.idle_rules.clone(),
+        ebs_idle_rules: config.ebs.idle_rules.clone(),
+        elb_alb_idle_rules: config.elb.alb_idle_rules.clone(),
+        elb_nlb_idle_rules: config.elb.nlb_idle_rules.clone(),
+        rds_idle_rules: config.rds.idle_rules.clone(),
+        aurora_idle_rules: config.aurora.idle_rules.clone(),
+        redshift_idle_rules: config.redshift.idle_rules.clone(),
+        emr_idle_rules: config.emr.idle_rules.clone(),
+        es_idle_rules: config.es.idle_rules.clone(),
+    })))
 }

@@ -101,6 +101,7 @@ impl S3Service {
 
             resources.push(Resource {
                 id: bucket_id.clone(),
+                arn: None,
                 region: self.region.clone(),
                 resource_type: ResourceType::S3Bucket,
                 tags: self.package_tags_as_ntags(self.get_tags_for_bucket(&bucket_id).await),
@@ -370,7 +371,7 @@ impl S3Service {
     }
 
     async fn delete_bucket<'a>(&self, bucket: &str) -> Result<()> {
-        debug!("Deleting bucket and its contents: {:?}", bucket);
+        debug!(resource = bucket, "Deleting");
 
         if !self.dry_run {
             if let Ok(()) = self.delete_objects_in_bucket(bucket).await {
