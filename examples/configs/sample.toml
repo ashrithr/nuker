@@ -4,7 +4,7 @@ usage_days = 1
 
 [ec2]
 # Specifies whether EC2 enforcement is enabled or not
-enabled = false
+enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Deleted'
 target_state = "Deleted"
@@ -87,7 +87,7 @@ ignore = []
 
 [ebs]
 # Specifies whether to clean up Volumes that are detached and not being used
-enabled = false
+enabled = true
 # State to enfore. Possible states are 'Deleted'
 target_state = "Deleted"
 # The following volumes will be ignored from rules enforcement
@@ -157,7 +157,7 @@ ignore = []
 
 [rds]
 # Specifies whether RDS enforcement is enabled or not
-enabled = false
+enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Deleted'
 target_state = "Deleted"
@@ -214,7 +214,7 @@ ignore = []
 
 [aurora]
 # Specifies whether RDS-Aurora enforcement is enabled or not
-enabled = false
+enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Deleted'
 target_state = "Deleted"
@@ -271,7 +271,7 @@ ignore = []
 
 [redshift]
 # Specifies whether Redshift enforcement is enabled or not
-enabled = false
+enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Deleted'. Redshift does not have a stop option
 # so instead the DB will be terminated with a snapshot taken which will be valid
@@ -334,7 +334,7 @@ ignore = []
 
 [emr]
 # Specifies whether EMR enforcement is enabled or not
-enabled = false
+enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Deleted'.
 # Note: EMR does not support Stopping clusters, instead the cluster will be
@@ -389,7 +389,7 @@ ignore = []
 
 [glue]
 # Specifies whether Glue enforcement is enabled or not.
-enabled = false
+enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Deleted'.
 # Note: Glue does not support Stopping endpoints, instead the endpoint will be
@@ -421,7 +421,7 @@ older_than = "8 hours"
 
 [sagemaker]
 # Specifies whether Sagemaker enforcement is enabled or not.
-enabled = false
+enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Deleted'.
 # Note: Sagemaker does not support Stopping endpoints, instead the endpoint will be
@@ -456,7 +456,7 @@ older_than = "8 hours"
 
 [es]
 # Specifies whether ElasticSearch enforcement is enabled or not.
-enabled = false
+enabled = true
 # State to enfoce, if any of the following conditions are not met. Possible
 # states are: 'Stopped' and 'Deleted'.
 # Note: Elastic Search Service does not support stopping.
