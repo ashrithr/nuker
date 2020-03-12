@@ -14,12 +14,13 @@ use rusoto_ec2::{
     Instance, ModifyInstanceAttributeRequest, NetworkInterface, ReleaseAddressRequest,
     StopInstancesRequest, Tag, TerminateInstancesRequest,
 };
+use std::sync::Arc;
 use tracing::{debug, trace};
 
 #[derive(Clone)]
 pub struct Ec2Service {
     pub client: Ec2Client,
-    pub cw_client: CwClient,
+    pub cw_client: Arc<Box<CwClient>>,
     pub config: Ec2Config,
     pub region: Region,
     pub dry_run: bool,
@@ -30,6 +31,7 @@ impl Ec2Service {
         profile_name: Option<String>,
         region: Region,
         config: Ec2Config,
+        cw_client: Arc<Box<CwClient>>,
         dry_run: bool,
     ) -> Result<Self> {
         if let Some(profile) = &profile_name {
@@ -38,11 +40,7 @@ impl Ec2Service {
 
             Ok(Ec2Service {
                 client: Ec2Client::new_with(HttpClient::new()?, pp, region.clone()),
-                cw_client: CwClient::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.clone().idle_rules,
-                )?,
+                cw_client,
                 config,
                 region,
                 dry_run,
@@ -50,11 +48,7 @@ impl Ec2Service {
         } else {
             Ok(Ec2Service {
                 client: Ec2Client::new(region.clone()),
-                cw_client: CwClient::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.clone().idle_rules,
-                )?,
+                cw_client,
                 config,
                 region,
                 dry_run,
@@ -125,6 +119,7 @@ impl Ec2Service {
 
             resources.push(Resource {
                 id: instance_id,
+                arn: None,
                 region: self.region.clone(),
                 resource_type: ResourceType::Ec2Instance,
                 tags: self.package_tags_as_ntags(instance.tags.clone()),
@@ -158,6 +153,7 @@ impl Ec2Service {
 
             resources.push(Resource {
                 id: interface_id,
+                arn: None,
                 region: self.region.clone(),
                 resource_type: ResourceType::Ec2Interface,
                 tags: self.package_tags_as_ntags(interface.tag_set.clone()),
@@ -186,6 +182,7 @@ impl Ec2Service {
 
             resources.push(Resource {
                 id: address_id,
+                arn: None,
                 region: self.region.clone(),
                 resource_type: ResourceType::Ec2Address,
                 tags: self.package_tags_as_ntags(address.tags.clone()),
@@ -217,7 +214,7 @@ impl Ec2Service {
     }
 
     async fn is_resource_idle(&self, instance: &Instance) -> bool {
-        if !self.config.idle_rules.is_empty() {
+        if self.config.idle_rules.is_some() {
             !self
                 .cw_client
                 .filter_instance(&instance.instance_id.as_ref().unwrap())
@@ -320,7 +317,7 @@ impl Ec2Service {
     }
 
     async fn delete_resource(&self, resource: &Resource) -> Result<()> {
-        debug!("Deleting the resource: {:?}", resource.id);
+        debug!(resource = resource.id.as_str(), "Deleting");
 
         match resource.resource_type {
             ResourceType::Ec2Instance => {
@@ -353,7 +350,7 @@ impl Ec2Service {
     async fn stop_resource(&self, resource: &Resource) -> Result<()> {
         match resource.resource_type {
             ResourceType::Ec2Instance => {
-                debug!("Stopping Resource: {:?}", resource.id);
+                debug!(resource = resource.id.as_str(), "Stopping");
 
                 if !self.dry_run {
                     self.client
@@ -567,7 +564,7 @@ mod tests {
             required_tags: None,
             allowed_instance_types: vec![],
             ignore: vec![],
-            idle_rules: vec![],
+            idle_rules: None,
             termination_protection: TerminationProtection { ignore: true },
             security_groups: SecurityGroups::default(),
             eni: Eni::default(),
@@ -582,14 +579,22 @@ mod tests {
                 MockCredentialsProvider,
                 Default::default(),
             ),
-            cw_client: CwClient {
+            cw_client: Arc::new(Box::new(CwClient {
                 client: CloudWatchClient::new_with(
                     MockRequestDispatcher::default(),
                     MockCredentialsProvider,
                     Default::default(),
                 ),
-                idle_rules: ec2_config.idle_rules.clone(),
-            },
+                ec2_idle_rules: ec2_config.idle_rules.clone(),
+                ebs_idle_rules: None,
+                elb_alb_idle_rules: None,
+                elb_nlb_idle_rules: None,
+                rds_idle_rules: None,
+                aurora_idle_rules: None,
+                redshift_idle_rules: None,
+                emr_idle_rules: None,
+                es_idle_rules: None,
+            })),
             config: ec2_config,
             region: Region::UsEast1,
             dry_run: true,

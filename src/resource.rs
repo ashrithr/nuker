@@ -13,6 +13,7 @@ pub const GLUE_TYPE: &str = "glue";
 pub const SAGEMAKER_TYPE: &str = "sagemaker";
 pub const REDSHIFT_TYPE: &str = "redshift";
 pub const ES_TYPE: &str = "es";
+pub const ELB_TYPE: &str = "elb";
 
 #[derive(Display, Debug, Clone)]
 pub enum ResourceType {
@@ -29,6 +30,8 @@ pub enum ResourceType {
     GlueDevEndpoint,
     SagemakerNotebook,
     EsDomain,
+    ElbAlb,
+    ElbNlb,
 }
 
 impl ResourceType {
@@ -46,6 +49,8 @@ impl ResourceType {
             ResourceType::GlueDevEndpoint => GLUE_TYPE,
             ResourceType::SagemakerNotebook => SAGEMAKER_TYPE,
             ResourceType::EsDomain => ES_TYPE,
+            ResourceType::ElbAlb => ELB_TYPE,
+            ResourceType::ElbNlb => ELB_TYPE,
         }
     }
 
@@ -155,6 +160,13 @@ impl ResourceType {
             _ => false,
         }
     }
+
+    pub fn is_elb(&self) -> bool {
+        match *self {
+            ResourceType::ElbAlb | ResourceType::ElbNlb => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -189,6 +201,7 @@ impl EnforcementState {
 #[derive(Debug, Clone)]
 pub struct Resource {
     pub id: String,
+    pub arn: Option<String>,
     pub resource_type: ResourceType,
     pub region: Region,
     pub tags: Option<Vec<NTag>>,

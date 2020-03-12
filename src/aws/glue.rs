@@ -128,6 +128,7 @@ impl GlueService {
 
             resources.push(Resource {
                 id: endpoint_id,
+                arn: None,
                 region: self.region.clone(),
                 resource_type: ResourceType::GlueDevEndpoint,
                 tags: Some(ntags),
@@ -193,7 +194,7 @@ impl GlueService {
     }
 
     async fn delete_endpoint(&self, endpoint_name: &str) -> Result<()> {
-        debug!("Deleting Glue DevEndpoint - {}", endpoint_name);
+        debug!(resource = endpoint_name, "Deleting");
 
         if !self.dry_run {
             self.client

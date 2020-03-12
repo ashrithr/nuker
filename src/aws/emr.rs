@@ -12,12 +12,13 @@ use rusoto_emr::{
     ClusterSummary, Emr, EmrClient, ListClustersInput, ListInstancesInput,
     SetTerminationProtectionInput, TerminateJobFlowsInput,
 };
+use std::sync::Arc;
 use tracing::{debug, trace};
 
 #[derive(Clone)]
 pub struct EmrService {
     pub client: EmrClient,
-    pub cw_client: CwClient,
+    pub cw_client: Arc<Box<CwClient>>,
     pub ec2_client: Option<Ec2Client>,
     pub config: EmrConfig,
     pub region: Region,
@@ -29,6 +30,7 @@ impl EmrService {
         profile_name: Option<String>,
         region: Region,
         config: EmrConfig,
+        cw_client: Arc<Box<CwClient>>,
         dry_run: bool,
     ) -> Result<Self> {
         if let Some(profile) = &profile_name {
@@ -37,11 +39,7 @@ impl EmrService {
 
             Ok(EmrService {
                 client: EmrClient::new_with(HttpClient::new()?, pp.clone(), region.clone()),
-                cw_client: CwClient::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.clone().idle_rules,
-                )?,
+                cw_client,
                 ec2_client: if config.security_groups.enabled {
                     Some(Ec2Client::new_with(HttpClient::new()?, pp, region.clone()))
                 } else {
@@ -54,11 +52,7 @@ impl EmrService {
         } else {
             Ok(EmrService {
                 client: EmrClient::new(region.clone()),
-                cw_client: CwClient::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.clone().idle_rules,
-                )?,
+                cw_client,
                 ec2_client: if config.security_groups.enabled {
                     Some(Ec2Client::new(region.clone()))
                 } else {
@@ -121,6 +115,7 @@ impl EmrService {
 
             resources.push(Resource {
                 id: cluster_id,
+                arn: cluster.cluster_arn,
                 region: self.region.clone(),
                 resource_type: ResourceType::EmrCluster,
                 tags: None,
@@ -155,7 +150,7 @@ impl EmrService {
     }
 
     async fn is_resource_idle(&self, cluster: &ClusterSummary) -> bool {
-        if !self.config.idle_rules.is_empty() {
+        if self.config.idle_rules.is_some() {
             !self
                 .cw_client
                 .filter_emr_cluster(&cluster.id.as_ref().unwrap())
@@ -283,8 +278,6 @@ impl EmrService {
     }
 
     async fn terminate_resources(&self, cluster_ids: &Vec<String>) -> Result<()> {
-        debug!("Terminating the clusters: {:?}", cluster_ids);
-
         if self.config.termination_protection.ignore {
             self.disable_termination_protection(cluster_ids.to_owned())
                 .await?;
@@ -361,11 +354,13 @@ impl NukerService for EmrService {
     }
 
     async fn stop(&self, resource: &Resource) -> Result<()> {
+        debug!(resource = resource.id.as_str(), "Deleting");
         self.terminate_resources(vec![resource.id.to_owned()].as_ref())
             .await
     }
 
     async fn delete(&self, resource: &Resource) -> Result<()> {
+        debug!(resource = resource.id.as_str(), "Deleting");
         self.terminate_resources(vec![resource.id.to_owned()].as_ref())
             .await
     }

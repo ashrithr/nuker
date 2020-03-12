@@ -110,6 +110,51 @@ older_than = "30 days"
     duration = "1 day"
     granularity = "1 hour"
 
+[elb]
+# Specifies whether ELB enforcement is enabled or not
+enabled = true
+# State to enforce. Possible states are 'Deleted'
+target_state = "Deleted"
+# The following load balancers will be ignored from rules enforcement
+ignore = []
+
+    # Defines required tags on each Load Balancer.
+    # [[elb.required_tags]]
+    # name = "Name"
+    # pattern = '^(elb)-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+    # [[elb.required_tags]]
+    # name = "Owner:Name"
+
+    # [[elb.required_tags]]
+    # name = "Owner:Email"
+    # pattern = '^(.*)@(.*).com$'
+
+    # [[elb.required_tags]]
+    # name = "Purpose"
+
+    # [[elb.required_tags]]
+    # name = "Environment"
+
+    # Application Load Balancer Idle Rules
+    # Only supports dimention metrics which takes 'LoadBalancer'
+    [[elb.alb_idle_rules]]
+    namespace = "AWS/ApplicationELB"
+    metric = "RequestCount"
+    minimum = 1
+    duration = "1 day"
+    granularity = "1 hour"
+
+    # Network Load Balancer Idle Rules
+    # Only supports dimention metrics which takes 'LoadBalancer'
+    [[elb.nlb_idle_rules]]
+    namespace = "AWS/NetworkELB"
+    metric = "ProcessedBytes"
+    minimum = 1024
+    duration = "1 day"
+    granularity = "1 hour"
+
+
 [rds]
 # Specifies whether RDS enforcement is enabled or not
 enabled = true

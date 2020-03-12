@@ -9,14 +9,15 @@ use chrono::{DateTime, Utc};
 use rusoto_core::{credential::ProfileProvider, HttpClient, Region};
 use rusoto_ec2::{
     DeleteSnapshotRequest, DeleteVolumeRequest, DescribeSnapshotsRequest, DescribeVolumesRequest,
-    Ec2, Ec2Client, Filter, Snapshot, Tag, Volume,
+    DetachVolumeRequest, Ec2, Ec2Client, Filter, Snapshot, Tag, Volume,
 };
+use std::sync::Arc;
 use tracing::{debug, trace};
 
 #[derive(Clone)]
 pub struct EbsService {
     pub client: Ec2Client,
-    pub cw_client: CwClient,
+    pub cw_client: Arc<Box<CwClient>>,
     pub config: EbsConfig,
     pub region: Region,
     pub dry_run: bool,
@@ -27,6 +28,7 @@ impl EbsService {
         profile_name: Option<String>,
         region: Region,
         config: EbsConfig,
+        cw_client: Arc<Box<CwClient>>,
         dry_run: bool,
     ) -> Result<Self> {
         if let Some(profile) = &profile_name {
@@ -35,11 +37,7 @@ impl EbsService {
 
             Ok(EbsService {
                 client: Ec2Client::new_with(HttpClient::new()?, pp, region.clone()),
-                cw_client: CwClient::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.clone().idle_rules,
-                )?,
+                cw_client,
                 config,
                 region,
                 dry_run,
@@ -47,11 +45,7 @@ impl EbsService {
         } else {
             Ok(EbsService {
                 client: Ec2Client::new(region.clone()),
-                cw_client: CwClient::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.clone().idle_rules,
-                )?,
+                cw_client,
                 config,
                 region,
                 dry_run,
@@ -84,12 +78,7 @@ impl EbsService {
                         "Resource is idle (available)"
                     );
                     EnforcementState::from_target_state(&self.config.target_state)
-                } else if self.is_resource_idle(&volume).await
-                    && volume.state == Some("available".to_string())
-                {
-                    // TODO: identify non-root volumes
-                    // TODO: Detach the volume before attempting to delete it, remove the above
-                    // condition
+                } else if self.is_resource_idle(&volume).await && !self.is_root_volume(&volume) {
                     debug!(resource = volume_id.as_str(), "Resource is idle");
                     EnforcementState::from_target_state(&self.config.target_state)
                 } else {
@@ -99,6 +88,7 @@ impl EbsService {
 
             resources.push(Resource {
                 id: volume_id,
+                arn: None,
                 resource_type: ResourceType::EbsVolume,
                 region: self.region.clone(),
                 tags: self.package_tags_as_ntags(volume.tags.clone()),
@@ -127,6 +117,7 @@ impl EbsService {
 
             resources.push(Resource {
                 id: snap_id,
+                arn: None,
                 resource_type: ResourceType::EbsSnapshot,
                 region: self.region.clone(),
                 tags: self.package_tags_as_ntags(snapshot.tags.clone()),
@@ -150,7 +141,7 @@ impl EbsService {
     }
 
     async fn is_resource_idle(&self, volume: &Volume) -> bool {
-        if !self.config.idle_rules.is_empty() {
+        if self.config.idle_rules.is_some() {
             !self
                 .cw_client
                 .filter_volume(&volume.volume_id.as_ref().unwrap())
@@ -175,6 +166,21 @@ impl EbsService {
                 }
                 Err(_e) => false,
             }
+        } else {
+            false
+        }
+    }
+
+    fn is_root_volume(&self, volume: &Volume) -> bool {
+        let root_attachments = vec!["/dev/sda1", "/dev/xvda"];
+        if let Some(ref attachments) = volume.attachments {
+            attachments.iter().any(|vol_att| {
+                if let Some(ref device) = vol_att.device {
+                    root_attachments.contains(&device.as_str())
+                } else {
+                    false
+                }
+            })
         } else {
             false
         }
@@ -242,13 +248,13 @@ impl EbsService {
         Ok(snapshots)
     }
 
-    async fn delete_volume(&self, volume_id: String) -> Result<()> {
-        debug!("Deleting Volume: {}", volume_id);
+    async fn detach_volume(&self, volume_id: &String) -> Result<()> {
+        debug!("Detaching Volume: {}", volume_id);
 
         if !self.dry_run {
             self.client
-                .delete_volume(DeleteVolumeRequest {
-                    volume_id: volume_id.to_owned(),
+                .detach_volume(DetachVolumeRequest {
+                    volume_id: volume_id.to_string(),
                     ..Default::default()
                 })
                 .await?;
@@ -257,13 +263,30 @@ impl EbsService {
         Ok(())
     }
 
-    async fn delete_snapshot(&self, snapshot_id: String) -> Result<()> {
-        debug!("Deleting snapshot: {}", snapshot_id);
+    async fn delete_volume(&self, resource: &Resource) -> Result<()> {
+        debug!(resource = resource.id.as_str(), "Deleting");
+
+        if !self.dry_run {
+            self.detach_volume(&resource.id).await?;
+
+            self.client
+                .delete_volume(DeleteVolumeRequest {
+                    volume_id: resource.id.to_owned(),
+                    ..Default::default()
+                })
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn delete_snapshot(&self, resource: &Resource) -> Result<()> {
+        debug!(resource = resource.id.as_str(), "Deleting");
 
         if !self.dry_run {
             self.client
                 .delete_snapshot(DeleteSnapshotRequest {
-                    snapshot_id,
+                    snapshot_id: resource.id.to_owned(),
                     ..Default::default()
                 })
                 .await?;
@@ -294,9 +317,9 @@ impl NukerService for EbsService {
 
     async fn delete(&self, resource: &Resource) -> Result<()> {
         if resource.resource_type.is_volume() {
-            self.delete_volume(resource.id.to_owned()).await?;
+            self.delete_volume(resource).await?;
         } else if resource.resource_type.is_snapshot() {
-            self.delete_snapshot(resource.id.to_owned()).await?;
+            self.delete_snapshot(resource).await?;
         }
 
         Ok(())

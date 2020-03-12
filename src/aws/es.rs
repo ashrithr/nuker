@@ -11,12 +11,13 @@ use rusoto_es::{
     DeleteElasticsearchDomainRequest, DescribeElasticsearchDomainRequest, DomainInfo,
     ElasticsearchDomainStatus, Es, EsClient, ListTagsRequest, Tag,
 };
+use std::sync::Arc;
 use tracing::{debug, trace};
 
 #[derive(Clone)]
 pub struct EsService {
     pub client: EsClient,
-    pub cw_client: CwClient,
+    pub cw_client: Arc<Box<CwClient>>,
     pub config: EsConfig,
     pub region: Region,
     pub dry_run: bool,
@@ -27,6 +28,7 @@ impl EsService {
         profile_name: Option<String>,
         region: Region,
         config: EsConfig,
+        cw_client: Arc<Box<CwClient>>,
         dry_run: bool,
     ) -> Result<Self> {
         if let Some(profile) = &profile_name {
@@ -35,11 +37,7 @@ impl EsService {
 
             Ok(EsService {
                 client: EsClient::new_with(HttpClient::new()?, pp.clone(), region.clone()),
-                cw_client: CwClient::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.clone().idle_rules,
-                )?,
+                cw_client,
                 config,
                 region,
                 dry_run,
@@ -47,11 +45,7 @@ impl EsService {
         } else {
             Ok(EsService {
                 client: EsClient::new(region.clone()),
-                cw_client: CwClient::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.clone().idle_rules,
-                )?,
+                cw_client,
                 config,
                 region,
                 dry_run,
@@ -67,6 +61,7 @@ impl EsService {
 
         for domain in domains {
             let domain_name = domain.domain_name.to_owned();
+            let domain_arn = domain.arn.to_owned();
             let mut domain_state: Option<String> = None;
 
             if let Some(created) = domain.created {
@@ -110,9 +105,10 @@ impl EsService {
 
             resources.push(Resource {
                 id: domain_name,
+                arn: Some(domain_arn.clone()),
                 region: self.region.clone(),
                 resource_type: ResourceType::EsDomain,
-                tags: self.package_tags_as_ntags(self.list_tags(domain.arn.clone()).await?),
+                tags: self.package_tags_as_ntags(self.list_tags(domain_arn.clone()).await?),
                 state: domain_state,
                 enforcement_state,
             })
@@ -147,7 +143,7 @@ impl EsService {
     }
 
     async fn is_resource_idle(&self, domain: &ElasticsearchDomainStatus) -> bool {
-        if !self.config.idle_rules.is_empty() {
+        if self.config.idle_rules.is_some() {
             !self
                 .cw_client
                 .filter_es_domain(&domain.domain_name)
@@ -213,7 +209,7 @@ impl EsService {
     }
 
     async fn terminate_resource(&self, domain_name: String) -> Result<()> {
-        debug!("Terminating resource: {}", domain_name);
+        debug!(resource = domain_name.as_str(), "Deleting");
 
         if !self.dry_run {
             self.client

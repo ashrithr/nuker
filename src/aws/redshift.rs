@@ -10,12 +10,13 @@ use rusoto_credential::ProfileProvider;
 use rusoto_redshift::{
     Cluster, DeleteClusterMessage, DescribeClustersMessage, Redshift, RedshiftClient, Tag,
 };
+use std::sync::Arc;
 use tracing::{debug, trace};
 
 #[derive(Clone)]
 pub struct RedshiftService {
     pub client: RedshiftClient,
-    pub cw_client: CwClient,
+    pub cw_client: Arc<Box<CwClient>>,
     pub config: RedshiftConfig,
     pub region: Region,
     pub dry_run: bool,
@@ -26,6 +27,7 @@ impl RedshiftService {
         profile_name: Option<String>,
         region: Region,
         config: RedshiftConfig,
+        cw_client: Arc<Box<CwClient>>,
         dry_run: bool,
     ) -> Result<Self> {
         if let Some(profile) = &profile_name {
@@ -34,11 +36,7 @@ impl RedshiftService {
 
             Ok(RedshiftService {
                 client: RedshiftClient::new_with(HttpClient::new()?, pp, region.clone()),
-                cw_client: CwClient::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.clone().idle_rules,
-                )?,
+                cw_client,
                 config,
                 region,
                 dry_run,
@@ -46,11 +44,7 @@ impl RedshiftService {
         } else {
             Ok(RedshiftService {
                 client: RedshiftClient::new(region.clone()),
-                cw_client: CwClient::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.clone().idle_rules,
-                )?,
+                cw_client,
                 config,
                 region,
                 dry_run,
@@ -104,6 +98,7 @@ impl RedshiftService {
 
             resources.push(Resource {
                 id: cluster_id,
+                arn: None,
                 region: self.region.clone(),
                 resource_type: ResourceType::Redshift,
                 tags: self.package_tags_as_ntags(cluster.tags.clone()),
@@ -135,7 +130,7 @@ impl RedshiftService {
     }
 
     async fn is_resource_idle(&self, cluster: &Cluster) -> bool {
-        if !self.config.idle_rules.is_empty() {
+        if self.config.idle_rules.is_some() {
             !self
                 .cw_client
                 .filter_rs_cluster(&cluster.cluster_identifier.as_ref().unwrap())
@@ -191,6 +186,8 @@ impl RedshiftService {
     }
 
     async fn terminate_resource(&self, cluster_id: String) -> Result<()> {
+        debug!(resource = cluster_id.as_str(), "Deleting");
+
         if !self.dry_run {
             self.client
                 .delete_cluster(DeleteClusterMessage {
@@ -207,6 +204,8 @@ impl RedshiftService {
     // to delete the cluster by taking a snapshot of the cluster and then restore
     // when needed.
     async fn stop_resource(&self, cluster_id: String) -> Result<()> {
+        debug!(resource = cluster_id.as_str(), "Deleting");
+
         if !self.dry_run {
             self.client
                 .delete_cluster(DeleteClusterMessage {

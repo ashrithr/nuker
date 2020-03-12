@@ -28,6 +28,7 @@ pub struct Config {
     pub usage_days: i64,
     pub ec2: Ec2Config,
     pub ebs: EbsConfig,
+    pub elb: ElbConfig,
     pub rds: RdsConfig,
     pub aurora: AuroraConfig,
     pub s3: S3Config,
@@ -101,7 +102,7 @@ pub struct Ec2Config {
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
-    pub idle_rules: Vec<IdleRules>,
+    pub idle_rules: Option<Vec<IdleRules>>,
     pub termination_protection: TerminationProtection,
     pub security_groups: SecurityGroups,
     pub eni: Eni,
@@ -113,7 +114,7 @@ pub struct EbsConfig {
     pub enabled: bool,
     pub target_state: TargetState,
     pub ignore: Vec<String>,
-    pub idle_rules: Vec<IdleRules>,
+    pub idle_rules: Option<Vec<IdleRules>>,
     #[serde(with = "humantime_serde")]
     pub older_than: Option<Duration>,
 }
@@ -125,7 +126,7 @@ pub struct EmrConfig {
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
-    pub idle_rules: Vec<IdleRules>,
+    pub idle_rules: Option<Vec<IdleRules>>,
     pub termination_protection: TerminationProtection,
     pub security_groups: SecurityGroups,
 }
@@ -137,7 +138,7 @@ pub struct RdsConfig {
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
-    pub idle_rules: Vec<IdleRules>,
+    pub idle_rules: Option<Vec<IdleRules>>,
     pub termination_protection: TerminationProtection,
 }
 
@@ -148,7 +149,7 @@ pub struct AuroraConfig {
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
-    pub idle_rules: Vec<IdleRules>,
+    pub idle_rules: Option<Vec<IdleRules>>,
     pub termination_protection: TerminationProtection,
 }
 
@@ -159,7 +160,7 @@ pub struct RedshiftConfig {
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
-    pub idle_rules: Vec<IdleRules>,
+    pub idle_rules: Option<Vec<IdleRules>>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -202,7 +203,17 @@ pub struct EsConfig {
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
-    pub idle_rules: Vec<IdleRules>,
+    pub idle_rules: Option<Vec<IdleRules>>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ElbConfig {
+    pub enabled: bool,
+    pub target_state: TargetState,
+    pub required_tags: Option<Vec<RequiredTags>>,
+    pub ignore: Vec<String>,
+    pub alb_idle_rules: Option<Vec<IdleRules>>,
+    pub nlb_idle_rules: Option<Vec<IdleRules>>,
 }
 
 /// Parse the command line arguments for nuker executable

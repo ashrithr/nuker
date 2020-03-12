@@ -1,6 +1,6 @@
 [package]
 name = "nuker"
-version = "0.8.3"
+version = "0.8.4"
 authors = ["Ashrith Mekala <ashrith@cloudwick.com>"]
 edition = "2018"
 
@@ -19,7 +19,8 @@ rusoto_emr = { version = "0.43.0-beta.1", default_features = false, features = [
 rusoto_glue = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
 rusoto_sts = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
 rusoto_sagemaker = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_es = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] } 
+rusoto_es = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
+rusoto_elbv2 = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
 # Core
 async-trait = "0.1"
 tokio = { version = "0.2.13", features = ["macros", "rt-threaded"] }
