@@ -1,5 +1,4 @@
-use nuker::config;
-use nuker::nuke;
+use nuker::{config, nuke};
 use tracing::{error, info, trace};
 use tracing_futures::Instrument;
 
@@ -17,7 +16,7 @@ async fn main() {
 
     trace!("{:?}", config);
 
-    let nuker = nuke::Nuker::new(config, args);
+    let mut nuker = nuke::Nuker::new(config, args);
 
     match tokio::try_join!(nuker.run().instrument(tracing::trace_span!("nuke"))) {
         Ok(_) => {}

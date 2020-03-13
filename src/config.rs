@@ -1,8 +1,9 @@
 //! Configuration Parser
+use crate::service::Service;
 use clap::{App, Arg};
 use regex::Regex;
 use serde::Deserialize;
-use std::{fs::File, io::Read, time::Duration};
+use std::{fs::File, io::Read, str::FromStr, time::Duration};
 use tracing::warn;
 
 const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
@@ -13,6 +14,8 @@ pub struct Args {
     pub config: String,
     pub profile: Option<String>,
     pub regions: Vec<String>,
+    pub targets: Option<Vec<Service>>,
+    pub exclude: Option<Vec<Service>>,
     pub dry_run: bool,
     pub force: bool,
     pub verbose: u64,
@@ -24,8 +27,6 @@ pub struct Args {
 /// This struct is built from reading the configuration file
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub print_usage: bool,
-    pub usage_days: i64,
     pub ec2: Ec2Config,
     pub ebs: EbsConfig,
     pub elb: ElbConfig,
@@ -241,6 +242,29 @@ pub fn parse_args() -> Args {
                 .number_of_values(1),
         )
         .arg(
+            Arg::with_name("target")
+                .long("target")
+                .help(
+                    "Services to include from rules enforcement. This will take precedence \
+                over the configuration file.",
+                )
+                .takes_value(true)
+                .multiple(true)
+                .number_of_values(1),
+        )
+        .arg(
+            Arg::with_name("exclude")
+                .long("exclude")
+                .help(
+                    "Services to exclude from rules enforcement. This will take precedence \
+                over the configuration file.",
+                )
+                .takes_value(true)
+                .multiple(true)
+                .number_of_values(1)
+                .conflicts_with("target"),
+        )
+        .arg(
             Arg::with_name("profile")
                 .long("profile")
                 .help(
@@ -255,7 +279,7 @@ pub fn parse_args() -> Args {
         .arg(Arg::with_name("no-dry-run").long("no-dry-run").help(
             "Disables the dry run behavior, which just lists the resources that are \
                     being cleaned but not actually delete them. Enabling this option will disable \
-                    dry run behaviour and deletes the resources.",
+                    dry run behavior and deletes the resources.",
         ))
         .arg(
             Arg::with_name("force")
@@ -294,10 +318,34 @@ pub fn parse_args() -> Args {
         vec![]
     };
 
+    let targets: Option<Vec<Service>> = if args.is_present("target") {
+        Some(
+            args.values_of("target")
+                .unwrap()
+                .map(|t| Service::from_str(t).unwrap())
+                .collect(),
+        )
+    } else {
+        None
+    };
+
+    let exclude: Option<Vec<Service>> = if args.is_present("exclude") {
+        Some(
+            args.values_of("exclude")
+                .unwrap()
+                .map(|e| Service::from_str(e).unwrap())
+                .collect(),
+        )
+    } else {
+        None
+    };
+
     Args {
         config: args.value_of("config-file").unwrap().to_string(),
         regions: regions.iter().map(|r| r.to_string()).collect(),
         profile: args.value_of("profile").map(|s| s.to_owned()),
+        targets,
+        exclude,
         dry_run,
         force,
         verbose,

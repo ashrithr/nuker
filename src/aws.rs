@@ -14,21 +14,22 @@ mod sagemaker;
 mod sts;
 mod util;
 
-use crate::aws::cloudwatch::CwClient;
 use crate::{
     aws::{
-        aurora::AuroraService, ebs::EbsService, ec2::Ec2Service, elb::ElbService, emr::EmrService,
-        es::EsService, glue::GlueService, rds::RdsService, redshift::RedshiftService,
-        s3::S3Service, sagemaker::SagemakerService,
+        aurora::AuroraService, cloudwatch::CwClient, ebs::EbsService, ec2::Ec2Service,
+        elb::ElbService, emr::EmrService, es::EsService, glue::GlueService, rds::RdsService,
+        redshift::RedshiftService, s3::S3Service, sagemaker::SagemakerService,
     },
     config::Config,
     error::Error as AwsError,
-    resource::{self, Resource},
-    service::NukerService,
+    resource::Resource,
+    service::{self, NukerService},
 };
 use rusoto_core::Region;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 use tracing::{error, trace};
 use tracing_futures::Instrument;
 
@@ -228,33 +229,27 @@ impl AwsNuker {
             let region = self.region.name().to_string();
 
             if ref_client.is::<Ec2Service>() {
-                scan_resources!(resource::EC2_TYPE, resources, handles, service, region);
+                scan_resources!(service::EC2_TYPE, resources, handles, service, region);
             } else if ref_client.is::<EbsService>() {
-                scan_resources!(resource::EBS_TYPE, resources, handles, service, region);
+                scan_resources!(service::EBS_TYPE, resources, handles, service, region);
             } else if ref_client.is::<RdsService>() {
-                scan_resources!(resource::RDS_TYPE, resources, handles, service, region);
+                scan_resources!(service::RDS_TYPE, resources, handles, service, region);
             } else if ref_client.is::<AuroraService>() {
-                scan_resources!(resource::AURORA_TYPE, resources, handles, service, region);
+                scan_resources!(service::AURORA_TYPE, resources, handles, service, region);
             } else if ref_client.is::<RedshiftService>() {
-                scan_resources!(resource::REDSHIFT_TYPE, resources, handles, service, region);
+                scan_resources!(service::REDSHIFT_TYPE, resources, handles, service, region);
             } else if ref_client.is::<EmrService>() {
-                scan_resources!(resource::EMR_TYPE, resources, handles, service, region);
+                scan_resources!(service::EMR_TYPE, resources, handles, service, region);
             } else if ref_client.is::<GlueService>() {
-                scan_resources!(resource::GLUE_TYPE, resources, handles, service, region);
+                scan_resources!(service::GLUE_TYPE, resources, handles, service, region);
             } else if ref_client.is::<SagemakerService>() {
-                scan_resources!(
-                    resource::SAGEMAKER_TYPE,
-                    resources,
-                    handles,
-                    service,
-                    region
-                );
+                scan_resources!(service::SAGEMAKER_TYPE, resources, handles, service, region);
             } else if ref_client.is::<S3Service>() {
-                scan_resources!(resource::S3_TYPE, resources, handles, service, region);
+                scan_resources!(service::S3_TYPE, resources, handles, service, region);
             } else if ref_client.is::<EsService>() {
-                scan_resources!(resource::ES_TYPE, resources, handles, service, region);
+                scan_resources!(service::ES_TYPE, resources, handles, service, region);
             } else if ref_client.is::<ElbService>() {
-                scan_resources!(resource::ELB_TYPE, resources, handles, service, region);
+                scan_resources!(service::ELB_TYPE, resources, handles, service, region);
             }
         }
 
@@ -286,33 +281,27 @@ impl AwsNuker {
             let region = self.region.name().to_string();
 
             if ref_client.is::<Ec2Service>() {
-                cleanup_resources!(resource::EC2_TYPE, resources, handles, service, region);
+                cleanup_resources!(service::EC2_TYPE, resources, handles, service, region);
             } else if ref_client.is::<EbsService>() {
-                cleanup_resources!(resource::EBS_TYPE, resources, handles, service, region);
+                cleanup_resources!(service::EBS_TYPE, resources, handles, service, region);
             } else if ref_client.is::<RdsService>() {
-                cleanup_resources!(resource::RDS_TYPE, resources, handles, service, region);
+                cleanup_resources!(service::RDS_TYPE, resources, handles, service, region);
             } else if ref_client.is::<AuroraService>() {
-                cleanup_resources!(resource::AURORA_TYPE, resources, handles, service, region);
+                cleanup_resources!(service::AURORA_TYPE, resources, handles, service, region);
             } else if ref_client.is::<RedshiftService>() {
-                cleanup_resources!(resource::REDSHIFT_TYPE, resources, handles, service, region);
+                cleanup_resources!(service::REDSHIFT_TYPE, resources, handles, service, region);
             } else if ref_client.is::<EmrService>() {
-                cleanup_resources!(resource::EMR_TYPE, resources, handles, service, region);
+                cleanup_resources!(service::EMR_TYPE, resources, handles, service, region);
             } else if ref_client.is::<GlueService>() {
-                cleanup_resources!(resource::GLUE_TYPE, resources, handles, service, region);
+                cleanup_resources!(service::GLUE_TYPE, resources, handles, service, region);
             } else if ref_client.is::<SagemakerService>() {
-                cleanup_resources!(
-                    resource::SAGEMAKER_TYPE,
-                    resources,
-                    handles,
-                    service,
-                    region
-                );
+                cleanup_resources!(service::SAGEMAKER_TYPE, resources, handles, service, region);
             } else if ref_client.is::<S3Service>() {
-                cleanup_resources!(resource::S3_TYPE, resources, handles, service, region);
+                cleanup_resources!(service::S3_TYPE, resources, handles, service, region);
             } else if ref_client.is::<EsService>() {
-                cleanup_resources!(resource::ES_TYPE, resources, handles, service, region);
+                cleanup_resources!(service::ES_TYPE, resources, handles, service, region);
             } else if ref_client.is::<ElbService>() {
-                cleanup_resources!(resource::ELB_TYPE, resources, handles, service, region);
+                cleanup_resources!(service::ELB_TYPE, resources, handles, service, region);
             }
         }
 

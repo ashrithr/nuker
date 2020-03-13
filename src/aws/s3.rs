@@ -418,6 +418,8 @@ impl S3Service {
 #[async_trait]
 impl NukerService for S3Service {
     async fn scan(&self) -> Result<Vec<Resource>> {
+        trace!("Init S3 resource scanner");
+
         let buckets = self.get_buckets().await?;
         Ok(self.package_buckets_as_resources(buckets).await)
     }

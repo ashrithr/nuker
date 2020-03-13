@@ -1,7 +1,3 @@
-# Whether to print the AWS Usage Report by account and service breakdown
-print_usage = false
-usage_days = 1
-
 [ec2]
 # Specifies whether EC2 enforcement is enabled or not
 enabled = true
@@ -119,22 +115,22 @@ target_state = "Deleted"
 ignore = []
 
     # Defines required tags on each Load Balancer.
-    # [[elb.required_tags]]
-    # name = "Name"
-    # pattern = '^(elb)-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+    [[elb.required_tags]]
+    name = "Name"
+    pattern = '^(elb)-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
 
-    # [[elb.required_tags]]
-    # name = "Owner:Name"
+    [[elb.required_tags]]
+    name = "Owner:Name"
 
-    # [[elb.required_tags]]
-    # name = "Owner:Email"
-    # pattern = '^(.*)@(.*).com$'
+    [[elb.required_tags]]
+    name = "Owner:Email"
+    pattern = '^(.*)@(.*).com$'
 
-    # [[elb.required_tags]]
-    # name = "Purpose"
+    [[elb.required_tags]]
+    name = "Purpose"
 
-    # [[elb.required_tags]]
-    # name = "Environment"
+    [[elb.required_tags]]
+    name = "Environment"
 
     # Application Load Balancer Idle Rules
     # Only supports dimention metrics which takes 'LoadBalancer'
@@ -323,7 +319,7 @@ ignore = []
     granularity = "1 hour"
 
 [s3]
-enabled = false
+enabled = true
 target_state = "Deleted"
 check_dns_compliant_naming = true
 required_naming_prefix = '^cw-(us-[a-z]*-[0-9]{1})-([0-9]{12})-(.*)$'

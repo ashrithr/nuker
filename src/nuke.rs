@@ -5,10 +5,8 @@ use crate::{
 };
 use colored::*;
 use rusoto_core::Region;
-use std::io;
-use std::process::exit;
-use std::str::FromStr;
-use tracing::debug;
+use std::{io, process::exit, str::FromStr};
+use tracing::{debug, trace};
 use tracing_futures::Instrument;
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
@@ -41,10 +39,11 @@ pub struct Nuker {
 
 impl Nuker {
     pub fn new(config: Config, args: Args) -> Self {
+        trace!("Args: {:?}", args);
         Nuker { args, config }
     }
 
-    pub async fn run(&self) -> Result<()> {
+    pub async fn run(&mut self) -> Result<()> {
         let mut clients: Vec<AwsNuker> = Vec::new();
         let mut handles = Vec::new();
 
@@ -60,6 +59,9 @@ impl Nuker {
                 exit(1);
             }
         }
+
+        // Merge services enabled from Cli and Config
+        self.enable_service_types();
 
         if self.args.regions.is_empty() {
             debug!("Scanning for resources across all regions - {:?}", REGIONS);
@@ -113,5 +115,37 @@ impl Nuker {
             Err(_) => {}
         }
         input.trim().to_string()
+    }
+
+    fn enable_service_types(&mut self) {
+        use crate::service::Service;
+
+        let excludes: Vec<Service> = if self.args.targets.is_some() {
+            Service::iter()
+                .filter(|s| !self.args.targets.as_ref().unwrap().contains(&s))
+                .collect()
+        } else if self.args.exclude.is_some() {
+            self.args.exclude.as_ref().unwrap().clone()
+        } else {
+            vec![]
+        };
+
+        trace!(services = ?excludes, "Excluding services");
+
+        for exclude in excludes {
+            match exclude {
+                Service::Aurora => self.config.aurora.enabled = false,
+                Service::Ebs => self.config.ebs.enabled = false,
+                Service::Ec2 => self.config.ec2.enabled = false,
+                Service::Elb => self.config.elb.enabled = false,
+                Service::Emr => self.config.emr.enabled = false,
+                Service::Es => self.config.es.enabled = false,
+                Service::Glue => self.config.glue.enabled = false,
+                Service::Rds => self.config.rds.enabled = false,
+                Service::Redshift => self.config.redshift.enabled = false,
+                Service::S3 => self.config.s3.enabled = false,
+                Service::Sagemaker => self.config.sagemaker.enabled = false,
+            }
+        }
     }
 }

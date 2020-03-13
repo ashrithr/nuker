@@ -1,19 +1,7 @@
-use crate::config::TargetState;
+use crate::{config::TargetState, service::*};
 use colored::*;
 use rusoto_core::Region;
 use std::fmt;
-
-pub const EC2_TYPE: &str = "ec2";
-pub const EBS_TYPE: &str = "ebs";
-pub const RDS_TYPE: &str = "rds";
-pub const AURORA_TYPE: &str = "aurora";
-pub const S3_TYPE: &str = "s3";
-pub const EMR_TYPE: &str = "emr";
-pub const GLUE_TYPE: &str = "glue";
-pub const SAGEMAKER_TYPE: &str = "sagemaker";
-pub const REDSHIFT_TYPE: &str = "redshift";
-pub const ES_TYPE: &str = "es";
-pub const ELB_TYPE: &str = "elb";
 
 #[derive(Display, Debug, Clone)]
 pub enum ResourceType {
