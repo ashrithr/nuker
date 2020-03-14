@@ -751,7 +751,7 @@ dependencies = [
 
 [[package]]
 name = "nuker"
-version = "0.8.4"
+version = "0.8.6"
 dependencies = [
  "async-trait 0.1.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",

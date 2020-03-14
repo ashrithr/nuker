@@ -325,7 +325,7 @@ check_dns_compliant_naming = true
 required_naming_prefix = '^cw-(us-[a-z]*-[0-9]{1})-([0-9]{12})-(.*)$'
 # Ensure buckets does not allow public access via READ, READ_ACP, WRITE,
 # WRITE_ACP, and via bucket policies
-check_public_accessibility = true
+# check_public_accessibility = true
 ignore = []
 
 [emr]

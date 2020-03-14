@@ -61,18 +61,6 @@ impl S3Service {
         for bucket in buckets {
             let bucket_id = bucket.name.unwrap();
 
-            // Check if the bucket belongs to specified region
-            let bucket_region = self.get_bucket_region(&bucket_id).await;
-            if bucket_region != self.region.name() {
-                trace!(
-                    "Bucket ({}) region ({}) is not part of region being enforced - [{}]",
-                    bucket_id,
-                    bucket_region,
-                    self.region.name()
-                );
-                continue;
-            }
-
             let enforcement_state: EnforcementState = {
                 if self.config.ignore.contains(&bucket_id) {
                     EnforcementState::SkipConfig
@@ -111,26 +99,6 @@ impl S3Service {
         }
 
         resources
-    }
-
-    async fn get_bucket_region(&self, bucket_id: &str) -> String {
-        if let Ok(result) = self
-            .client
-            .get_bucket_location(GetBucketLocationRequest {
-                bucket: bucket_id.to_string(),
-            })
-            .await
-        {
-            return if result.location_constraint.is_some()
-                && !result.location_constraint.as_ref().unwrap().is_empty()
-            {
-                result.location_constraint.unwrap()
-            } else {
-                Region::UsEast1.name().to_string()
-            };
-        }
-
-        Region::UsEast1.name().to_string()
     }
 
     fn resource_prefix_does_not_match(&self, bucket_id: &str) -> bool {
@@ -208,8 +176,37 @@ impl S3Service {
 
     async fn get_buckets(&self) -> Result<Vec<Bucket>> {
         let result = self.client.list_buckets().await?;
+        let mut buckets: Vec<Bucket> = Vec::new();
 
-        Ok(result.buckets.unwrap_or_default())
+        for bucket in result.buckets.unwrap_or_default() {
+            let bucket_loc_res = self
+                .client
+                .get_bucket_location(GetBucketLocationRequest {
+                    bucket: bucket.name.as_ref().unwrap().to_string(),
+                })
+                .await?;
+            let bucket_loc = if !bucket_loc_res
+                .location_constraint
+                .as_ref()
+                .unwrap()
+                .is_empty()
+            {
+                bucket_loc_res
+                    .location_constraint
+                    .as_ref()
+                    .unwrap()
+                    .as_str()
+            } else {
+                Region::UsEast1.name()
+            };
+            let region = self.region.name();
+
+            if bucket_loc == region {
+                buckets.push(bucket);
+            }
+        }
+
+        Ok(buckets)
     }
 
     async fn get_acls_for_bucket(&self, bucket_id: &str) -> Option<Vec<Grant>> {
