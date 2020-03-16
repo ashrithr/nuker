@@ -1,35 +1,35 @@
 [package]
 name = "nuker"
 version = "0.8.7"
-authors = ["Ashrith Mekala <ashrith@cloudwick.com>"]
+authors = ["Ashrith Mekala <ashrith@me.com>"]
 edition = "2018"
 
 [dependencies]
 # AWS SDK
-rusoto_ce = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_cloudwatch = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_core = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_credential = "0.43.0-beta.1"
-rusoto_ec2 = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_iam = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_rds = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_s3 = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_redshift = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_emr = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_glue = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_sts = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_sagemaker = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_es = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_elbv2 = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
-rusoto_autoscaling = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
+rusoto_ce = { version = "0.43.0", default_features = false, features = ["rustls"] }
+rusoto_cloudwatch = { version = "0.43.0", default_features = false, features = ["rustls"] }
+rusoto_core = { version = "0.43.0", default_features = false, features = ["rustls"] }
+rusoto_credential = "0.43.0"
+rusoto_ec2 = { version = "0.43.0", default_features = false, features = ["rustls"] }
+rusoto_iam = { version = "0.43.0", default_features = false, features = ["rustls"] }
+rusoto_rds = { version = "0.43.0", default_features = false, features = ["rustls"] }
+rusoto_s3 = { version = "0.43.0", default_features = false, features = ["rustls"] }
+rusoto_redshift = { version = "0.43.0", default_features = false, features = ["rustls"] }
+rusoto_emr = { version = "0.43.0", default_features = false, features = ["rustls"] }
+rusoto_glue = { version = "0.43.0", default_features = false, features = ["rustls"] }
+rusoto_sts = { version = "0.43.0", default_features = false, features = ["rustls"] }
+rusoto_sagemaker = { version = "0.43.0", default_features = false, features = ["rustls"] }
+rusoto_es = { version = "0.43.0", default_features = false, features = ["rustls"] }
+rusoto_elbv2 = { version = "0.43.0", default_features = false, features = ["rustls"] }
+rusoto_autoscaling = { version = "0.43.0", default_features = false, features = ["rustls"] }
 # Core
 async-trait = "0.1"
 tokio = { version = "0.2.13", features = ["macros", "rt-threaded"] }
 futures = "0.3"
 # Error Handling
 derive_more = "0.99.3"
-failure = "0.1.6"
-failure_derive = "0.1.6"
+failure = "0.1.7"
+failure_derive = "0.1.7"
 # Logging
 chrono = "0.4"
 colored = "1.9"
@@ -50,4 +50,4 @@ dyn-clone = "1.0"
 
 [dev-dependencies]
 env_logger = "0.7.1"
-rusoto_mock = { version = "0.43.0-beta.1", default_features = false, features = ["rustls"] }
+rusoto_mock = { version = "0.43.0", default_features = false, features = ["rustls"] }
