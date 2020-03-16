@@ -106,6 +106,35 @@ older_than = "30 days"
     duration = "1 day"
     granularity = "1 hour"
 
+[asg]
+# Specifies whether to clean up Autosacling groups
+enabled = true
+# State to enforce. Possible state are 'Deleted'
+target_state = "Deleted"
+# The following AutoScaling groups will be ignored from rules enforcement
+ignore = []
+# Clean up empty ASG's. An ASG is considered empty when it doesn't have any EC2
+# instances attached and is not associated with an ELB.
+cleanup_empty = true
+
+    # Defines required tags on each instance.
+    [[asg.required_tags]]
+    name = "Name"
+    pattern = '^rds-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+    [[asg.required_tags]]
+    name = "Owner:Name"
+
+    [[asg.required_tags]]
+    name = "Owner:Email"
+    pattern = '^(.*)@(.*).com$'
+
+    [[asg.required_tags]]
+    name = "Purpose"
+
+    [[asg.required_tags]]
+    name = "Environment"
+
 [elb]
 # Specifies whether ELB enforcement is enabled or not
 enabled = true

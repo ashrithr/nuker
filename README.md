@@ -20,6 +20,9 @@ Cleans up AWS resources based on configurable Rules. This project is a WIP.
 * ELB
     - Clean up based on Tags
     - Clean up Idle Load Balancers based on CloudWatch metrics
+* ASG
+    - Clean up based on tags
+    - Clean up empty ASG (if no instances and load balancers are attached)
 * RDS
     - Clean up based on Tags
     - Clean up based on Allowed Instance Types
@@ -84,7 +87,7 @@ To get help:
 
 ## Docker
 
-nuker can be built using Docker:
+nuker can be built and run using Docker:
 
 ```
 docker build -t nuker .
@@ -103,6 +106,8 @@ ashrithr/nuker:latest \
 --config /home/nuker/config.toml
 ```
 
+> NOTE: Add `--no-dry-run` flag to actually clean up the resources
+
 2. Run nuker by mounting aws credentials directory to Docker container
 
 ```
@@ -113,3 +118,5 @@ ashrithr/nuker:latest \
 --profile default \
 --config /home/nuker/config.toml
 ```
+
+> NOTE: Add `--no-dry-run` flag to actually clean up the resources

@@ -20,6 +20,7 @@ pub enum ResourceType {
     EsDomain,
     ElbAlb,
     ElbNlb,
+    Asg,
 }
 
 impl ResourceType {
@@ -39,6 +40,7 @@ impl ResourceType {
             ResourceType::EsDomain => ES_TYPE,
             ResourceType::ElbAlb => ELB_TYPE,
             ResourceType::ElbNlb => ELB_TYPE,
+            ResourceType::Asg => ASG_TYPE,
         }
     }
 
@@ -152,6 +154,13 @@ impl ResourceType {
     pub fn is_elb(&self) -> bool {
         match *self {
             ResourceType::ElbAlb | ResourceType::ElbNlb => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_asg(&self) -> bool {
+        match *self {
+            ResourceType::Asg => true,
             _ => false,
         }
     }
