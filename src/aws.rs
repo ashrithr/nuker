@@ -1,5 +1,6 @@
 mod aurora;
 // mod ce;
+mod asg;
 mod cloudwatch;
 mod ebs;
 mod ec2;
@@ -16,9 +17,9 @@ mod util;
 
 use crate::{
     aws::{
-        aurora::AuroraService, cloudwatch::CwClient, ebs::EbsService, ec2::Ec2Service,
-        elb::ElbService, emr::EmrService, es::EsService, glue::GlueService, rds::RdsService,
-        redshift::RedshiftService, s3::S3Service, sagemaker::SagemakerService,
+        asg::AsgService, aurora::AuroraService, cloudwatch::CwClient, ebs::EbsService,
+        ec2::Ec2Service, elb::ElbService, emr::EmrService, es::EsService, glue::GlueService,
+        rds::RdsService, redshift::RedshiftService, s3::S3Service, sagemaker::SagemakerService,
     },
     config::Config,
     error::Error as AwsError,
@@ -210,6 +211,15 @@ impl AwsNuker {
             )?))
         }
 
+        if config.asg.enabled {
+            services.push(Box::new(AsgService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.asg.clone(),
+                dry_run,
+            )?))
+        }
+
         Ok(AwsNuker {
             region,
             services,
@@ -250,6 +260,8 @@ impl AwsNuker {
                 scan_resources!(service::ES_TYPE, resources, handles, service, region);
             } else if ref_client.is::<ElbService>() {
                 scan_resources!(service::ELB_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<AsgService>() {
+                scan_resources!(service::ASG_TYPE, resources, handles, service, region);
             }
         }
 
@@ -302,6 +314,8 @@ impl AwsNuker {
                 cleanup_resources!(service::ES_TYPE, resources, handles, service, region);
             } else if ref_client.is::<ElbService>() {
                 cleanup_resources!(service::ELB_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<AsgService>() {
+                cleanup_resources!(service::ASG_TYPE, resources, handles, service, region);
             }
         }
 

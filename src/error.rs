@@ -1,3 +1,4 @@
+use rusoto_autoscaling::{DeleteAutoScalingGroupError, DescribeAutoScalingGroupsError};
 use rusoto_ce::GetCostAndUsageError;
 use rusoto_core::{region::ParseRegionError, request::TlsError, RusotoError};
 use rusoto_credential::CredentialsError;
@@ -251,6 +252,14 @@ pub enum Error {
     #[fail(display = "Failed deleting load balancer: {}", error)]
     DeleteElb {
         error: RusotoError<DeleteLoadBalancerError>,
+    },
+    #[fail(display = "Issue describing AutoScaling Groups: {}", error)]
+    DescribeAsg {
+        error: RusotoError<DescribeAutoScalingGroupsError>,
+    },
+    #[fail(display = "Failed deleting AutoScaling Group: {}", error)]
+    DeleteAsg {
+        error: RusotoError<DeleteAutoScalingGroupError>,
     },
     #[fail(display = "JSON Encoding/Decoding error: {}", error)]
     JsonError { error: serde_json::error::Error },

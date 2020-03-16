@@ -766,6 +766,7 @@ dependencies = [
  "humantime 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "humantime-serde 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_autoscaling 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_ce 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_cloudwatch 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_core 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1058,6 +1059,19 @@ dependencies = [
  "untrusted 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "web-sys 0.3.29 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "rusoto_autoscaling"
+version = "0.43.0-beta.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "async-trait 0.1.24 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bytes 0.5.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusoto_core 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_urlencoded 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xml-rs 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2171,6 +2185,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum regex-syntax 0.6.6 (registry+https://github.com/rust-lang/crates.io-index)" = "dcfd8681eebe297b81d98498869d4aae052137651ad7b96822f09ceb690d0a96"
 "checksum remove_dir_all 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "4a83fa3702a688b9359eccba92d153ac33fd2e8462f9e0e3fdf155239ea7792e"
 "checksum ring 0.16.9 (registry+https://github.com/rust-lang/crates.io-index)" = "6747f8da1f2b1fabbee1aaa4eb8a11abf9adef0bf58a41cee45db5d59cecdfac"
+"checksum rusoto_autoscaling 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)" = "a5b94f4776829de49c9583154000422ed4eebe2c2e86b15b827850aa02908a44"
 "checksum rusoto_ce 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)" = "937bcf37531b5201c782ffe322037861e3b70ad243264e2de52534e881f6487a"
 "checksum rusoto_cloudwatch 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)" = "c7d07ceeca6b14bdd33c8f3862a9325b39843dce3635abd1d8f138d2ac785219"
 "checksum rusoto_core 0.43.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)" = "492ae34e8ba20e0521e028e19fc90a5650c2668b622b2220986de811bfe44f1e"
