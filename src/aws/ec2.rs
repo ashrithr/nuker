@@ -594,6 +594,7 @@ mod tests {
                 redshift_idle_rules: None,
                 emr_idle_rules: None,
                 es_idle_rules: None,
+                ecs_idle_rules: None,
             })),
             config: ec2_config,
             region: Region::UsEast1,

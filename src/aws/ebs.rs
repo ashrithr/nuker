@@ -248,13 +248,13 @@ impl EbsService {
         Ok(snapshots)
     }
 
-    async fn detach_volume(&self, volume_id: &String) -> Result<()> {
-        debug!("Detaching Volume: {}", volume_id);
+    async fn detach_volume(&self, vol_id: &String) -> Result<()> {
+        debug!("Detaching Volume: {}", vol_id);
 
         if !self.dry_run {
             self.client
                 .detach_volume(DetachVolumeRequest {
-                    volume_id: volume_id.to_string(),
+                    volume_id: vol_id.to_string(),
                     ..Default::default()
                 })
                 .await?;
@@ -267,7 +267,9 @@ impl EbsService {
         debug!(resource = resource.id.as_str(), "Deleting");
 
         if !self.dry_run {
-            self.detach_volume(&resource.id).await?;
+            if resource.state == Some("in-use".to_string()) {
+                self.detach_volume(&resource.id).await?;
+            }
 
             self.client
                 .delete_volume(DeleteVolumeRequest {

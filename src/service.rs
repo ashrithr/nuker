@@ -23,6 +23,7 @@ pub const REDSHIFT_TYPE: &str = "redshift";
 pub const ES_TYPE: &str = "es";
 pub const ELB_TYPE: &str = "elb";
 pub const ASG_TYPE: &str = "asg";
+pub const ECS_TYPE: &str = "ecs";
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Service {
@@ -38,6 +39,7 @@ pub enum Service {
     S3,
     Sagemaker,
     Asg,
+    Ecs,
 }
 
 #[derive(Debug, PartialEq)]
@@ -80,6 +82,7 @@ impl FromStr for Service {
             S3_TYPE => Ok(Service::S3),
             SAGEMAKER_TYPE => Ok(Service::Sagemaker),
             ASG_TYPE => Ok(Service::Asg),
+            ECS_TYPE => Ok(Service::Ecs),
             s => Err(ParseServiceError::new(s)),
         }
     }
@@ -100,6 +103,7 @@ impl Service {
             Service::S3 => S3_TYPE,
             Service::Sagemaker => SAGEMAKER_TYPE,
             Service::Asg => ASG_TYPE,
+            Service::Ecs => ECS_TYPE,
         }
     }
 
@@ -117,6 +121,7 @@ impl Service {
             Service::S3,
             Service::Sagemaker,
             Service::Asg,
+            Service::Ecs,
         ]
         .iter()
         .copied()

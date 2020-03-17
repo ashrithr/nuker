@@ -21,6 +21,7 @@ pub struct CwClient {
     pub redshift_idle_rules: Option<Vec<IdleRules>>,
     pub emr_idle_rules: Option<Vec<IdleRules>>,
     pub es_idle_rules: Option<Vec<IdleRules>>,
+    pub ecs_idle_rules: Option<Vec<IdleRules>>,
 }
 
 impl CwClient {
@@ -76,6 +77,7 @@ impl CwClient {
             ResourceType::Redshift => &self.redshift_idle_rules,
             ResourceType::EmrCluster => &self.emr_idle_rules,
             ResourceType::EsDomain => &self.es_idle_rules,
+            ResourceType::EcsCluster => &self.ecs_idle_rules,
             _ => &None,
         };
 
@@ -163,6 +165,11 @@ impl CwClient {
 
     pub async fn filter_nlb_load_balancer(&self, lb_name: &String) -> Result<bool> {
         self.filter_resource(lb_name, "LoadBalancer", ResourceType::ElbNlb)
+            .await
+    }
+
+    pub async fn filter_ecs_cluster(&self, cluster_name: &String) -> Result<bool> {
+        self.filter_resource(cluster_name, "ClusterName", ResourceType::EcsCluster)
             .await
     }
 
@@ -274,6 +281,7 @@ mod tests {
             redshift_idle_rules: None,
             emr_idle_rules: None,
             es_idle_rules: None,
+            ecs_idle_rules: None,
         }
     }
 

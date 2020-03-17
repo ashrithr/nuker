@@ -261,6 +261,34 @@ pub enum Error {
     DeleteAsg {
         error: RusotoError<DeleteAutoScalingGroupError>,
     },
+    #[fail(display = "Failed listing tags for ECS Cluster: {}", error)]
+    ListEcsTags {
+        error: RusotoError<rusoto_ecs::ListTagsForResourceError>,
+    },
+    #[fail(display = "Issue describing ECS clusters: {}", error)]
+    DescribeEcsClusters {
+        error: RusotoError<rusoto_ecs::ListClustersError>,
+    },
+    #[fail(display = "Issue describing ECS cluster: {}", error)]
+    DescribeEcsCluster {
+        error: RusotoError<rusoto_ecs::DescribeClustersError>,
+    },
+    #[fail(display = "Failed deleting ECS Cluster: {}", error)]
+    DeleteEcsCluster {
+        error: RusotoError<rusoto_ecs::DeleteClusterError>,
+    },
+    #[fail(display = "Failed listing ECS Cluster attributes: {}", error)]
+    ListEcsAttributes {
+        error: RusotoError<rusoto_ecs::ListAttributesError>,
+    },
+    #[fail(display = "Failed de-registering container instances: {}", error)]
+    DeregisterEcsInstances {
+        error: RusotoError<rusoto_ecs::DeregisterContainerInstanceError>,
+    },
+    #[fail(display = "Failed listing container instances: {}", error)]
+    ListEcsInstances {
+        error: RusotoError<rusoto_ecs::ListContainerInstancesError>,
+    },
     #[fail(display = "JSON Encoding/Decoding error: {}", error)]
     JsonError { error: serde_json::error::Error },
     #[fail(display = "Encountered Tokio IO error: {}", error)]
