@@ -525,3 +525,43 @@ ignore = []
     minimum = 1
     duration = "1 day"
     granularity = "1 hour"
+
+[ecs]
+enabled = true
+target_state = "Deleted"
+allowed_instance_types = []
+ignore = []
+
+    # Defines required tags on each cluster.
+    [[ecs.required_tags]]
+    name = "Name"
+    pattern = '^ecs-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+    [[ecs.required_tags]]
+    name = "Owner:Name"
+
+    [[ecs.required_tags]]
+    name = "Owner:Email"
+    pattern = '^(.*)@(.*).com$'
+
+    [[ecs.required_tags]]
+    name = "Purpose"
+
+    [[ecs.required_tags]]
+    name = "Environment"
+
+    # Identify any ECS cluster that appear to be idle based on the following
+    # rules.
+    [[ecs.idle_rules]]
+    namespace = "AWS/ECS"
+    metric = "CPUReservation"
+    minimum = 5
+    duration = "1 day"
+    granularity = "1 hour"
+
+    [[ecs.idle_rules]]
+    namespace = "AWS/ECS"
+    metric = "MemoryReservation"
+    minimum = 1
+    duration = "1 day"
+    granularity = "1 hour"

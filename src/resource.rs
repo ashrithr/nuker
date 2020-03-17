@@ -21,6 +21,7 @@ pub enum ResourceType {
     ElbAlb,
     ElbNlb,
     Asg,
+    EcsCluster,
 }
 
 impl ResourceType {
@@ -41,6 +42,7 @@ impl ResourceType {
             ResourceType::ElbAlb => ELB_TYPE,
             ResourceType::ElbNlb => ELB_TYPE,
             ResourceType::Asg => ASG_TYPE,
+            ResourceType::EcsCluster => ECS_TYPE,
         }
     }
 
@@ -161,6 +163,13 @@ impl ResourceType {
     pub fn is_asg(&self) -> bool {
         match *self {
             ResourceType::Asg => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_ecs(&self) -> bool {
+        match *self {
+            ResourceType::EcsCluster => true,
             _ => false,
         }
     }

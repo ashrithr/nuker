@@ -39,6 +39,7 @@ pub struct Config {
     pub sagemaker: SagemakerConfig,
     pub es: EsConfig,
     pub asg: AutoScalingConfig,
+    pub ecs: EcsConfig,
 }
 
 #[derive(Debug, Deserialize, Clone, Eq, PartialEq)]
@@ -224,6 +225,16 @@ pub struct AutoScalingConfig {
     pub target_state: TargetState,
     pub required_tags: Option<Vec<RequiredTags>>,
     pub ignore: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct EcsConfig {
+    pub enabled: bool,
+    pub target_state: TargetState,
+    pub allowed_instance_types: Vec<String>,
+    pub required_tags: Option<Vec<RequiredTags>>,
+    pub ignore: Vec<String>,
+    pub idle_rules: Option<Vec<IdleRules>>,
 }
 
 /// Parse the command line arguments for nuker executable

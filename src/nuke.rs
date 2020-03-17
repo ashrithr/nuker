@@ -146,6 +146,7 @@ impl Nuker {
                 Service::S3 => self.config.s3.enabled = false,
                 Service::Sagemaker => self.config.sagemaker.enabled = false,
                 Service::Asg => self.config.asg.enabled = false,
+                Service::Ecs => self.config.ecs.enabled = false,
             }
         }
     }

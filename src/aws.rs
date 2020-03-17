@@ -1,9 +1,9 @@
-mod aurora;
-// mod ce;
 mod asg;
+mod aurora;
 mod cloudwatch;
 mod ebs;
 mod ec2;
+mod ecs;
 mod elb;
 mod emr;
 mod es;
@@ -18,8 +18,9 @@ mod util;
 use crate::{
     aws::{
         asg::AsgService, aurora::AuroraService, cloudwatch::CwClient, ebs::EbsService,
-        ec2::Ec2Service, elb::ElbService, emr::EmrService, es::EsService, glue::GlueService,
-        rds::RdsService, redshift::RedshiftService, s3::S3Service, sagemaker::SagemakerService,
+        ec2::Ec2Service, ecs::EcsService, elb::ElbService, emr::EmrService, es::EsService,
+        glue::GlueService, rds::RdsService, redshift::RedshiftService, s3::S3Service,
+        sagemaker::SagemakerService,
     },
     config::Config,
     error::Error as AwsError,
@@ -220,6 +221,16 @@ impl AwsNuker {
             )?))
         }
 
+        if config.ecs.enabled {
+            services.push(Box::new(EcsService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.ecs.clone(),
+                cw_client.clone(),
+                dry_run,
+            )?))
+        }
+
         Ok(AwsNuker {
             region,
             services,
@@ -262,6 +273,8 @@ impl AwsNuker {
                 scan_resources!(service::ELB_TYPE, resources, handles, service, region);
             } else if ref_client.is::<AsgService>() {
                 scan_resources!(service::ASG_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<EcsService>() {
+                scan_resources!(service::ECS_TYPE, resources, handles, service, region);
             }
         }
 
@@ -316,6 +329,8 @@ impl AwsNuker {
                 cleanup_resources!(service::ELB_TYPE, resources, handles, service, region);
             } else if ref_client.is::<AsgService>() {
                 cleanup_resources!(service::ASG_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<EcsService>() {
+                cleanup_resources!(service::ECS_TYPE, resources, handles, service, region);
             }
         }
 
@@ -354,5 +369,6 @@ fn create_cw_client(
         redshift_idle_rules: config.redshift.idle_rules.clone(),
         emr_idle_rules: config.emr.idle_rules.clone(),
         es_idle_rules: config.es.idle_rules.clone(),
+        ecs_idle_rules: config.ecs.idle_rules.clone(),
     })))
 }
