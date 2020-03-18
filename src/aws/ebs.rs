@@ -1,11 +1,10 @@
 use crate::{
-    aws::{cloudwatch::CwClient, Result},
+    aws::{cloudwatch::CwClient, util, Result},
     config::EbsConfig,
     resource::{EnforcementState, NTag, Resource, ResourceType},
     service::NukerService,
 };
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use rusoto_core::{credential::ProfileProvider, HttpClient, Region};
 use rusoto_ec2::{
     DeleteSnapshotRequest, DeleteVolumeRequest, DescribeSnapshotsRequest, DescribeVolumesRequest,
@@ -154,18 +153,10 @@ impl EbsService {
 
     fn is_snapshot_old(&self, snapshot: &Snapshot) -> bool {
         if self.config.older_than.is_some() && snapshot.start_time.is_some() {
-            match DateTime::parse_from_rfc3339(snapshot.start_time.as_ref().unwrap()) {
-                Ok(ts) => {
-                    let start = Utc::now().timestamp_millis()
-                        - self.config.older_than.unwrap().as_millis() as i64;
-                    if start > ts.timestamp_millis() {
-                        true
-                    } else {
-                        false
-                    }
-                }
-                Err(_e) => false,
-            }
+            util::is_ts_older_than(
+                snapshot.start_time.as_ref().unwrap().as_str(),
+                self.config.older_than.as_ref().unwrap(),
+            )
         } else {
             false
         }

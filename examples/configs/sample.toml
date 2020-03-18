@@ -73,6 +73,11 @@ ignore = []
     [ec2.termination_protection]
     ignore = true
 
+    # Defines whether to cleanup stopped instances after specified duration
+    [ec2.manage_stopped]
+    enabled = true
+    older_than = "7 days"
+
     # Identifies and cleans up unused Elastic Network Interfaces
     [ec2.eni]
     cleanup = true

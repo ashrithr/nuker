@@ -143,7 +143,6 @@ impl GlueService {
     fn resource_allowed_run_time(&self, endpoint: &DevEndpoint) -> bool {
         if self.config.older_than.as_secs() > 0 && endpoint.created_timestamp.is_some() {
             let endpoint_start = Utc.timestamp(endpoint.created_timestamp.unwrap() as i64, 0);
-
             let start = Utc::now().timestamp_millis() - self.config.older_than.as_millis() as i64;
 
             if start > endpoint_start.timestamp_millis() {

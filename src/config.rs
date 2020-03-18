@@ -69,15 +69,17 @@ pub struct IdleRules {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct ManageStoppedInstances {
-    enabled: bool,
-    #[serde(with = "humantime_serde")]
-    terminate_older_than: Duration,
-}
-
-#[derive(Debug, Deserialize, Clone)]
 pub struct TerminationProtection {
     pub ignore: bool,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct ManageStopped {
+    pub enabled: bool,
+    #[serde(with = "humantime_serde")]
+    pub older_than: Duration,
+    #[serde(skip)]
+    pub dt_extract_regex: Option<Regex>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -107,6 +109,7 @@ pub struct Ec2Config {
     pub ignore: Vec<String>,
     pub idle_rules: Option<Vec<IdleRules>>,
     pub termination_protection: TerminationProtection,
+    pub manage_stopped: ManageStopped,
     pub security_groups: SecurityGroups,
     pub eni: Eni,
     pub eip: Eip,
@@ -395,6 +398,10 @@ pub fn parse_config(buffer: &str) -> Config {
                 rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
         }
+    }
+
+    if config.ec2.manage_stopped.enabled {
+        config.ec2.manage_stopped.dt_extract_regex = compile_regex(r"^.*\((?P<datetime>.*)\)$");
     }
 
     if config.rds.required_tags.is_some() {

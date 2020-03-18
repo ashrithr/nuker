@@ -182,6 +182,7 @@ pub enum EnforcementState {
     Skip,
     SkipConfig,
     SkipStopped,
+    SkipUnknownState,
 }
 
 impl EnforcementState {
@@ -192,6 +193,9 @@ impl EnforcementState {
             EnforcementState::Skip => "skipped because of rules".yellow().bold(),
             EnforcementState::SkipConfig => "skipped because of config".yellow().bold(),
             EnforcementState::SkipStopped => "skipped as resource is not running".yellow().bold(),
+            EnforcementState::SkipUnknownState => {
+                "skipped as resource state is unknown".yellow().bold()
+            }
         }
     }
 

@@ -17,6 +17,9 @@ use rusoto_ec2::{
 use std::sync::Arc;
 use tracing::{debug, trace};
 
+const RUNNING_STATE: i64 = 16;
+const STOPPED_STATE: i64 = 80;
+
 #[derive(Clone)]
 pub struct Ec2Service {
     pub client: Ec2Client,
@@ -85,10 +88,18 @@ impl Ec2Service {
                         "Skipping instance from ignore list"
                     );
                     EnforcementState::SkipConfig
-                } else if instance.state.as_ref().unwrap().code != Some(16) {
+                } else if self.is_resource_stopped_older(&instance) {
+                    debug!(
+                        resource = instance_id.as_str(),
+                        "Instance is stopped for longer than {:?}",
+                        self.config.manage_stopped.older_than
+                    );
+                    EnforcementState::Delete
+                } else if instance.state.as_ref().unwrap().code != Some(RUNNING_STATE) {
                     // Instance not in running state
                     debug!(
                         resource = instance_id.as_str(),
+                        state = ?instance.state.as_ref().unwrap(),
                         "Skipping as instance is not running"
                     );
                     EnforcementState::SkipStopped
@@ -239,6 +250,56 @@ impl Ec2Service {
         } else {
             false
         }
+    }
+
+    fn is_resource_stopped_older(&self, instance: &Instance) -> bool {
+        if self.config.manage_stopped.enabled
+            && instance.state.as_ref().unwrap().code == Some(STOPPED_STATE)
+        {
+            if instance.state_transition_reason.is_some() && instance.state_reason.is_some() {
+                let state_transition_reason = instance.state_transition_reason.as_ref().unwrap();
+                let dt_regex = self
+                    .config
+                    .manage_stopped
+                    .dt_extract_regex
+                    .as_ref()
+                    .unwrap();
+                let state_reason = instance
+                    .state_reason
+                    .as_ref()
+                    .unwrap()
+                    .message
+                    .as_ref()
+                    .unwrap();
+
+                // https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_StateReason.html
+                if state_reason.starts_with("Client.UserInitiatedShutdown")
+                    || state_reason.starts_with("Client.InstanceInitiatedShutdown")
+                    || state_reason.starts_with("Server.ScheduledStop")
+                {
+                    if dt_regex.is_match(state_transition_reason) {
+                        if let Some(datetime) = dt_regex
+                            .captures(state_transition_reason)
+                            .and_then(|cap| cap.name("datetime").map(|dt| dt.as_str()))
+                        {
+                            return util::is_ts_older_than(
+                                datetime,
+                                &self.config.manage_stopped.older_than,
+                            );
+                        }
+                    }
+                } else {
+                    trace!(
+                        resource = instance.instance_id.as_ref().unwrap().as_str(),
+                        state = state_reason.as_str(),
+                        "Instance state is not considered as stopped event"
+                    );
+                    return false;
+                }
+            }
+        }
+
+        false
     }
 
     async fn get_instances(&self, filter: Vec<Filter>) -> Result<Vec<Instance>> {
@@ -566,6 +627,7 @@ mod tests {
             ignore: vec![],
             idle_rules: None,
             termination_protection: TerminationProtection { ignore: true },
+            manage_stopped: ManageStopped::default(),
             security_groups: SecurityGroups::default(),
             eni: Eni::default(),
             eip: Eip::default(),
