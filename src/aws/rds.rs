@@ -5,10 +5,11 @@ use crate::{
     service::NukerService,
 };
 use async_trait::async_trait;
+use chrono::Utc;
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_rds::{
-    DBInstance, DeleteDBInstanceMessage, DescribeDBInstancesMessage, Filter,
+    DBInstance, DeleteDBInstanceMessage, DescribeDBInstancesMessage, DescribeEventsMessage, Filter,
     ListTagsForResourceMessage, ModifyDBInstanceMessage, Rds, RdsClient, StopDBInstanceMessage,
     Tag,
 };
@@ -17,6 +18,8 @@ use tracing::{debug, trace};
 
 const AURORA_POSTGRES_ENGINE: &str = "aurora-postgresql";
 const AURORA_MYSQL_ENGINE: &str = "aurora-mysql";
+const DB_STATUS_AVAILABLE: &str = "available";
+const DB_STATUS_STOPPED: &str = "stopped";
 
 #[derive(Clone)]
 pub struct RdsService {
@@ -79,7 +82,14 @@ impl RdsService {
             let enforcement_state: EnforcementState = {
                 if self.config.ignore.contains(&instance_id) {
                     EnforcementState::SkipConfig
-                } else if instance.db_instance_status != Some("available".to_string()) {
+                } else if self.is_resource_stopped_older(&instance).await {
+                    debug!(
+                        resource = instance_id.as_str(),
+                        "Instance is stopped for longer than {:?}",
+                        self.config.manage_stopped.older_than
+                    );
+                    EnforcementState::Delete
+                } else if instance.db_instance_status != Some(DB_STATUS_AVAILABLE.to_string()) {
                     EnforcementState::SkipStopped
                 } else {
                     if self.resource_tags_does_not_match(&instance).await {
@@ -130,6 +140,47 @@ impl RdsService {
         } else {
             false
         }
+    }
+
+    async fn is_resource_stopped_older(&self, instance: &DBInstance) -> bool {
+        if self.config.manage_stopped.enabled
+            && instance.db_instance_status == Some(DB_STATUS_STOPPED.to_string())
+        {
+            match self
+                .client
+                .describe_events(DescribeEventsMessage {
+                    duration: Some(20160), // 14 days - Max
+                    event_categories: Some(vec!["notification".to_string()]),
+                    source_identifier: instance.db_instance_identifier.clone(),
+                    source_type: Some("db-instance".to_string()),
+                    ..Default::default()
+                })
+                .await
+            {
+                Ok(events_message) => {
+                    if let Some(events) = events_message.events {
+                        for event in events {
+                            if event.message == Some("DB instance stopped".to_string()) {
+                                let stopped_date =
+                                    event.date.unwrap_or(format!("{:?}", Utc::now()));
+
+                                return util::is_ts_older_than(
+                                    stopped_date.as_str(),
+                                    &self.config.manage_stopped.older_than,
+                                );
+                            }
+                        }
+                    }
+                }
+                Err(err) => trace!(
+                    resource = instance.db_instance_identifier.as_ref().unwrap().as_str(),
+                    "Failed getting describe events: {:?}",
+                    err
+                ),
+            }
+        }
+
+        false
     }
 
     fn resource_types_does_not_match(&self, instance: &DBInstance) -> bool {

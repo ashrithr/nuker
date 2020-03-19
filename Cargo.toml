@@ -1,6 +1,6 @@
 [package]
 name = "nuker"
-version = "0.9.0"
+version = "0.9.1"
 authors = ["Ashrith Mekala <ashrith@me.com>"]
 edition = "2018"
 
