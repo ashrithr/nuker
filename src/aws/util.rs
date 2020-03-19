@@ -5,6 +5,7 @@ use std::time::Duration;
 use tracing::debug;
 
 enum DtFormat<'a> {
+    UnixTimestamp,
     RFC2822,
     RFC3339,
     FromDtStr(&'a str),
@@ -49,6 +50,7 @@ pub fn compare_tags(tags: Option<Vec<NTag>>, required_tags: &Vec<RequiredTags>) 
 pub fn is_ts_older_than(date: &str, older_than: &Duration) -> bool {
     let mut millis: Option<i64> = None;
     let try_formats = [
+        DtFormat::UnixTimestamp,
         DtFormat::RFC2822,
         DtFormat::RFC3339,
         DtFormat::FromDtStr("%+"),
@@ -61,6 +63,11 @@ pub fn is_ts_older_than(date: &str, older_than: &Duration) -> bool {
             break;
         }
         match try_format {
+            &DtFormat::UnixTimestamp => {
+                if let Ok(dt) = date.parse::<i64>() {
+                    millis = Some(dt);
+                }
+            }
             &DtFormat::RFC2822 => {
                 if let Ok(dt) = DateTime::parse_from_rfc2822(date) {
                     millis = Some(dt.timestamp_millis());

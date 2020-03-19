@@ -5,7 +5,6 @@ use crate::{
     service::NukerService,
 };
 use async_trait::async_trait;
-use chrono::{TimeZone, Utc};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_sagemaker::{
@@ -155,14 +154,8 @@ impl SagemakerService {
 
     fn resource_allowed_run_time(&self, notebook: &NotebookInstanceSummary) -> bool {
         if self.config.older_than.as_secs() > 0 && notebook.creation_time.is_some() {
-            let notebook_start = Utc.timestamp(notebook.creation_time.unwrap() as i64, 0);
-            let start = Utc::now().timestamp_millis() - self.config.older_than.as_millis() as i64;
-
-            if start > notebook_start.timestamp_millis() {
-                true
-            } else {
-                false
-            }
+            let date = format!("{}", notebook.creation_time.unwrap_or(0f64) as i64);
+            util::is_ts_older_than(date.as_str(), &self.config.older_than)
         } else {
             false
         }

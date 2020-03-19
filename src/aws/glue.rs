@@ -5,7 +5,6 @@ use crate::{
     service::NukerService,
 };
 use async_trait::async_trait;
-use chrono::{TimeZone, Utc};
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_glue::{
@@ -117,7 +116,8 @@ impl GlueService {
                     } else if self.resource_allowed_run_time(&endpoint) {
                         debug!(
                             resource = endpoint_id.as_str(),
-                            "Endpoint is running beyond max time ({:?})", self.config.older_than
+                            "Endpoint is running beyond allowed runtime ({:?})",
+                            self.config.older_than
                         );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else {
@@ -142,14 +142,8 @@ impl GlueService {
 
     fn resource_allowed_run_time(&self, endpoint: &DevEndpoint) -> bool {
         if self.config.older_than.as_secs() > 0 && endpoint.created_timestamp.is_some() {
-            let endpoint_start = Utc.timestamp(endpoint.created_timestamp.unwrap() as i64, 0);
-            let start = Utc::now().timestamp_millis() - self.config.older_than.as_millis() as i64;
-
-            if start > endpoint_start.timestamp_millis() {
-                true
-            } else {
-                false
-            }
+            let date = format!("{}", endpoint.created_timestamp.unwrap_or(0f64) as i64);
+            util::is_ts_older_than(date.as_str(), &self.config.older_than)
         } else {
             false
         }

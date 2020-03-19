@@ -13,6 +13,7 @@ Cleans up AWS resources based on configurable Rules. This project is a WIP.
     - Clean up based on open Security Group rules
     - Clean up unassociated elastic IP addresses
     - Clean up unused elastic network interfaces
+    - Clean up instances older than configured duration
 * EBS
     - Clean up unused volumes
     - Clean up snapshots that are older than configured duration
@@ -27,6 +28,7 @@ Cleans up AWS resources based on configurable Rules. This project is a WIP.
     - Clean up based on Tags
     - Clean up based on Allowed Instance Types
     - Clean up Idle Instances/Clusters based on CloudWatch metrics
+    - Clean up stopped database instances older than configured duration
 * Redshift
     - Clean up based on Tags
     - Clean up based on Allowed Instance Types
@@ -40,6 +42,7 @@ Cleans up AWS resources based on configurable Rules. This project is a WIP.
     - Clean up based on allowed Instance types
     - Clean up Idle Instances based on Cloudwatch metrics
     - Clean up based on open Security Group rules
+    - Enforce using cluster for specified duration
 * Glue
     - Clean up Glue Dev Endpoints based on Tags
     - Enforce using Glue Dev Endpoints for specified duration
