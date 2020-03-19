@@ -164,10 +164,23 @@ impl RdsService {
                                 let stopped_date =
                                     event.date.unwrap_or(format!("{:?}", Utc::now()));
 
-                                return util::is_ts_older_than(
+                                if util::is_ts_older_than(
                                     stopped_date.as_str(),
                                     &self.config.manage_stopped.older_than,
-                                );
+                                ) {
+                                    return true;
+                                } else {
+                                    trace!(
+                                        resource = instance
+                                            .db_instance_identifier
+                                            .as_ref()
+                                            .unwrap()
+                                            .as_str(),
+                                        "DB Instance is stopped at {:?} and is not old enough {:?}",
+                                        stopped_date,
+                                        self.config.manage_stopped.older_than
+                                    );
+                                }
                             }
                         }
                     }
