@@ -135,6 +135,8 @@ pub struct EmrConfig {
     pub idle_rules: Option<Vec<IdleRules>>,
     pub termination_protection: TerminationProtection,
     pub security_groups: SecurityGroups,
+    #[serde(with = "humantime_serde")]
+    pub older_than: Duration,
 }
 
 #[derive(Debug, Deserialize, Clone)]

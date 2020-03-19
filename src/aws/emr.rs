@@ -1,5 +1,5 @@
 use crate::{
-    aws::{cloudwatch::CwClient, Result},
+    aws::{cloudwatch::CwClient, util, Result},
     config::EmrConfig,
     resource::{EnforcementState, Resource, ResourceType},
     service::NukerService,
@@ -82,12 +82,14 @@ impl EmrService {
                         "Skipping resource from ignore list"
                     );
                     EnforcementState::SkipConfig
-                } else if cluster.status.as_ref().unwrap().state != Some("RUNNING".to_string()) {
+                } else if !(cluster.status.as_ref().unwrap().state == Some("RUNNING".to_string())
+                    || cluster.status.as_ref().unwrap().state == Some("WAITING".to_string()))
+                {
                     debug!(
                         resource = cluster_id.as_str(),
                         "Skipping resource as its not running"
                     );
-                    EnforcementState::SkipStopped
+                    EnforcementState::SkipUnknownState
                 } else {
                     if self.resource_tags_does_not_match(&cluster) {
                         debug!(
@@ -99,6 +101,13 @@ impl EmrService {
                         debug!(
                             resource = cluster_id.as_str(),
                             "Resource types does not match"
+                        );
+                        EnforcementState::from_target_state(&self.config.target_state)
+                    } else if self.resource_allowed_run_time(&cluster) {
+                        debug!(
+                            resource = cluster_id.as_str(),
+                            "Cluster is running beyond allowed runtime of {:?}",
+                            self.config.older_than
                         );
                         EnforcementState::from_target_state(&self.config.target_state)
                     } else if self.is_resource_idle(&cluster).await {
@@ -125,6 +134,20 @@ impl EmrService {
         }
 
         Ok(resources)
+    }
+
+    fn resource_allowed_run_time(&self, cluster: &ClusterSummary) -> bool {
+        if self.config.older_than.as_secs() > 0 && cluster.status.is_some() {
+            if let Some(timeline) = cluster.status.as_ref().unwrap().timeline.as_ref() {
+                let date = format!("{}", timeline.creation_date_time.unwrap_or(0f64) as i64);
+
+                util::is_ts_older_than(date.as_str(), &self.config.older_than)
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 
     fn resource_tags_does_not_match(&self, _cluster: &ClusterSummary) -> bool {
