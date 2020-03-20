@@ -157,6 +157,7 @@ pub struct AuroraConfig {
     pub target_state: TargetState,
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
+    pub manage_stopped: ManageStopped,
     pub ignore: Vec<String>,
     pub idle_rules: Option<Vec<IdleRules>>,
     pub termination_protection: TerminationProtection,
