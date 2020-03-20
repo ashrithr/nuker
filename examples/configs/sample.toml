@@ -298,11 +298,6 @@ ignore = []
     duration = "1 day"
     granularity = "1 hour"
 
-    # Defines whether to cleanup stopped clusters after specified duration
-    [aurora.manage_stopped]
-    enabled = true
-    older_than = "7 days"
-
     # Defines whether to acknowledge the terminate protection, if 'acknowledge'
     # is set to 'true' then the utility would not try to terminate the instances
     # which has termination protection enabled.

@@ -5,19 +5,17 @@ use crate::{
     service::NukerService,
 };
 use async_trait::async_trait;
-use chrono::Utc;
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_rds::{
     DBCluster, DeleteDBClusterMessage, DeleteDBInstanceMessage, DescribeDBClustersMessage,
-    DescribeDBInstancesMessage, DescribeEventsMessage, Filter, ListTagsForResourceMessage,
-    ModifyDBClusterMessage, Rds, RdsClient, StopDBClusterMessage, Tag,
+    DescribeDBInstancesMessage, Filter, ListTagsForResourceMessage, ModifyDBClusterMessage, Rds,
+    RdsClient, StopDBClusterMessage, Tag,
 };
 use std::sync::Arc;
 use tracing::{debug, trace};
 
 const DB_STATUS_AVAILABLE: &str = "available";
-const DB_STATUS_STOPPED: &str = "stopped";
 
 #[derive(Clone)]
 pub struct AuroraService {
@@ -81,13 +79,6 @@ impl AuroraService {
             let enforcement_state: EnforcementState = {
                 if self.config.ignore.contains(&cluster_id) {
                     EnforcementState::SkipConfig
-                } else if self.is_resource_stopped_older(&cluster).await {
-                    debug!(
-                        resource = cluster_id.as_str(),
-                        "Cluster is stopped for longer than {:?}",
-                        self.config.manage_stopped.older_than
-                    );
-                    EnforcementState::Delete
                 } else if cluster.status != Some(DB_STATUS_AVAILABLE.to_string()) {
                     EnforcementState::SkipStopped
                 } else {
@@ -139,60 +130,6 @@ impl AuroraService {
         } else {
             false
         }
-    }
-
-    async fn is_resource_stopped_older(&self, cluster: &DBCluster) -> bool {
-        if self.config.manage_stopped.enabled
-            && cluster.status == Some(DB_STATUS_STOPPED.to_string())
-        {
-            match self
-                .client
-                .describe_events(DescribeEventsMessage {
-                    duration: Some(20160), // 14 days - Max
-                    event_categories: Some(vec!["notification".to_string()]),
-                    source_identifier: cluster.db_cluster_identifier.clone(),
-                    source_type: Some("db-cluster".to_string()),
-                    ..Default::default()
-                })
-                .await
-            {
-                Ok(event_message) => {
-                    if let Some(events) = event_message.events {
-                        for event in events {
-                            if event.message == Some("DB cluster stopped".to_string()) {
-                                let stopped_date =
-                                    event.date.unwrap_or(format!("{:?}", Utc::now()));
-
-                                if util::is_ts_older_than(
-                                    stopped_date.as_str(),
-                                    &self.config.manage_stopped.older_than,
-                                ) {
-                                    return true;
-                                } else {
-                                    trace!(
-                                        resource = cluster
-                                            .db_cluster_identifier
-                                            .as_ref()
-                                            .unwrap()
-                                            .as_str(),
-                                        "DB Cluster is stopped at {:?} and is not old enough {:?}",
-                                        stopped_date,
-                                        self.config.manage_stopped.older_than
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(err) => trace!(
-                    resource = cluster.db_cluster_identifier.as_ref().unwrap().as_str(),
-                    "Failed getting describe events: {:?}",
-                    err
-                ),
-            }
-        }
-
-        false
     }
 
     async fn resource_types_does_not_match(&self, cluster: &DBCluster) -> bool {

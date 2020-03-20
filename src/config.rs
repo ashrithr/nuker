@@ -157,7 +157,6 @@ pub struct AuroraConfig {
     pub target_state: TargetState,
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
-    pub manage_stopped: ManageStopped,
     pub ignore: Vec<String>,
     pub idle_rules: Option<Vec<IdleRules>>,
     pub termination_protection: TerminationProtection,
@@ -247,13 +246,15 @@ pub struct EcsConfig {
 /// Parse the command line arguments for nuker executable
 pub fn parse_args() -> Args {
     let args = App::new("nuker")
+        .about("Cleans up AWS resources based on configurable Rules.")
         .version(VERSION.unwrap_or("unknown"))
+        .subcommand(App::new("resource-types").about("Prints out supported resource types"))
         .arg(
             Arg::with_name("config-file")
                 .long("config")
                 .short("C")
                 .value_name("config")
-                .required(true)
+                // .required(true)
                 .help("The config file to feed in.")
                 .takes_value(true),
         )
@@ -320,6 +321,17 @@ pub fn parse_args() -> Args {
                 .help("Turn on verbose output."),
         )
         .get_matches();
+
+    if let Some(ref _matches) = args.subcommand_matches("resource-types") {
+        for r in crate::service::Service::iter() {
+            print!("{} ", r.name());
+        }
+        ::std::process::exit(0);
+    }
+
+    if !args.is_present("config-file") {
+        panic!("--config <config> is a required parameter");
+    }
 
     let verbose = if args.is_present("verbose") {
         args.occurrences_of("verbose")

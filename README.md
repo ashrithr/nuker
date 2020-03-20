@@ -14,45 +14,61 @@ Cleans up AWS resources based on configurable Rules. This project is a WIP.
     - Clean up unassociated elastic IP addresses
     - Clean up unused elastic network interfaces
     - Clean up instances older than configured duration
+    - Ignore specified resource(s)
 * EBS
-    - Clean up unused volumes
+    - Clean up unused volumes (not attached to any instance)
     - Clean up snapshots that are older than configured duration
     - Enforce use of gp2 volumes over io1
-* ELB
+    - Clean up Idle volumes based on CloudWatch metrics
+    - Ignore specified resource(s)
+* ELB V2
     - Clean up based on Tags
     - Clean up Idle Load Balancers based on CloudWatch metrics
+    - Ignore specified resource(s)    
 * ASG
     - Clean up based on tags
     - Clean up empty ASG (if no instances and load balancers are attached)
+    - Ignore specified resource(s)
 * RDS
     - Clean up based on Tags
     - Clean up based on Allowed Instance Types
     - Clean up Idle Instances/Clusters based on CloudWatch metrics
-    - Clean up stopped database instances older than configured duration
+    - Clean up stopped database instances older than configured duration (not supported for Aurora Clusters as Aurora clusters cannot be deleted in stopped state)
+    - Ignore specified resource(s)
 * Redshift
     - Clean up based on Tags
     - Clean up based on Allowed Instance Types
-    - Clean up Idle Clusters based on Cloudwatch metrics
+    - Clean up Idle Clusters based on CloudWatch metrics
+    - Ignore specified resource(s)    
 * S3
     - Clean up based on bucket naming prefix
-    - Clean up publicly exposed buckets
+    - Clean up publicly exposed buckets (Blocked)
     - Enforce DNS compliant naming
+    - Ignore specified resource(s)
 * EMR
     - Clean up based on Tags
     - Clean up based on allowed Instance types
-    - Clean up Idle Instances based on Cloudwatch metrics
+    - Clean up Idle Instances based on CloudWatch metrics
     - Clean up based on open Security Group rules
     - Enforce using cluster for specified duration
+    - Ignore specified resource(s)
 * Glue
     - Clean up Glue Dev Endpoints based on Tags
     - Enforce using Glue Dev Endpoints for specified duration
+    - Ignore specified resource(s)
 * Sagemaker
     - Clean up Sagemaker Notebooks based on Tags
     - Enforce using Sagemaker Notebooks for specified duration
+    - Ignore specified resource(s)
 * ElasticSearch
     - Clean up ES Domains based on Tags
     - Clean up based on allowed Instance Types
-    - Clean up Idle Domains based on Cloudwatch metrics
+    - Clean up Idle Domains based on CloudWatch metrics
+    - Ignore specified resource(s)
+* ECS
+    - Clean up Clusters based on Tags
+    - Clean up Idle Clusters based on CloudWatch metrics
+    - Ignore specified resource(s)
 
 ## Configuration
 
@@ -87,6 +103,20 @@ To get help:
 ```
 ./target/release/nuker -h
 ```
+
+## Targeting/Excluding specific resources
+
+To Target/Exclude specific resource types use `--target` or `--exclude` flags. For example:
+
+```
+nuker --config examples/configs/sample.toml \
+--profile default \
+--region us-east-1 \
+--exclude s3 \
+--exclude es
+```
+
+> To view list of supported resource types, use the `nuker resource-types`.
 
 ## Docker
 
