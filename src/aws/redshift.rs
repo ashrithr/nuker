@@ -104,6 +104,7 @@ impl RedshiftService {
                 tags: self.package_tags_as_ntags(cluster.tags.clone()),
                 state: cluster.cluster_status.clone(),
                 enforcement_state,
+                dependencies: None,
             });
         }
 

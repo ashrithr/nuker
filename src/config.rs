@@ -40,6 +40,7 @@ pub struct Config {
     pub es: EsConfig,
     pub asg: AutoScalingConfig,
     pub ecs: EcsConfig,
+    pub vpc: VpcConfig,
 }
 
 #[derive(Debug, Deserialize, Clone, Eq, PartialEq)]
@@ -123,6 +124,27 @@ pub struct EbsConfig {
     pub idle_rules: Option<Vec<IdleRules>>,
     #[serde(with = "humantime_serde")]
     pub older_than: Option<Duration>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct Igw {
+    pub cleanup: bool,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct Vgw {
+    pub cleanup: bool,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct VpcConfig {
+    pub enabled: bool,
+    pub target_state: TargetState,
+    pub ignore: Vec<String>,
+    pub cleanup_empty: bool,
+    pub required_tags: Option<Vec<RequiredTags>>,
+    pub igw: Igw,
+    pub vgw: Vgw,
 }
 
 #[derive(Debug, Deserialize, Clone)]

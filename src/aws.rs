@@ -14,13 +14,14 @@ mod s3;
 mod sagemaker;
 mod sts;
 mod util;
+mod vpc;
 
 use crate::{
     aws::{
         asg::AsgService, aurora::AuroraService, cloudwatch::CwClient, ebs::EbsService,
         ec2::Ec2Service, ecs::EcsService, elb::ElbService, emr::EmrService, es::EsService,
         glue::GlueService, rds::RdsService, redshift::RedshiftService, s3::S3Service,
-        sagemaker::SagemakerService,
+        sagemaker::SagemakerService, vpc::VpcService,
     },
     config::Config,
     error::Error as AwsError,
@@ -32,7 +33,7 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
-use tracing::{error, trace};
+use tracing::error;
 use tracing_futures::Instrument;
 
 type Result<T, E = AwsError> = std::result::Result<T, E>;
@@ -231,6 +232,15 @@ impl AwsNuker {
             )?))
         }
 
+        if config.vpc.enabled {
+            services.push(Box::new(VpcService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.vpc.clone(),
+                dry_run,
+            )?))
+        }
+
         Ok(AwsNuker {
             region,
             services,
@@ -239,8 +249,6 @@ impl AwsNuker {
     }
 
     pub async fn locate_resources(&mut self) {
-        trace!("Init locate_resources");
-
         let mut handles = Vec::new();
 
         for service in &self.services {
@@ -275,6 +283,8 @@ impl AwsNuker {
                 scan_resources!(service::ASG_TYPE, resources, handles, service, region);
             } else if ref_client.is::<EcsService>() {
                 scan_resources!(service::ECS_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<VpcService>() {
+                scan_resources!(service::VPC_TYPE, resources, handles, service, region);
             }
         }
 
@@ -288,7 +298,6 @@ impl AwsNuker {
     }
 
     pub async fn cleanup_resources(&self) -> Result<()> {
-        trace!("Init cleanup resources");
         let mut handles = Vec::new();
         let mut resources: HashMap<String, Vec<Resource>> = HashMap::new();
 
@@ -331,6 +340,8 @@ impl AwsNuker {
                 cleanup_resources!(service::ASG_TYPE, resources, handles, service, region);
             } else if ref_client.is::<EcsService>() {
                 cleanup_resources!(service::ECS_TYPE, resources, handles, service, region);
+            } else if ref_client.is::<VpcService>() {
+                cleanup_resources!(service::VPC_TYPE, resources, handles, service, region);
             }
         }
 

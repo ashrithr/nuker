@@ -93,6 +93,7 @@ impl EbsService {
                 tags: self.package_tags_as_ntags(volume.tags.clone()),
                 state: volume.state,
                 enforcement_state,
+                dependencies: None,
             });
         }
 
@@ -122,6 +123,7 @@ impl EbsService {
                 tags: self.package_tags_as_ntags(snapshot.tags.clone()),
                 state: snapshot.state,
                 enforcement_state,
+                dependencies: None,
             });
         }
 

@@ -147,6 +147,7 @@ impl Nuker {
                 Service::Sagemaker => self.config.sagemaker.enabled = false,
                 Service::Asg => self.config.asg.enabled = false,
                 Service::Ecs => self.config.ecs.enabled = false,
+                Service::Vpc => self.config.vpc.enabled = false,
             }
         }
     }

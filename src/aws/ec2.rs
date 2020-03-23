@@ -136,6 +136,7 @@ impl Ec2Service {
                 tags: self.package_tags_as_ntags(instance.tags.clone()),
                 state: instance.state.as_ref().unwrap().name.clone(),
                 enforcement_state,
+                dependencies: None,
             });
         }
 
@@ -170,6 +171,7 @@ impl Ec2Service {
                 tags: self.package_tags_as_ntags(interface.tag_set.clone()),
                 state: interface.status,
                 enforcement_state,
+                dependencies: None,
             });
         }
 
@@ -199,6 +201,7 @@ impl Ec2Service {
                 tags: self.package_tags_as_ntags(address.tags.clone()),
                 state: None,
                 enforcement_state,
+                dependencies: None,
             });
         }
 

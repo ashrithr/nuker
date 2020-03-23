@@ -134,6 +134,7 @@ impl GlueService {
                 tags: Some(ntags),
                 state: endpoint.status,
                 enforcement_state,
+                dependencies: None,
             });
         }
 

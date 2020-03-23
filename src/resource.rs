@@ -22,6 +22,7 @@ pub enum ResourceType {
     ElbNlb,
     Asg,
     EcsCluster,
+    Vpc,
 }
 
 impl ResourceType {
@@ -43,6 +44,7 @@ impl ResourceType {
             ResourceType::ElbNlb => ELB_TYPE,
             ResourceType::Asg => ASG_TYPE,
             ResourceType::EcsCluster => ECS_TYPE,
+            ResourceType::Vpc => VPC_TYPE,
         }
     }
 
@@ -173,6 +175,13 @@ impl ResourceType {
             _ => false,
         }
     }
+
+    pub fn is_vpc(&self) -> bool {
+        match *self {
+            ResourceType::Vpc => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -217,6 +226,7 @@ pub struct Resource {
     pub tags: Option<Vec<NTag>>,
     pub state: Option<String>,
     pub enforcement_state: EnforcementState,
+    pub dependencies: Option<Vec<Resource>>,
 }
 
 impl fmt::Display for Resource {

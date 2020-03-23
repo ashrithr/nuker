@@ -3,10 +3,11 @@ use rusoto_ce::GetCostAndUsageError;
 use rusoto_core::{region::ParseRegionError, request::TlsError, RusotoError};
 use rusoto_credential::CredentialsError;
 use rusoto_ec2::{
-    DeleteNetworkInterfaceError, DeleteSnapshotError, DeleteVolumeError, DescribeAddressesError,
-    DescribeInstanceAttributeError, DescribeInstancesError, DescribeNetworkInterfacesError,
-    DescribeSecurityGroupsError, DescribeSnapshotsError, DescribeVolumesError, DetachVolumeError,
-    ModifyInstanceAttributeError, ReleaseAddressError, StopInstancesError, TerminateInstancesError,
+    DeleteNetworkInterfaceError, DeleteSnapshotError, DeleteVolumeError, DeleteVpcError,
+    DescribeAddressesError, DescribeInstanceAttributeError, DescribeInstancesError,
+    DescribeNetworkInterfacesError, DescribeSecurityGroupsError, DescribeSnapshotsError,
+    DescribeVolumesError, DescribeVpcsError, DetachVolumeError, ModifyInstanceAttributeError,
+    ReleaseAddressError, StopInstancesError, TerminateInstancesError,
 };
 use rusoto_elbv2::{DeleteLoadBalancerError, DescribeLoadBalancersError};
 use rusoto_emr::{
@@ -83,6 +84,12 @@ pub enum Error {
     AddressDelete {
         error: RusotoError<ReleaseAddressError>,
     },
+    #[fail(display = "Issue describing VPCs: {}", error)]
+    VpcsDescribe {
+        error: RusotoError<DescribeVpcsError>,
+    },
+    #[fail(display = "Issue deleting VPC: {}", error)]
+    VpcDelete { error: RusotoError<DeleteVpcError> },
     #[fail(display = "Issue describing DB Instances: {}", error)]
     DBInstanceDescribe {
         error: RusotoError<DescribeDBInstancesError>,
