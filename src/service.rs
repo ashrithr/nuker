@@ -153,13 +153,11 @@ pub trait NukerService: Any + Send + Sync + DynClone {
 
     /// Clean up the resources, based on the enforcement state figured out
     /// from the specified rules
-    async fn cleanup(&self, resources: Vec<Resource>) -> Result<()> {
-        for resource in resources {
-            match resource.enforcement_state {
-                EnforcementState::Stop => self.stop(&resource).await?,
-                EnforcementState::Delete => self.delete(&resource).await?,
-                _ => {}
-            }
+    async fn cleanup(&self, resource: &Resource) -> Result<()> {
+        match resource.enforcement_state {
+            EnforcementState::Stop => self.stop(resource).await?,
+            EnforcementState::Delete => self.delete(resource).await?,
+            _ => {}
         }
 
         Ok(())

@@ -1,15 +1,13 @@
 use crate::{
     aws::AwsNuker,
     config::{Args, Config},
-    error::Error as AwsError,
+    Result,
 };
 use colored::*;
 use rusoto_core::Region;
 use std::{io, process::exit, str::FromStr};
 use tracing::{debug, trace};
 use tracing_futures::Instrument;
-
-type Result<T, E = AwsError> = std::result::Result<T, E>;
 
 static REGIONS: &'static [Region] = &[
     Region::ApEast1,

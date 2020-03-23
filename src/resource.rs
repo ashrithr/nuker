@@ -23,6 +23,7 @@ pub enum ResourceType {
     Asg,
     EcsCluster,
     Vpc,
+    Root, // for tracking DAG dependencies
 }
 
 impl ResourceType {
@@ -45,6 +46,7 @@ impl ResourceType {
             ResourceType::Asg => ASG_TYPE,
             ResourceType::EcsCluster => ECS_TYPE,
             ResourceType::Vpc => VPC_TYPE,
+            ResourceType::Root => "root",
         }
     }
 
@@ -179,6 +181,13 @@ impl ResourceType {
     pub fn is_vpc(&self) -> bool {
         match *self {
             ResourceType::Vpc => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_root(&self) -> bool {
+        match *self {
+            ResourceType::Root => true,
             _ => false,
         }
     }

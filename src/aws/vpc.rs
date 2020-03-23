@@ -145,11 +145,11 @@ impl VpcService {
         Ok(vpcs)
     }
 
-    /// Find and delete all dependencies before attempting to delete the VPC.
+    /// Find all dependencies for this resource.
     ///
     /// FIXME: Track dependent resources as a DAG and use the dependency tree to cleanup the
     /// resources accordingly.
-    async fn delete_dependencies(&self, vpc_id: &String) -> bool {
+    async fn dependencies(&self, vpc_id: &String) -> bool {
         // 1. Delete any associated IGW's
         match self
             .client
@@ -522,6 +522,8 @@ impl VpcService {
     }
 
     async fn delete_resource(&self, resource: &Resource) -> Result<()> {
+        debug!(resource = resource.id.as_str(), "Deleting");
+
         if !self.dry_run {
             self.client
                 .delete_vpc(DeleteVpcRequest {
