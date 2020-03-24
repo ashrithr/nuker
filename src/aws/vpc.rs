@@ -8,14 +8,13 @@ use async_trait::async_trait;
 use rusoto_core::{credential::ProfileProvider, HttpClient, Region};
 use rusoto_ec2::{
     DeleteInternetGatewayRequest, DeleteNatGatewayRequest, DeleteNetworkAclRequest,
-    DeleteNetworkInterfaceRequest, DeleteRouteTableRequest, DeleteSecurityGroupRequest,
-    DeleteSubnetRequest, DeleteVpcEndpointsRequest, DeleteVpcPeeringConnectionRequest,
-    DeleteVpcRequest, DeleteVpnGatewayRequest, DescribeInstancesRequest,
-    DescribeInternetGatewaysRequest, DescribeNatGatewaysRequest, DescribeNetworkAclsRequest,
-    DescribeNetworkInterfacesRequest, DescribeRouteTablesRequest, DescribeSecurityGroupsRequest,
-    DescribeSubnetsRequest, DescribeVpcEndpointsRequest, DescribeVpcPeeringConnectionsRequest,
-    DescribeVpcsRequest, DescribeVpnGatewaysRequest, Ec2, Ec2Client, Filter, Tag,
-    TerminateInstancesRequest, Vpc,
+    DeleteRouteTableRequest, DeleteSubnetRequest, DeleteVpcEndpointsRequest,
+    DeleteVpcPeeringConnectionRequest, DeleteVpcRequest, DeleteVpnGatewayRequest,
+    DescribeInstancesRequest, DescribeInternetGatewaysRequest, DescribeNatGatewaysRequest,
+    DescribeNetworkAclsRequest, DescribeNetworkInterfacesRequest, DescribeRouteTablesRequest,
+    DescribeSecurityGroupsRequest, DescribeSubnetsRequest, DescribeVpcEndpointsRequest,
+    DescribeVpcPeeringConnectionsRequest, DescribeVpcsRequest, DescribeVpnGatewaysRequest, Ec2,
+    Ec2Client, Filter, Tag, Vpc,
 };
 use tracing::{debug, trace};
 
