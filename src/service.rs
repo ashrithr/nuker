@@ -24,6 +24,7 @@ pub const ES_TYPE: &str = "es";
 pub const ELB_TYPE: &str = "elb";
 pub const ASG_TYPE: &str = "asg";
 pub const ECS_TYPE: &str = "ecs";
+pub const VPC_TYPE: &str = "vpc";
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Service {
@@ -40,6 +41,7 @@ pub enum Service {
     Sagemaker,
     Asg,
     Ecs,
+    Vpc,
 }
 
 #[derive(Debug, PartialEq)]
@@ -83,6 +85,7 @@ impl FromStr for Service {
             SAGEMAKER_TYPE => Ok(Service::Sagemaker),
             ASG_TYPE => Ok(Service::Asg),
             ECS_TYPE => Ok(Service::Ecs),
+            VPC_TYPE => Ok(Service::Vpc),
             s => Err(ParseServiceError::new(s)),
         }
     }
@@ -104,6 +107,7 @@ impl Service {
             Service::Sagemaker => SAGEMAKER_TYPE,
             Service::Asg => ASG_TYPE,
             Service::Ecs => ECS_TYPE,
+            Service::Vpc => VPC_TYPE,
         }
     }
 
@@ -122,6 +126,7 @@ impl Service {
             Service::Sagemaker,
             Service::Asg,
             Service::Ecs,
+            Service::Vpc,
         ]
         .iter()
         .copied()
@@ -148,13 +153,11 @@ pub trait NukerService: Any + Send + Sync + DynClone {
 
     /// Clean up the resources, based on the enforcement state figured out
     /// from the specified rules
-    async fn cleanup(&self, resources: Vec<Resource>) -> Result<()> {
-        for resource in resources {
-            match resource.enforcement_state {
-                EnforcementState::Stop => self.stop(&resource).await?,
-                EnforcementState::Delete => self.delete(&resource).await?,
-                _ => {}
-            }
+    async fn cleanup(&self, resource: &Resource) -> Result<()> {
+        match resource.enforcement_state {
+            EnforcementState::Stop => self.stop(resource).await?,
+            EnforcementState::Delete => self.delete(resource).await?,
+            _ => {}
         }
 
         Ok(())

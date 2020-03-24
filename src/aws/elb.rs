@@ -106,6 +106,7 @@ impl ElbService {
                 tags: self.package_tags_as_ntags(tags),
                 state,
                 enforcement_state,
+                dependencies: None,
             });
         }
 

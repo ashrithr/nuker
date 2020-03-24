@@ -1,15 +1,13 @@
 use crate::{
     aws::AwsNuker,
     config::{Args, Config},
-    error::Error as AwsError,
+    Result,
 };
 use colored::*;
 use rusoto_core::Region;
 use std::{io, process::exit, str::FromStr};
 use tracing::{debug, trace};
 use tracing_futures::Instrument;
-
-type Result<T, E = AwsError> = std::result::Result<T, E>;
 
 static REGIONS: &'static [Region] = &[
     Region::ApEast1,
@@ -70,7 +68,7 @@ impl Nuker {
                 clients.push(AwsNuker::new(
                     self.args.profile.clone(),
                     region.to_owned(),
-                    &self.config,
+                    self.config.clone(),
                     self.args.dry_run,
                 )?);
             }
@@ -81,7 +79,7 @@ impl Nuker {
                 clients.push(AwsNuker::new(
                     self.args.profile.clone(),
                     Region::from_str(region)?,
-                    &self.config,
+                    self.config.clone(),
                     self.args.dry_run,
                 )?);
             }
@@ -147,6 +145,7 @@ impl Nuker {
                 Service::Sagemaker => self.config.sagemaker.enabled = false,
                 Service::Asg => self.config.asg.enabled = false,
                 Service::Ecs => self.config.ecs.enabled = false,
+                Service::Vpc => self.config.vpc.enabled = false,
             }
         }
     }

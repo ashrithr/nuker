@@ -130,6 +130,7 @@ impl EmrService {
                 tags: None,
                 state: cluster.status.as_ref().unwrap().state.clone(),
                 enforcement_state,
+                dependencies: None,
             });
         }
 

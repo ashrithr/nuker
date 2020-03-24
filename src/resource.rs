@@ -8,6 +8,7 @@ pub enum ResourceType {
     Ec2Instance,
     Ec2Interface,
     Ec2Address,
+    Ec2Sg,
     EbsVolume,
     EbsSnapshot,
     RDS,
@@ -22,14 +23,25 @@ pub enum ResourceType {
     ElbNlb,
     Asg,
     EcsCluster,
+    Vpc,
+    VpcIgw,
+    VpcSubnet,
+    VpcRt,
+    VpcNacl,
+    VpcPeerConn,
+    VpcEndpoint,
+    VpcNatGw,
+    VpcVpnGw,
+    Root, // for tracking DAG dependencies
 }
 
 impl ResourceType {
     pub fn name(&self) -> &str {
         match *self {
-            ResourceType::Ec2Instance | ResourceType::Ec2Interface | ResourceType::Ec2Address => {
-                EC2_TYPE
-            }
+            ResourceType::Ec2Instance
+            | ResourceType::Ec2Interface
+            | ResourceType::Ec2Address
+            | ResourceType::Ec2Sg => EC2_TYPE,
             ResourceType::EbsVolume | ResourceType::EbsSnapshot => EBS_TYPE,
             ResourceType::RDS => RDS_TYPE,
             ResourceType::Aurora => AURORA_TYPE,
@@ -43,14 +55,25 @@ impl ResourceType {
             ResourceType::ElbNlb => ELB_TYPE,
             ResourceType::Asg => ASG_TYPE,
             ResourceType::EcsCluster => ECS_TYPE,
+            ResourceType::Vpc
+            | ResourceType::VpcIgw
+            | ResourceType::VpcSubnet
+            | ResourceType::VpcRt
+            | ResourceType::VpcNacl
+            | ResourceType::VpcPeerConn
+            | ResourceType::VpcEndpoint
+            | ResourceType::VpcNatGw
+            | ResourceType::VpcVpnGw => VPC_TYPE,
+            ResourceType::Root => "root",
         }
     }
 
     pub fn is_ec2(&self) -> bool {
         match *self {
-            ResourceType::Ec2Instance | ResourceType::Ec2Interface | ResourceType::Ec2Address => {
-                true
-            }
+            ResourceType::Ec2Instance
+            | ResourceType::Ec2Interface
+            | ResourceType::Ec2Address
+            | ResourceType::Ec2Sg => true,
             _ => false,
         }
     }
@@ -173,9 +196,31 @@ impl ResourceType {
             _ => false,
         }
     }
+
+    pub fn is_vpc(&self) -> bool {
+        match *self {
+            ResourceType::Vpc
+            | ResourceType::VpcIgw
+            | ResourceType::VpcSubnet
+            | ResourceType::VpcRt
+            | ResourceType::VpcNacl
+            | ResourceType::VpcPeerConn
+            | ResourceType::VpcEndpoint
+            | ResourceType::VpcNatGw
+            | ResourceType::VpcVpnGw => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_root(&self) -> bool {
+        match *self {
+            ResourceType::Root => true,
+            _ => false,
+        }
+    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum EnforcementState {
     Stop,
     Delete,
@@ -217,6 +262,7 @@ pub struct Resource {
     pub tags: Option<Vec<NTag>>,
     pub state: Option<String>,
     pub enforcement_state: EnforcementState,
+    pub dependencies: Option<Vec<Resource>>,
 }
 
 impl fmt::Display for Resource {

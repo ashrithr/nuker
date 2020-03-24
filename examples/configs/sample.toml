@@ -184,6 +184,45 @@ ignore = []
     duration = "1 day"
     granularity = "1 hour"
 
+[vpc]
+# Specifies whether VPC enforcement is enabled or not
+enabled = true
+# State to enforce. Possible state is 'Deleted'.
+target_state = "Deleted"
+# The following resources will be ignored from rule enforcement
+ignore = []
+# Clean up empty VPC's. A VPC is considered empty when it doesn't have any
+# resources associated with it.
+cleanup_empty = true
+
+    # Defines required tags on each VPC.
+    [[vpc.required_tags]]
+    name = "Name"
+    pattern = '^vpc-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+    [[vpc.required_tags]]
+    name = "Owner:Name"
+
+    [[vpc.required_tags]]
+    name = "Owner:Email"
+    pattern = '^(.*)@(.*).com$'
+
+    [[vpc.required_tags]]
+    name = "Purpose"
+
+    [[vpc.required_tags]]
+    name = "Environment"
+
+    # Identifies and cleans up unused Internet Gateways and Egress only Internet
+    # Gateways to avoid service limits. An IGW is considered unused if it is not
+    # attached to a VPC.
+    [vpc.igw]
+    cleanup = true
+
+    # Identifies and cleans up unused Virtual Private Gateways to avoid service
+    # limits. An VGW is considered unused if it is not attached to a VPC.
+    [vpc.vgw]
+    cleanup = true
 
 [rds]
 # Specifies whether RDS enforcement is enabled or not

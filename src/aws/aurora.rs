@@ -112,6 +112,7 @@ impl AuroraService {
                     .package_tags_as_ntags(self.list_tags(cluster.db_cluster_arn.clone()).await?),
                 state: cluster.status.clone(),
                 enforcement_state,
+                dependencies: None,
             });
         }
 

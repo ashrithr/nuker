@@ -95,6 +95,7 @@ impl S3Service {
                 tags: self.package_tags_as_ntags(self.get_tags_for_bucket(&bucket_id).await),
                 state: Some("Available".to_string()),
                 enforcement_state,
+                dependencies: None,
             })
         }
 

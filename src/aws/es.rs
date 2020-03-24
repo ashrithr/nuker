@@ -111,6 +111,7 @@ impl EsService {
                 tags: self.package_tags_as_ntags(self.list_tags(domain_arn.clone()).await?),
                 state: domain_state,
                 enforcement_state,
+                dependencies: None,
             })
         }
 

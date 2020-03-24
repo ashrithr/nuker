@@ -97,6 +97,7 @@ impl EcsService {
                 tags: self.package_tags_as_ntags(tags),
                 state: cluster.status,
                 enforcement_state,
+                dependencies: None,
             });
         }
 

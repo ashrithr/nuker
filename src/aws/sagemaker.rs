@@ -135,6 +135,7 @@ impl SagemakerService {
                 tags: ntags,
                 state: notebook.notebook_instance_status,
                 enforcement_state,
+                dependencies: None,
             })
         }
 

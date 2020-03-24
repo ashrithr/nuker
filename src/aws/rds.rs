@@ -122,6 +122,7 @@ impl RdsService {
                     .package_tags_as_ntags(self.list_tags(instance.db_instance_arn.clone()).await?),
                 state: instance.db_instance_status.clone(),
                 enforcement_state,
+                dependencies: None,
             });
         }
 
