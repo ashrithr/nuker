@@ -83,10 +83,12 @@ impl Dag {
             });
         }
 
-        trace!(
-            "{:?}",
-            Dot::with_config(&self.graph, &[Config::EdgeIndexLabel])
-        );
+        if self.graph.capacity().0 > 1 {
+            trace!(
+                "{:?}",
+                Dot::with_config(&self.graph, &[Config::EdgeIndexLabel])
+            );
+        }
 
         Ok(())
     }

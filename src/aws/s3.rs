@@ -13,7 +13,7 @@ use rusoto_s3::{
     GetPublicAccessBlockRequest, Grant, ListObjectVersionsRequest, ListObjectsV2Request,
     ObjectIdentifier, PolicyStatus, PublicAccessBlockConfiguration, S3Client, Tag, S3,
 };
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 static S3_PUBLIC_GROUPS: [&str; 2] = [
     "http://acs.amazonaws.com/groups/global/AuthenticatedUsers",
@@ -180,30 +180,41 @@ impl S3Service {
         let mut buckets: Vec<Bucket> = Vec::new();
 
         for bucket in result.buckets.unwrap_or_default() {
-            let bucket_loc_res = self
+            match self
                 .client
                 .get_bucket_location(GetBucketLocationRequest {
                     bucket: bucket.name.as_ref().unwrap().to_string(),
                 })
-                .await?;
-            let bucket_loc = if !bucket_loc_res
-                .location_constraint
-                .as_ref()
-                .unwrap()
-                .is_empty()
+                .await
             {
-                bucket_loc_res
-                    .location_constraint
-                    .as_ref()
-                    .unwrap()
-                    .as_str()
-            } else {
-                Region::UsEast1.name()
-            };
-            let region = self.region.name();
+                Ok(bucket_loc_res) => {
+                    let bucket_loc = if !bucket_loc_res
+                        .location_constraint
+                        .as_ref()
+                        .unwrap()
+                        .is_empty()
+                    {
+                        bucket_loc_res
+                            .location_constraint
+                            .as_ref()
+                            .unwrap()
+                            .as_str()
+                    } else {
+                        Region::UsEast1.name()
+                    };
+                    let region = self.region.name();
 
-            if bucket_loc == region {
-                buckets.push(bucket);
+                    if bucket_loc == region {
+                        buckets.push(bucket);
+                    }
+                }
+                Err(err) => {
+                    warn!(
+                        resource = ?bucket.name,
+                        reason = ?err,
+                        "Failed getting bucket location."
+                    );
+                }
             }
         }
 
@@ -278,6 +289,7 @@ impl S3Service {
     }
 
     async fn delete_objects_in_bucket(&self, bucket: &str) -> Result<()> {
+        trace!(resource = bucket, "Deleting objects");
         let mut next_token: Option<String> = None;
 
         // Delete all objects from the bucket
@@ -292,10 +304,17 @@ impl S3Service {
                 .await?;
 
             if let Some(objects) = result.contents {
-                self.client
+                debug!(
+                    resource = bucket,
+                    objects_count = objects.len(),
+                    "Deleting Objects"
+                );
+
+                match self
+                    .client
                     .delete_objects(DeleteObjectsRequest {
                         bucket: bucket.to_owned(),
-                        bypass_governance_retention: Some(true),
+                        // bypass_governance_retention: Some(true),
                         delete: Delete {
                             objects: objects
                                 .iter()
@@ -308,7 +327,28 @@ impl S3Service {
                         },
                         ..Default::default()
                     })
-                    .await?;
+                    .await
+                {
+                    Ok(r) => {
+                        if let Some(errors) = r.errors {
+                            for error in errors {
+                                warn!(
+                                    resource = bucket,
+                                    "Failed delete_object with errors: {:?}", error
+                                );
+                            }
+                        } else {
+                            debug!(
+                                resource = bucket,
+                                deleted_count = r.deleted.unwrap().len(),
+                                "Successfully deleted objects"
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        warn!(resource = bucket, error = ?err, "Failed delete_objects");
+                    }
+                }
             }
 
             if result.next_continuation_token.is_none() {
@@ -322,6 +362,8 @@ impl S3Service {
     }
 
     async fn delete_versions_in_bucket(&self, bucket: &str) -> Result<()> {
+        trace!(resource = bucket, "Deleting Object Versions");
+
         // Delete all object versions(required for versioned buckets)
         let mut next_key_token: Option<String> = None;
         let mut next_version_token: Option<String> = None;
@@ -337,10 +379,17 @@ impl S3Service {
                 .await?;
 
             if let Some(versions) = result.versions {
-                self.client
+                debug!(
+                    resource = bucket,
+                    versions_count = versions.len(),
+                    "Deleting Object Versions"
+                );
+
+                match self
+                    .client
                     .delete_objects(DeleteObjectsRequest {
                         bucket: bucket.to_owned(),
-                        bypass_governance_retention: Some(true),
+                        // bypass_governance_retention: Some(true),
                         delete: Delete {
                             objects: versions
                                 .iter()
@@ -354,10 +403,31 @@ impl S3Service {
                         },
                         ..Default::default()
                     })
-                    .await?;
+                    .await
+                {
+                    Ok(r) => {
+                        if let Some(errors) = r.errors {
+                            for error in errors {
+                                warn!(
+                                    resource = bucket,
+                                    "Failed delete_object with errors: {:?}", error
+                                );
+                            }
+                        } else {
+                            debug!(
+                                resource = bucket,
+                                deleted_count = r.deleted.unwrap().len(),
+                                "Successfully deleted objects"
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        warn!(resource = bucket, error = ?err, "Failed delete_objects");
+                    }
+                }
             }
 
-            if result.is_truncated.is_none() {
+            if result.next_key_marker.is_none() {
                 break;
             } else {
                 next_key_token = result.next_key_marker;
