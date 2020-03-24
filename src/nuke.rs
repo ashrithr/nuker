@@ -68,7 +68,7 @@ impl Nuker {
                 clients.push(AwsNuker::new(
                     self.args.profile.clone(),
                     region.to_owned(),
-                    &self.config,
+                    self.config.clone(),
                     self.args.dry_run,
                 )?);
             }
@@ -79,7 +79,7 @@ impl Nuker {
                 clients.push(AwsNuker::new(
                     self.args.profile.clone(),
                     Region::from_str(region)?,
-                    &self.config,
+                    self.config.clone(),
                     self.args.dry_run,
                 )?);
             }

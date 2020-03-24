@@ -77,6 +77,10 @@ impl VpcService {
                 }
             };
 
+            let dependencies = self
+                .find_dependencies(vpc_id.as_str(), enforcement_state)
+                .await?;
+
             resources.push(Resource {
                 id: vpc_id.into(),
                 arn: None,
@@ -85,7 +89,11 @@ impl VpcService {
                 tags: self.package_tags_as_ntags(vpc.tags),
                 state: vpc.state,
                 enforcement_state,
-                dependencies: None,
+                dependencies: if dependencies.is_empty() {
+                    None
+                } else {
+                    Some(dependencies)
+                },
             });
         }
 
@@ -145,18 +153,131 @@ impl VpcService {
         Ok(vpcs)
     }
 
-    /// Find all dependencies for this resource.
-    ///
-    /// FIXME: Track dependent resources as a DAG and use the dependency tree to cleanup the
-    /// resources accordingly.
-    async fn dependencies(&self, vpc_id: &String) -> bool {
-        // 1. Delete any associated IGW's
+    async fn delete_igw(&self, resource: &Resource) -> Result<()> {
+        debug!(resource = resource.id.as_str(), "Deleting");
+        if !self.dry_run {
+            self.client
+                .delete_internet_gateway(DeleteInternetGatewayRequest {
+                    internet_gateway_id: resource.id.clone(),
+                    ..Default::default()
+                })
+                .await?
+        }
+
+        Ok(())
+    }
+
+    async fn delete_rt(&self, resource: &Resource) -> Result<()> {
+        debug!(resource = resource.id.as_str(), "Deleting");
+        if !self.dry_run {
+            self.client
+                .delete_route_table(DeleteRouteTableRequest {
+                    route_table_id: resource.id.clone(),
+                    ..Default::default()
+                })
+                .await?
+        }
+
+        Ok(())
+    }
+
+    async fn delete_nacl(&self, resource: &Resource) -> Result<()> {
+        debug!(resource = resource.id.as_str(), "Deleting");
+        if !self.dry_run {
+            self.client
+                .delete_network_acl(DeleteNetworkAclRequest {
+                    network_acl_id: resource.id.clone(),
+                    ..Default::default()
+                })
+                .await?
+        }
+
+        Ok(())
+    }
+
+    async fn delete_peer_conn(&self, resource: &Resource) -> Result<()> {
+        debug!(resource = resource.id.as_str(), "Deleting");
+        if !self.dry_run {
+            self.client
+                .delete_vpc_peering_connection(DeleteVpcPeeringConnectionRequest {
+                    vpc_peering_connection_id: resource.id.clone(),
+                    ..Default::default()
+                })
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn delete_endpoint(&self, resource: &Resource) -> Result<()> {
+        debug!(resource = resource.id.as_str(), "Deleting");
+        if !self.dry_run {
+            self.client
+                .delete_vpc_endpoints(DeleteVpcEndpointsRequest {
+                    vpc_endpoint_ids: vec![resource.id.clone()],
+                    ..Default::default()
+                })
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn delete_nat_gateway(&self, resource: &Resource) -> Result<()> {
+        debug!(resource = resource.id.as_str(), "Deleting");
+        if !self.dry_run {
+            self.client
+                .delete_nat_gateway(DeleteNatGatewayRequest {
+                    nat_gateway_id: resource.id.clone(),
+                })
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn delete_vpn_gateway(&self, resource: &Resource) -> Result<()> {
+        debug!(resource = resource.id.as_str(), "Deleting");
+        if !self.dry_run {
+            self.client
+                .delete_vpn_gateway(DeleteVpnGatewayRequest {
+                    vpn_gateway_id: resource.id.clone(),
+                    ..Default::default()
+                })
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn delete_subnet(&self, resource: &Resource) -> Result<()> {
+        debug!(resource = resource.id.as_str(), "Deleting");
+        if !self.dry_run {
+            self.client
+                .delete_subnet(DeleteSubnetRequest {
+                    subnet_id: resource.id.clone(),
+                    ..Default::default()
+                })
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn find_dependencies(
+        &self,
+        vpc_id: &str,
+        enforcement_state: EnforcementState,
+    ) -> Result<Vec<Resource>> {
+        let mut resources = Vec::new();
+
+        // 1. Associated IGW's
         match self
             .client
             .describe_internet_gateways(DescribeInternetGatewaysRequest {
                 filters: Some(vec![Filter {
                     name: Some("attachment.vpc-id".to_string()),
-                    values: Some(vec![vpc_id.to_owned()]),
+                    values: Some(vec![vpc_id.into()]),
                 }]),
                 ..Default::default()
             })
@@ -165,32 +286,29 @@ impl VpcService {
             Ok(result) => {
                 if let Some(igws) = result.internet_gateways {
                     for igw in igws {
-                        let igw_id = igw.internet_gateway_id.unwrap();
-
-                        match self
-                            .client
-                            .delete_internet_gateway(DeleteInternetGatewayRequest {
-                                internet_gateway_id: igw_id,
-                                ..Default::default()
-                            })
-                            .await
-                        {
-                            Ok(_) => {}
-                            Err(_) => {}
-                        }
+                        resources.push(Resource {
+                            id: igw.internet_gateway_id.unwrap().into(),
+                            arn: None,
+                            resource_type: ResourceType::VpcIgw,
+                            region: self.region.clone(),
+                            tags: self.package_tags_as_ntags(igw.tags),
+                            state: None,
+                            enforcement_state: enforcement_state.clone(),
+                            dependencies: None,
+                        });
                     }
                 }
             }
             Err(_) => {}
         }
 
-        // 2. Delete any associated Subnets
+        // 2. Associated Subnets
         match self
             .client
             .describe_subnets(DescribeSubnetsRequest {
                 filters: Some(vec![Filter {
                     name: Some("vpc-id".to_string()),
-                    values: Some(vec![vpc_id.to_owned()]),
+                    values: Some(vec![vpc_id.into()]),
                 }]),
                 ..Default::default()
             })
@@ -199,26 +317,23 @@ impl VpcService {
             Ok(result) => {
                 if let Some(subnets) = result.subnets {
                     for subnet in subnets {
-                        let subnet_id = subnet.subnet_id.unwrap();
-
-                        match self
-                            .client
-                            .delete_subnet(DeleteSubnetRequest {
-                                subnet_id,
-                                ..Default::default()
-                            })
-                            .await
-                        {
-                            Ok(_) => {}
-                            Err(_) => {}
-                        }
+                        resources.push(Resource {
+                            id: subnet.subnet_id.unwrap(),
+                            arn: None,
+                            resource_type: ResourceType::VpcSubnet,
+                            region: self.region.clone(),
+                            tags: self.package_tags_as_ntags(subnet.tags),
+                            state: None,
+                            enforcement_state: enforcement_state.clone(),
+                            dependencies: None,
+                        });
                     }
                 }
             }
             Err(_) => {}
         }
 
-        // 3. Delete any associated Route tables
+        // 3. Associated Route tables
         match self
             .client
             .describe_route_tables(DescribeRouteTablesRequest {
@@ -233,25 +348,23 @@ impl VpcService {
             Ok(result) => {
                 if let Some(rts) = result.route_tables {
                     for rt in rts {
-                        // route_table_id
-                        match self
-                            .client
-                            .delete_route_table(DeleteRouteTableRequest {
-                                route_table_id: rt.route_table_id.unwrap(),
-                                ..Default::default()
-                            })
-                            .await
-                        {
-                            Ok(_) => {}
-                            Err(_) => {}
-                        }
+                        resources.push(Resource {
+                            id: rt.route_table_id.unwrap(),
+                            arn: None,
+                            resource_type: ResourceType::VpcRt,
+                            region: self.region.clone(),
+                            tags: self.package_tags_as_ntags(rt.tags),
+                            state: None,
+                            enforcement_state: enforcement_state.clone(),
+                            dependencies: None,
+                        });
                     }
                 }
             }
             Err(_) => {}
         }
 
-        // 4. Delete any associated NACLs
+        // 4. Associated NACLs
         match self
             .client
             .describe_network_acls(DescribeNetworkAclsRequest {
@@ -266,24 +379,23 @@ impl VpcService {
             Ok(result) => {
                 if let Some(nacls) = result.network_acls {
                     for nacl in nacls {
-                        match self
-                            .client
-                            .delete_network_acl(DeleteNetworkAclRequest {
-                                network_acl_id: nacl.network_acl_id.unwrap(),
-                                ..Default::default()
-                            })
-                            .await
-                        {
-                            Ok(_) => {}
-                            Err(_) => {}
-                        }
+                        resources.push(Resource {
+                            id: nacl.network_acl_id.unwrap(),
+                            arn: None,
+                            resource_type: ResourceType::VpcNacl,
+                            region: self.region.clone(),
+                            tags: self.package_tags_as_ntags(nacl.tags),
+                            state: None,
+                            enforcement_state: enforcement_state.clone(),
+                            dependencies: None,
+                        });
                     }
                 }
             }
             Err(_) => {}
         }
 
-        // 5. VPC Peering Connections
+        // 5. Associated VPC Peering Connections
         match self
             .client
             .describe_vpc_peering_connections(DescribeVpcPeeringConnectionsRequest {
@@ -298,24 +410,23 @@ impl VpcService {
             Ok(result) => {
                 if let Some(peering_connections) = result.vpc_peering_connections {
                     for conn in peering_connections {
-                        match self
-                            .client
-                            .delete_vpc_peering_connection(DeleteVpcPeeringConnectionRequest {
-                                vpc_peering_connection_id: conn.vpc_peering_connection_id.unwrap(),
-                                ..Default::default()
-                            })
-                            .await
-                        {
-                            Ok(_) => {}
-                            Err(_) => {}
-                        }
+                        resources.push(Resource {
+                            id: conn.vpc_peering_connection_id.unwrap(),
+                            arn: None,
+                            resource_type: ResourceType::VpcPeerConn,
+                            region: self.region.clone(),
+                            tags: self.package_tags_as_ntags(conn.tags),
+                            state: None,
+                            enforcement_state: enforcement_state.clone(),
+                            dependencies: None,
+                        });
                     }
                 }
             }
             Err(_) => {}
         }
 
-        // 6. VPC Endpoints
+        // 6. Associated VPC Endpoints
         match self
             .client
             .describe_vpc_endpoints(DescribeVpcEndpointsRequest {
@@ -329,28 +440,24 @@ impl VpcService {
         {
             Ok(result) => {
                 if let Some(endpoints) = result.vpc_endpoints {
-                    let vpc_endpoint_ids = endpoints
-                        .into_iter()
-                        .map(|e| e.vpc_endpoint_id.unwrap())
-                        .collect::<Vec<String>>();
-
-                    match self
-                        .client
-                        .delete_vpc_endpoints(DeleteVpcEndpointsRequest {
-                            vpc_endpoint_ids,
-                            ..Default::default()
-                        })
-                        .await
-                    {
-                        Ok(_) => {}
-                        Err(_) => {}
+                    for endpoint in endpoints {
+                        resources.push(Resource {
+                            id: endpoint.vpc_endpoint_id.unwrap(),
+                            arn: None,
+                            resource_type: ResourceType::VpcEndpoint,
+                            region: self.region.clone(),
+                            tags: self.package_tags_as_ntags(endpoint.tags),
+                            state: None,
+                            enforcement_state: enforcement_state.clone(),
+                            dependencies: None,
+                        });
                     }
                 }
             }
             Err(_) => {}
         }
 
-        // 7. NAT Gateways
+        // 7. Associated NAT Gateways
         match self
             .client
             .describe_nat_gateways(DescribeNatGatewaysRequest {
@@ -365,23 +472,23 @@ impl VpcService {
             Ok(result) => {
                 if let Some(nat_gateways) = result.nat_gateways {
                     for nat in nat_gateways {
-                        match self
-                            .client
-                            .delete_nat_gateway(DeleteNatGatewayRequest {
-                                nat_gateway_id: nat.nat_gateway_id.unwrap(),
-                            })
-                            .await
-                        {
-                            Ok(_) => {}
-                            Err(_) => {}
-                        }
+                        resources.push(Resource {
+                            id: nat.nat_gateway_id.unwrap(),
+                            arn: None,
+                            resource_type: ResourceType::VpcNatGw,
+                            region: self.region.clone(),
+                            tags: self.package_tags_as_ntags(nat.tags),
+                            state: None,
+                            enforcement_state: enforcement_state.clone(),
+                            dependencies: None,
+                        });
                     }
                 }
             }
             Err(_) => {}
         }
 
-        // 8. Security Groups
+        // 8. Associated Security Groups
         match self
             .client
             .describe_security_groups(DescribeSecurityGroupsRequest {
@@ -396,17 +503,16 @@ impl VpcService {
             Ok(result) => {
                 if let Some(security_groups) = result.security_groups {
                     for sg in security_groups {
-                        match self
-                            .client
-                            .delete_security_group(DeleteSecurityGroupRequest {
-                                group_id: sg.group_id,
-                                ..Default::default()
-                            })
-                            .await
-                        {
-                            Ok(_) => {}
-                            Err(_) => {}
-                        }
+                        resources.push(Resource {
+                            id: sg.group_id.unwrap(),
+                            arn: None,
+                            resource_type: ResourceType::Ec2Sg,
+                            region: self.region.clone(),
+                            tags: self.package_tags_as_ntags(sg.tags),
+                            state: None,
+                            enforcement_state: enforcement_state.clone(),
+                            dependencies: None,
+                        });
                     }
                 }
             }
@@ -429,21 +535,17 @@ impl VpcService {
                 if let Some(reservations) = result.reservations {
                     for reservation in reservations {
                         if let Some(instances) = reservation.instances {
-                            let instance_ids = instances
-                                .into_iter()
-                                .map(|i| i.instance_id.unwrap())
-                                .collect::<Vec<String>>();
-
-                            match self
-                                .client
-                                .terminate_instances(TerminateInstancesRequest {
-                                    instance_ids,
-                                    ..Default::default()
-                                })
-                                .await
-                            {
-                                Ok(_) => {}
-                                Err(_) => {}
+                            for instance in instances {
+                                resources.push(Resource {
+                                    id: instance.instance_id.unwrap(),
+                                    arn: None,
+                                    resource_type: ResourceType::Ec2Instance,
+                                    region: self.region.clone(),
+                                    tags: self.package_tags_as_ntags(instance.tags),
+                                    state: None,
+                                    enforcement_state: enforcement_state.clone(),
+                                    dependencies: None,
+                                });
                             }
                         }
                     }
@@ -467,17 +569,16 @@ impl VpcService {
             Ok(result) => {
                 if let Some(vpn_gateways) = result.vpn_gateways {
                     for vpn_gateway in vpn_gateways {
-                        match self
-                            .client
-                            .delete_vpn_gateway(DeleteVpnGatewayRequest {
-                                vpn_gateway_id: vpn_gateway.vpn_gateway_id.unwrap(),
-                                ..Default::default()
-                            })
-                            .await
-                        {
-                            Ok(_) => {}
-                            Err(_) => {}
-                        }
+                        resources.push(Resource {
+                            id: vpn_gateway.vpn_gateway_id.unwrap(),
+                            arn: None,
+                            resource_type: ResourceType::VpcVpnGw,
+                            region: self.region.clone(),
+                            tags: self.package_tags_as_ntags(vpn_gateway.tags),
+                            state: None,
+                            enforcement_state: enforcement_state.clone(),
+                            dependencies: None,
+                        });
                     }
                 }
             }
@@ -499,29 +600,26 @@ impl VpcService {
             Ok(result) => {
                 if let Some(network_interfaces) = result.network_interfaces {
                     for network_interface in network_interfaces {
-                        match self
-                            .client
-                            .delete_network_interface(DeleteNetworkInterfaceRequest {
-                                network_interface_id: network_interface
-                                    .network_interface_id
-                                    .unwrap(),
-                                ..Default::default()
-                            })
-                            .await
-                        {
-                            Ok(_) => {}
-                            Err(_) => {}
-                        }
+                        resources.push(Resource {
+                            id: network_interface.network_interface_id.unwrap(),
+                            arn: None,
+                            resource_type: ResourceType::Ec2Interface,
+                            region: self.region.clone(),
+                            tags: self.package_tags_as_ntags(network_interface.tag_set),
+                            state: None,
+                            enforcement_state: enforcement_state.clone(),
+                            dependencies: None,
+                        });
                     }
                 }
             }
             Err(_) => {}
         }
 
-        false
+        Ok(resources)
     }
 
-    async fn delete_resource(&self, resource: &Resource) -> Result<()> {
+    async fn delete_vpc(&self, resource: &Resource) -> Result<()> {
         debug!(resource = resource.id.as_str(), "Deleting");
 
         if !self.dry_run {
@@ -547,11 +645,22 @@ impl NukerService for VpcService {
     }
 
     async fn stop(&self, resource: &Resource) -> Result<()> {
-        self.delete_resource(resource).await
+        self.delete(resource).await
     }
 
     async fn delete(&self, resource: &Resource) -> Result<()> {
-        self.delete_resource(resource).await
+        match resource.resource_type {
+            ResourceType::Vpc => self.delete_vpc(resource).await,
+            ResourceType::VpcIgw => self.delete_igw(resource).await,
+            ResourceType::VpcEndpoint => self.delete_endpoint(resource).await,
+            ResourceType::VpcNacl => self.delete_nacl(resource).await,
+            ResourceType::VpcNatGw => self.delete_nat_gateway(resource).await,
+            ResourceType::VpcPeerConn => self.delete_peer_conn(resource).await,
+            ResourceType::VpcRt => self.delete_rt(resource).await,
+            ResourceType::VpcSubnet => self.delete_subnet(resource).await,
+            ResourceType::VpcVpnGw => self.delete_vpn_gateway(resource).await,
+            _ => Ok(()),
+        }
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {

@@ -25,7 +25,7 @@ pub struct Args {
 /// Configuration struct for nuker executable
 ///
 /// This struct is built from reading the configuration file
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub ec2: Ec2Config,
     pub ebs: EbsConfig,

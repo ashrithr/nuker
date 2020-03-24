@@ -66,6 +66,7 @@ macro_rules! scan_resources {
 /// AWS Nuker for nuking resources in AWS.
 pub struct AwsNuker {
     pub region: Region,
+    pub config: Config,
     services_map: HashMap<String, Box<dyn NukerService>>,
     resources: Arc<Mutex<Vec<Resource>>>,
     dag: Dag,
@@ -75,191 +76,164 @@ impl AwsNuker {
     pub fn new(
         profile_name: Option<String>,
         region: Region,
-        config: &Config,
+        config: Config,
         dry_run: bool,
     ) -> Result<AwsNuker> {
         let mut services_map: HashMap<String, Box<dyn NukerService>> = HashMap::new();
-        let cw_client = create_cw_client(&profile_name, &region, config)?;
+        let cw_client = create_cw_client(&profile_name, &region, &config)?;
 
-        if config.ec2.enabled {
-            services_map.insert(
-                service::EC2_TYPE.to_string(),
-                Box::new(Ec2Service::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.ec2.clone(),
-                    cw_client.clone(),
-                    dry_run,
-                )?),
-            );
-        }
+        services_map.insert(
+            service::EC2_TYPE.to_string(),
+            Box::new(Ec2Service::new(
+                profile_name.clone(),
+                region.clone(),
+                config.ec2.clone(),
+                cw_client.clone(),
+                dry_run,
+            )?),
+        );
 
-        if config.rds.enabled {
-            services_map.insert(
-                service::RDS_TYPE.to_string(),
-                Box::new(RdsService::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.rds.clone(),
-                    cw_client.clone(),
-                    dry_run,
-                )?),
-            );
-        }
+        services_map.insert(
+            service::RDS_TYPE.to_string(),
+            Box::new(RdsService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.rds.clone(),
+                cw_client.clone(),
+                dry_run,
+            )?),
+        );
 
-        if config.aurora.enabled {
-            services_map.insert(
-                service::AURORA_TYPE.to_string(),
-                Box::new(AuroraService::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.aurora.clone(),
-                    cw_client.clone(),
-                    dry_run,
-                )?),
-            );
-        }
+        services_map.insert(
+            service::AURORA_TYPE.to_string(),
+            Box::new(AuroraService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.aurora.clone(),
+                cw_client.clone(),
+                dry_run,
+            )?),
+        );
 
-        if config.s3.enabled {
-            services_map.insert(
-                service::S3_TYPE.to_string(),
-                Box::new(S3Service::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.s3.clone(),
-                    dry_run,
-                )?),
-            );
-        }
+        services_map.insert(
+            service::S3_TYPE.to_string(),
+            Box::new(S3Service::new(
+                profile_name.clone(),
+                region.clone(),
+                config.s3.clone(),
+                dry_run,
+            )?),
+        );
 
-        if config.redshift.enabled {
-            services_map.insert(
-                service::REDSHIFT_TYPE.to_string(),
-                Box::new(RedshiftService::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.redshift.clone(),
-                    cw_client.clone(),
-                    dry_run,
-                )?),
-            );
-        }
+        services_map.insert(
+            service::REDSHIFT_TYPE.to_string(),
+            Box::new(RedshiftService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.redshift.clone(),
+                cw_client.clone(),
+                dry_run,
+            )?),
+        );
 
-        if config.ebs.enabled {
-            services_map.insert(
-                service::EBS_TYPE.to_string(),
-                Box::new(EbsService::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.ebs.clone(),
-                    cw_client.clone(),
-                    dry_run,
-                )?),
-            );
-        }
+        services_map.insert(
+            service::EBS_TYPE.to_string(),
+            Box::new(EbsService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.ebs.clone(),
+                cw_client.clone(),
+                dry_run,
+            )?),
+        );
 
-        if config.emr.enabled {
-            services_map.insert(
-                service::EMR_TYPE.to_string(),
-                Box::new(EmrService::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.emr.clone(),
-                    cw_client.clone(),
-                    dry_run,
-                )?),
-            );
-        }
+        services_map.insert(
+            service::EMR_TYPE.to_string(),
+            Box::new(EmrService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.emr.clone(),
+                cw_client.clone(),
+                dry_run,
+            )?),
+        );
 
-        if config.glue.enabled {
-            services_map.insert(
-                service::GLUE_TYPE.to_string(),
-                Box::new(GlueService::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.glue.clone(),
-                    dry_run,
-                )?),
-            );
-        }
+        services_map.insert(
+            service::GLUE_TYPE.to_string(),
+            Box::new(GlueService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.glue.clone(),
+                dry_run,
+            )?),
+        );
 
-        if config.sagemaker.enabled {
-            services_map.insert(
-                service::SAGEMAKER_TYPE.to_string(),
-                Box::new(SagemakerService::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.sagemaker.clone(),
-                    dry_run,
-                )?),
-            );
-        }
+        services_map.insert(
+            service::SAGEMAKER_TYPE.to_string(),
+            Box::new(SagemakerService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.sagemaker.clone(),
+                dry_run,
+            )?),
+        );
 
-        if config.es.enabled {
-            services_map.insert(
-                service::ES_TYPE.to_string(),
-                Box::new(EsService::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.es.clone(),
-                    cw_client.clone(),
-                    dry_run,
-                )?),
-            );
-        }
+        services_map.insert(
+            service::ES_TYPE.to_string(),
+            Box::new(EsService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.es.clone(),
+                cw_client.clone(),
+                dry_run,
+            )?),
+        );
 
-        if config.elb.enabled {
-            services_map.insert(
-                service::ELB_TYPE.to_string(),
-                Box::new(ElbService::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.elb.clone(),
-                    cw_client.clone(),
-                    dry_run,
-                )?),
-            );
-        }
+        services_map.insert(
+            service::ELB_TYPE.to_string(),
+            Box::new(ElbService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.elb.clone(),
+                cw_client.clone(),
+                dry_run,
+            )?),
+        );
 
-        if config.asg.enabled {
-            services_map.insert(
-                service::ASG_TYPE.to_string(),
-                Box::new(AsgService::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.asg.clone(),
-                    dry_run,
-                )?),
-            );
-        }
+        services_map.insert(
+            service::ASG_TYPE.to_string(),
+            Box::new(AsgService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.asg.clone(),
+                dry_run,
+            )?),
+        );
 
-        if config.ecs.enabled {
-            services_map.insert(
-                service::ECS_TYPE.to_string(),
-                Box::new(EcsService::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.ecs.clone(),
-                    cw_client.clone(),
-                    dry_run,
-                )?),
-            );
-        }
+        services_map.insert(
+            service::ECS_TYPE.to_string(),
+            Box::new(EcsService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.ecs.clone(),
+                cw_client.clone(),
+                dry_run,
+            )?),
+        );
 
-        if config.vpc.enabled {
-            services_map.insert(
-                service::VPC_TYPE.to_string(),
-                Box::new(VpcService::new(
-                    profile_name.clone(),
-                    region.clone(),
-                    config.vpc.clone(),
-                    dry_run,
-                )?),
-            );
-        }
+        services_map.insert(
+            service::VPC_TYPE.to_string(),
+            Box::new(VpcService::new(
+                profile_name.clone(),
+                region.clone(),
+                config.vpc.clone(),
+                dry_run,
+            )?),
+        );
 
         Ok(AwsNuker {
             region,
+            config,
             services_map,
             resources: Arc::new(Mutex::new(Vec::new())),
             dag: Dag::new(),
@@ -275,33 +249,33 @@ impl AwsNuker {
             let ref_client = service.as_any();
             let region = self.region.name().to_string();
 
-            if ref_client.is::<Ec2Service>() {
+            if ref_client.is::<Ec2Service>() && self.config.ec2.enabled {
                 scan_resources!(service::EC2_TYPE, resources, handles, service, region);
-            } else if ref_client.is::<EbsService>() {
+            } else if ref_client.is::<EbsService>() && self.config.ebs.enabled {
                 scan_resources!(service::EBS_TYPE, resources, handles, service, region);
-            } else if ref_client.is::<RdsService>() {
+            } else if ref_client.is::<RdsService>() && self.config.rds.enabled {
                 scan_resources!(service::RDS_TYPE, resources, handles, service, region);
-            } else if ref_client.is::<AuroraService>() {
+            } else if ref_client.is::<AuroraService>() && self.config.aurora.enabled {
                 scan_resources!(service::AURORA_TYPE, resources, handles, service, region);
-            } else if ref_client.is::<RedshiftService>() {
+            } else if ref_client.is::<RedshiftService>() && self.config.redshift.enabled {
                 scan_resources!(service::REDSHIFT_TYPE, resources, handles, service, region);
-            } else if ref_client.is::<EmrService>() {
+            } else if ref_client.is::<EmrService>() && self.config.emr.enabled {
                 scan_resources!(service::EMR_TYPE, resources, handles, service, region);
-            } else if ref_client.is::<GlueService>() {
+            } else if ref_client.is::<GlueService>() && self.config.glue.enabled {
                 scan_resources!(service::GLUE_TYPE, resources, handles, service, region);
-            } else if ref_client.is::<SagemakerService>() {
+            } else if ref_client.is::<SagemakerService>() && self.config.sagemaker.enabled {
                 scan_resources!(service::SAGEMAKER_TYPE, resources, handles, service, region);
-            } else if ref_client.is::<S3Service>() {
+            } else if ref_client.is::<S3Service>() && self.config.s3.enabled {
                 scan_resources!(service::S3_TYPE, resources, handles, service, region);
-            } else if ref_client.is::<EsService>() {
+            } else if ref_client.is::<EsService>() && self.config.es.enabled {
                 scan_resources!(service::ES_TYPE, resources, handles, service, region);
-            } else if ref_client.is::<ElbService>() {
+            } else if ref_client.is::<ElbService>() && self.config.elb.enabled {
                 scan_resources!(service::ELB_TYPE, resources, handles, service, region);
-            } else if ref_client.is::<AsgService>() {
+            } else if ref_client.is::<AsgService>() && self.config.asg.enabled {
                 scan_resources!(service::ASG_TYPE, resources, handles, service, region);
-            } else if ref_client.is::<EcsService>() {
+            } else if ref_client.is::<EcsService>() && self.config.ecs.enabled {
                 scan_resources!(service::ECS_TYPE, resources, handles, service, region);
-            } else if ref_client.is::<VpcService>() {
+            } else if ref_client.is::<VpcService>() && self.config.vpc.enabled {
                 scan_resources!(service::VPC_TYPE, resources, handles, service, region);
             }
         }

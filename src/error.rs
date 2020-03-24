@@ -3,11 +3,14 @@ use rusoto_ce::GetCostAndUsageError;
 use rusoto_core::{region::ParseRegionError, request::TlsError, RusotoError};
 use rusoto_credential::CredentialsError;
 use rusoto_ec2::{
-    DeleteNetworkInterfaceError, DeleteSnapshotError, DeleteVolumeError, DeleteVpcError,
-    DescribeAddressesError, DescribeInstanceAttributeError, DescribeInstancesError,
-    DescribeNetworkInterfacesError, DescribeSecurityGroupsError, DescribeSnapshotsError,
-    DescribeVolumesError, DescribeVpcsError, DetachVolumeError, ModifyInstanceAttributeError,
-    ReleaseAddressError, StopInstancesError, TerminateInstancesError,
+    DeleteInternetGatewayError, DeleteNatGatewayError, DeleteNetworkAclError,
+    DeleteNetworkInterfaceError, DeleteRouteTableError, DeleteSecurityGroupError,
+    DeleteSnapshotError, DeleteSubnetError, DeleteVolumeError, DeleteVpcEndpointsError,
+    DeleteVpcError, DeleteVpcPeeringConnectionError, DeleteVpnGatewayError, DescribeAddressesError,
+    DescribeInstanceAttributeError, DescribeInstancesError, DescribeNetworkInterfacesError,
+    DescribeSecurityGroupsError, DescribeSnapshotsError, DescribeVolumesError, DescribeVpcsError,
+    DetachVolumeError, ModifyInstanceAttributeError, ReleaseAddressError, StopInstancesError,
+    TerminateInstancesError,
 };
 use rusoto_elbv2::{DeleteLoadBalancerError, DescribeLoadBalancersError};
 use rusoto_emr::{
@@ -90,6 +93,42 @@ pub enum Error {
     },
     #[fail(display = "Issue deleting VPC: {}", error)]
     VpcDelete { error: RusotoError<DeleteVpcError> },
+    #[fail(display = "Issue deleting IGW: {}", error)]
+    IgwDelete {
+        error: RusotoError<DeleteInternetGatewayError>,
+    },
+    #[fail(display = "Issue deleting Subnet: {}", error)]
+    SubnetDelete {
+        error: RusotoError<DeleteSubnetError>,
+    },
+    #[fail(display = "Issue deleting Route Table: {}", error)]
+    RouteTableDelete {
+        error: RusotoError<DeleteRouteTableError>,
+    },
+    #[fail(display = "Issue deleting Network ACL: {}", error)]
+    NetworkAclDelete {
+        error: RusotoError<DeleteNetworkAclError>,
+    },
+    #[fail(display = "Issue deleting VPC Peering Connection: {}", error)]
+    PeeringConnectionDelete {
+        error: RusotoError<DeleteVpcPeeringConnectionError>,
+    },
+    #[fail(display = "Issue deleting VPC Endpoint Request: {}", error)]
+    EndpointRequestDelete {
+        error: RusotoError<DeleteVpcEndpointsError>,
+    },
+    #[fail(display = "Issue deleting NAT Gateway: {}", error)]
+    NatGatewayDelete {
+        error: RusotoError<DeleteNatGatewayError>,
+    },
+    #[fail(display = "Issue deleting Security Group: {}", error)]
+    SecurityGroupError {
+        error: RusotoError<DeleteSecurityGroupError>,
+    },
+    #[fail(display = "Issue deleting VPN Gateway: {}", error)]
+    VpnGatewayError {
+        error: RusotoError<DeleteVpnGatewayError>,
+    },
     #[fail(display = "Issue describing DB Instances: {}", error)]
     DBInstanceDescribe {
         error: RusotoError<DescribeDBInstancesError>,
