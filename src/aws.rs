@@ -34,7 +34,7 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
-use tracing::error;
+use tracing::{error, trace};
 use tracing_futures::Instrument;
 
 macro_rules! scan_resources {
@@ -303,6 +303,7 @@ impl AwsNuker {
                 .cleanup(&resource)
                 .await?;
         }
+        trace!("Done cleaning up resources");
 
         Ok(())
     }

@@ -90,17 +90,19 @@ impl Nuker {
                 let region = client.region.name().to_string();
                 client
                     .locate_resources()
-                    .instrument(tracing::trace_span!("aws-nuker", region = region.as_str()))
+                    .instrument(tracing::trace_span!("nuker", region = region.as_str()))
                     .await;
                 client.print_resources();
                 let _ = client
                     .cleanup_resources()
-                    .instrument(tracing::trace_span!("aws-nuker", region = region.as_str()))
+                    .instrument(tracing::trace_span!("nuker", region = region.as_str()))
                     .await;
             }));
         }
 
+        trace!("Waiting for all futures to return");
         futures::future::join_all(handles).await;
+        trace!("All futures completed");
 
         Ok(())
     }

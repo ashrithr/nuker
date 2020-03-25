@@ -18,7 +18,7 @@ async fn main() {
 
     let mut nuker = nuke::Nuker::new(config, args);
 
-    match tokio::try_join!(nuker.run().instrument(tracing::trace_span!("nuke"))) {
+    match tokio::try_join!(nuker.run().instrument(tracing::trace_span!("nuker"))) {
         Ok(_) => {}
         Err(err) => error!("Encountered error: {:?}", err),
     }

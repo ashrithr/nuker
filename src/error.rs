@@ -29,7 +29,7 @@ use rusoto_rds::{
 use rusoto_redshift::{DeleteClusterError, DescribeClustersError};
 use rusoto_s3::{
     DeleteBucketError, DeleteObjectsError, GetBucketLocationError, GetBucketTaggingError,
-    ListBucketsError, ListObjectVersionsError, ListObjectsV2Error,
+    ListBucketsError, ListObjectVersionsError, ListObjectsV2Error, PutBucketVersioningError,
 };
 use rusoto_sagemaker::{
     DeleteNotebookInstanceError, ListNotebookInstancesError, ListTagsError,
@@ -236,6 +236,10 @@ pub enum Error {
     #[fail(display = "Failed listing S3 bucket tags: {}", error)]
     GetBucketTags {
         error: RusotoError<GetBucketTaggingError>,
+    },
+    #[fail(display = "Failed suspending versioning: {}", error)]
+    DisableBucketVersioning {
+        error: RusotoError<PutBucketVersioningError>,
     },
     #[fail(display = "Failed parsing the region: {}", error)]
     RegionParseError { error: ParseRegionError },

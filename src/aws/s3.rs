@@ -10,8 +10,9 @@ use rusoto_credential::ProfileProvider;
 use rusoto_s3::{
     Bucket, Delete, DeleteBucketRequest, DeleteObjectsRequest, GetBucketAclRequest,
     GetBucketLocationRequest, GetBucketPolicyStatusRequest, GetBucketTaggingRequest,
-    GetPublicAccessBlockRequest, Grant, ListObjectVersionsRequest, ListObjectsV2Request,
-    ObjectIdentifier, PolicyStatus, PublicAccessBlockConfiguration, S3Client, Tag, S3,
+    GetBucketVersioningRequest, GetPublicAccessBlockRequest, Grant, ListObjectVersionsRequest,
+    ListObjectsV2Request, ObjectIdentifier, PolicyStatus, PublicAccessBlockConfiguration,
+    PutBucketVersioningRequest, S3Client, Tag, VersioningConfiguration, S3,
 };
 use tracing::{debug, trace, warn};
 
@@ -366,72 +367,181 @@ impl S3Service {
 
         // Delete all object versions(required for versioned buckets)
         let mut next_key_token: Option<String> = None;
-        let mut next_version_token: Option<String> = None;
         loop {
-            let result = self
+            match self
                 .client
                 .list_object_versions(ListObjectVersionsRequest {
                     bucket: bucket.to_owned(),
                     key_marker: next_key_token,
-                    version_id_marker: next_version_token,
                     ..Default::default()
                 })
-                .await?;
+                .await
+            {
+                Ok(result) => {
+                    trace!(resource = bucket, versions = ?result.versions, "Got result from list_object_versions");
 
-            if let Some(versions) = result.versions {
-                debug!(
-                    resource = bucket,
-                    versions_count = versions.len(),
-                    "Deleting Object Versions"
-                );
+                    if let Some(versions) = result.versions {
+                        debug!(
+                            resource = bucket,
+                            versions_count = versions.len(),
+                            "Deleting Object Versions"
+                        );
 
-                match self
-                    .client
-                    .delete_objects(DeleteObjectsRequest {
-                        bucket: bucket.to_owned(),
-                        // bypass_governance_retention: Some(true),
-                        delete: Delete {
-                            objects: versions
-                                .iter()
-                                .map(|v| ObjectIdentifier {
-                                    key: v.key.as_ref().unwrap().to_owned(),
-                                    version_id: v.version_id.to_owned(),
+                        // delete object versions
+                        match self
+                            .client
+                            .delete_objects(DeleteObjectsRequest {
+                                bucket: bucket.to_owned(),
+                                // bypass_governance_retention: Some(true),
+                                delete: Delete {
+                                    objects: versions
+                                        .iter()
+                                        .map(|v| ObjectIdentifier {
+                                            key: v.key.as_ref().unwrap().to_owned(),
+                                            version_id: v.version_id.to_owned(),
+                                            ..Default::default()
+                                        })
+                                        .collect(),
                                     ..Default::default()
-                                })
-                                .collect(),
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    })
-                    .await
-                {
-                    Ok(r) => {
-                        if let Some(errors) = r.errors {
-                            for error in errors {
-                                warn!(
-                                    resource = bucket,
-                                    "Failed delete_object with errors: {:?}", error
-                                );
+                                },
+                                ..Default::default()
+                            })
+                            .await
+                        {
+                            Ok(r) => {
+                                if let Some(errors) = r.errors {
+                                    for error in errors {
+                                        warn!(
+                                            resource = bucket,
+                                            "Failed delete_object with errors: {:?}", error
+                                        );
+                                    }
+                                } else {
+                                    debug!(
+                                        resource = bucket,
+                                        deleted_count = r.deleted.unwrap().len(),
+                                        "Successfully deleted objects"
+                                    );
+                                }
                             }
-                        } else {
-                            debug!(
-                                resource = bucket,
-                                deleted_count = r.deleted.unwrap().len(),
-                                "Successfully deleted objects"
-                            );
+                            Err(err) => {
+                                warn!(resource = bucket, error = ?err, "Failed delete_objects - versions");
+                            }
                         }
                     }
-                    Err(err) => {
-                        warn!(resource = bucket, error = ?err, "Failed delete_objects");
+
+                    if let Some(delete_markers) = result.delete_markers {
+                        debug!(
+                            resource = bucket,
+                            del_markers_count = delete_markers.len(),
+                            "Deleting Object Delete Markers"
+                        );
+
+                        // delete object versions
+                        match self
+                            .client
+                            .delete_objects(DeleteObjectsRequest {
+                                bucket: bucket.to_owned(),
+                                // bypass_governance_retention: Some(true),
+                                delete: Delete {
+                                    objects: delete_markers
+                                        .iter()
+                                        .map(|m| ObjectIdentifier {
+                                            key: m.key.as_ref().unwrap().to_owned(),
+                                            version_id: m.version_id.to_owned(),
+                                            ..Default::default()
+                                        })
+                                        .collect(),
+                                    ..Default::default()
+                                },
+                                ..Default::default()
+                            })
+                            .await
+                        {
+                            Ok(r) => {
+                                if let Some(errors) = r.errors {
+                                    for error in errors {
+                                        warn!(
+                                            resource = bucket,
+                                            "Failed delete_object_markers with errors: {:?}", error
+                                        );
+                                    }
+                                } else {
+                                    debug!(
+                                        resource = bucket,
+                                        deleted_count = r.deleted.unwrap().len(),
+                                        "Successfully deleted objects markers"
+                                    );
+                                }
+                            }
+                            Err(err) => {
+                                warn!(resource = bucket, error = ?err, "Failed delete_objects - delete_markers");
+                            }
+                        }
+                    }
+
+                    if result.is_truncated == Some(true) {
+                        next_key_token = result.next_key_marker;
+                    } else {
+                        break;
+                    }
+                }
+                Err(err) => {
+                    warn!(resource = bucket, error = ?err, "Failed getting object versions.");
+                    break;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn suspend_versioning(&self, bucket: &str) -> Result<()> {
+        debug!(resource = bucket, "Checking and suspending versioning");
+
+        match self
+            .client
+            .get_bucket_versioning(GetBucketVersioningRequest {
+                bucket: bucket.to_owned(),
+            })
+            .await
+        {
+            Ok(result) => {
+                if let Some(status) = result.status {
+                    match &*status {
+                        "Enabled" => {
+                            match self
+                                .client
+                                .put_bucket_versioning(PutBucketVersioningRequest {
+                                    bucket: bucket.to_owned(),
+                                    versioning_configuration: VersioningConfiguration {
+                                        status: Some("Suspended".to_string()),
+                                        ..Default::default()
+                                    },
+                                    ..Default::default()
+                                })
+                                .await
+                            {
+                                Ok(()) => {
+                                    debug!(resource = bucket, "Successfully suspended versioning.");
+                                }
+                                Err(err) => {
+                                    warn!(resource = bucket, error = ?err, "Failed disabling versioning");
+                                    return Err(crate::error::Error::Internal {
+                                        error: "Failed disabling versioning".to_string(),
+                                    });
+                                }
+                            }
+                        }
+                        "Suspended" => {
+                            trace!(resource = bucket, "Versioning is disabled.");
+                        }
+                        _ => {}
                     }
                 }
             }
-
-            if result.next_key_marker.is_none() {
-                break;
-            } else {
-                next_key_token = result.next_key_marker;
-                next_version_token = result.next_version_id_marker;
+            Err(err) => {
+                warn!(resource = bucket, error = ?err, "Failed checking versioning status.");
             }
         }
 
@@ -442,13 +552,15 @@ impl S3Service {
         debug!(resource = bucket, "Deleting");
 
         if !self.dry_run {
-            if let Ok(()) = self.delete_objects_in_bucket(bucket).await {
-                if let Ok(()) = self.delete_versions_in_bucket(bucket).await {
-                    self.client
-                        .delete_bucket(DeleteBucketRequest {
-                            bucket: bucket.to_owned(),
-                        })
-                        .await?;
+            if let Ok(()) = self.suspend_versioning(bucket).await {
+                if let Ok(()) = self.delete_objects_in_bucket(bucket).await {
+                    if let Ok(()) = self.delete_versions_in_bucket(bucket).await {
+                        self.client
+                            .delete_bucket(DeleteBucketRequest {
+                                bucket: bucket.to_owned(),
+                            })
+                            .await?;
+                    }
                 }
             }
         }
