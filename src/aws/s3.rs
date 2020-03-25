@@ -382,7 +382,7 @@ impl S3Service {
                     trace!(
                         resource = bucket,
                         is_truncated = ?result.is_truncated,
-                        "Got result from list_object_versions"
+                        "list_object_versions"
                     );
 
                     if let Some(versions) = result.versions {
@@ -425,7 +425,7 @@ impl S3Service {
                                     debug!(
                                         resource = bucket,
                                         deleted_count = r.deleted.unwrap().len(),
-                                        "Successfully deleted objects"
+                                        "Deleted objects"
                                     );
                                 }
                             }
@@ -475,7 +475,7 @@ impl S3Service {
                                     debug!(
                                         resource = bucket,
                                         deleted_count = r.deleted.unwrap().len(),
-                                        "Successfully deleted objects markers"
+                                        "Deleted objects markers"
                                     );
                                 }
                             }
@@ -528,7 +528,7 @@ impl S3Service {
                                 .await
                             {
                                 Ok(()) => {
-                                    debug!(resource = bucket, "Successfully suspended versioning.");
+                                    debug!(resource = bucket, "Suspended versioning.");
                                 }
                                 Err(err) => {
                                     warn!(resource = bucket, error = ?err, "Failed disabling versioning");
@@ -546,7 +546,7 @@ impl S3Service {
                 }
             }
             Err(err) => {
-                warn!(resource = bucket, error = ?err, "Failed checking versioning status.");
+                warn!(resource = bucket, error = ?err, "Failed  versioning status.");
             }
         }
 
@@ -572,7 +572,7 @@ impl S3Service {
                         })
                         .await
                     {
-                        Ok(()) => trace!(resource = bucket, "Successfully deleted bucket policy"),
+                        Ok(()) => trace!(resource = bucket, "Deleted bucket policy"),
                         Err(err) => {
                             warn!(resource = bucket, error = ?err, "Failed deleting bucket policy")
                         }
@@ -581,7 +581,7 @@ impl S3Service {
                     trace!(resource = bucket, "No policy associated with bucket.");
                 }
             }
-            Err(err) => warn!(resource = bucket, error = ?err, "Failed getting bucket policy."),
+            Err(err) => warn!(resource = bucket, error = ?err, "Failed fetching bucket policy."),
         }
 
         Ok(())
