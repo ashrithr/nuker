@@ -8,11 +8,12 @@ use async_trait::async_trait;
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_s3::{
-    Bucket, Delete, DeleteBucketRequest, DeleteObjectsRequest, GetBucketAclRequest,
-    GetBucketLocationRequest, GetBucketPolicyStatusRequest, GetBucketTaggingRequest,
-    GetBucketVersioningRequest, GetPublicAccessBlockRequest, Grant, ListObjectVersionsRequest,
-    ListObjectsV2Request, ObjectIdentifier, PolicyStatus, PublicAccessBlockConfiguration,
-    PutBucketVersioningRequest, S3Client, Tag, VersioningConfiguration, S3,
+    Bucket, Delete, DeleteBucketPolicyRequest, DeleteBucketRequest, DeleteObjectsRequest,
+    GetBucketAclRequest, GetBucketLocationRequest, GetBucketPolicyRequest,
+    GetBucketPolicyStatusRequest, GetBucketTaggingRequest, GetBucketVersioningRequest,
+    GetPublicAccessBlockRequest, Grant, ListObjectVersionsRequest, ListObjectsV2Request,
+    ObjectIdentifier, PolicyStatus, PublicAccessBlockConfiguration, PutBucketVersioningRequest,
+    S3Client, Tag, VersioningConfiguration, S3,
 };
 use tracing::{debug, trace, warn};
 
@@ -378,7 +379,11 @@ impl S3Service {
                 .await
             {
                 Ok(result) => {
-                    trace!(resource = bucket, versions = ?result.versions, "Got result from list_object_versions");
+                    trace!(
+                        resource = bucket,
+                        is_truncated = ?result.is_truncated,
+                        "Got result from list_object_versions"
+                    );
 
                     if let Some(versions) = result.versions {
                         debug!(
@@ -548,18 +553,63 @@ impl S3Service {
         Ok(())
     }
 
+    async fn delete_bucket_policy(&self, bucket: &str) -> Result<()> {
+        debug!(resource = bucket, "Checking and deleting bucket policy");
+
+        match self
+            .client
+            .get_bucket_policy(GetBucketPolicyRequest {
+                bucket: bucket.to_string(),
+            })
+            .await
+        {
+            Ok(result) => {
+                if let Some(_policy) = result.policy {
+                    match self
+                        .client
+                        .delete_bucket_policy(DeleteBucketPolicyRequest {
+                            bucket: bucket.to_string(),
+                        })
+                        .await
+                    {
+                        Ok(()) => trace!(resource = bucket, "Successfully deleted bucket policy"),
+                        Err(err) => {
+                            warn!(resource = bucket, error = ?err, "Failed deleting bucket policy")
+                        }
+                    }
+                } else {
+                    trace!(resource = bucket, "No policy associated with bucket.");
+                }
+            }
+            Err(err) => warn!(resource = bucket, error = ?err, "Failed getting bucket policy."),
+        }
+
+        Ok(())
+    }
+
     async fn delete_bucket<'a>(&self, bucket: &str) -> Result<()> {
         debug!(resource = bucket, "Deleting");
 
         if !self.dry_run {
-            if let Ok(()) = self.suspend_versioning(bucket).await {
-                if let Ok(()) = self.delete_objects_in_bucket(bucket).await {
-                    if let Ok(()) = self.delete_versions_in_bucket(bucket).await {
-                        self.client
-                            .delete_bucket(DeleteBucketRequest {
-                                bucket: bucket.to_owned(),
-                            })
-                            .await?;
+            if let Ok(()) = self.delete_bucket_policy(bucket).await {
+                if let Ok(()) = self.suspend_versioning(bucket).await {
+                    if let Ok(()) = self.delete_objects_in_bucket(bucket).await {
+                        if let Ok(()) = self.delete_versions_in_bucket(bucket).await {
+                            trace!(resource = bucket, "Attempting to delete bucket");
+
+                            match self
+                                .client
+                                .delete_bucket(DeleteBucketRequest {
+                                    bucket: bucket.to_owned(),
+                                })
+                                .await
+                            {
+                                Ok(()) => trace!(resource = bucket, "Successfully deleted bucket."),
+                                Err(err) => {
+                                    warn!(resource = bucket, error = ?err, "Failed deleting bucket.")
+                                }
+                            }
+                        }
                     }
                 }
             }
