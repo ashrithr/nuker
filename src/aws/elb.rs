@@ -4,6 +4,7 @@ use crate::config::{ElbConfig, RequiredTags};
 use crate::resource::{EnforcementState, NTag, Resource, ResourceType};
 use crate::service::NukerService;
 use async_trait::async_trait;
+use failure::format_err;
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_elbv2::{
@@ -134,9 +135,7 @@ impl ElbService {
         {
             Ok(tags_description.pop().unwrap_or_default().tags)
         } else {
-            Err(crate::error::Error::Internal {
-                error: "Failed to get tags".to_string(),
-            })
+            Err(format_err!("Failed to get tags"))
         }
     }
 

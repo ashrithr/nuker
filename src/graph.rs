@@ -1,9 +1,8 @@
 //! Graph utility to create DAG for tracking `Resource` dependencies.
 
-use crate::{
-    error::Error as AwsError,
-    resource::{EnforcementState, Resource, ResourceType},
-};
+use crate::resource::{EnforcementState, Resource, ResourceType};
+use crate::Result;
+use failure::format_err;
 use petgraph::{
     algo::{is_cyclic_directed, toposort},
     dot::{Config, Dot},
@@ -13,8 +12,6 @@ use petgraph::{
 use rusoto_core::Region;
 use std::collections::HashMap;
 use tracing::trace;
-
-type Result<T, E = AwsError> = std::result::Result<T, E>;
 
 #[derive(Debug, Copy, Clone)]
 pub enum Relation {
@@ -78,9 +75,9 @@ impl Dag {
         }
 
         if !is_dag(&self.graph) {
-            return Err(AwsError::Internal {
-                error: "Failed constructing dependency graph for the resources".to_string(),
-            });
+            return Err(format_err!(
+                "Failed constructing dependency graph for the resources"
+            ));
         }
 
         if self.graph.capacity().0 > 1 {
@@ -118,9 +115,7 @@ impl Dag {
                     .node_weight(err.node_id())
                     .map(|weight| format!("Error graph has cycle at node: {:?}", weight));
 
-                Err(AwsError::Internal {
-                    error: error.unwrap_or_default(),
-                })
+                Err(format_err!("{}", error.unwrap_or_default()))
             }
         }
     }

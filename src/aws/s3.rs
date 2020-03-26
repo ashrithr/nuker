@@ -5,6 +5,7 @@ use crate::{
     service::NukerService,
 };
 use async_trait::async_trait;
+use failure::format_err;
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_s3::{
@@ -532,9 +533,7 @@ impl S3Service {
                                 }
                                 Err(err) => {
                                     warn!(resource = bucket, error = ?err, "Failed disabling versioning");
-                                    return Err(crate::error::Error::Internal {
-                                        error: "Failed disabling versioning".to_string(),
-                                    });
+                                    return Err(format_err!("Failed disabling versioning"));
                                 }
                             }
                         }

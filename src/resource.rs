@@ -3,7 +3,7 @@ use colored::*;
 use rusoto_core::Region;
 use std::fmt;
 
-#[derive(Display, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub enum ResourceType {
     Ec2Instance,
     Ec2Interface,
@@ -34,6 +34,14 @@ pub enum ResourceType {
     VpcVpnGw,
     Root, // for tracking DAG dependencies
 }
+
+// impl fmt::Display for ResourceType {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         match *self {
+
+//         }
+//     }
+// }
 
 impl ResourceType {
     pub fn name(&self) -> &str {
@@ -271,7 +279,7 @@ impl fmt::Display for Resource {
             f,
             "[{}] - {} - {}",
             self.region.name().bold(),
-            self.resource_type,
+            self.resource_type.name(),
             self.id.bold()
         )?;
 

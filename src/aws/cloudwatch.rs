@@ -1,4 +1,4 @@
-use crate::{config::IdleRules, error::Error as AwsError, resource::ResourceType};
+use crate::{config::IdleRules, resource::ResourceType, Result};
 use chrono::{DateTime, TimeZone, Utc};
 use rusoto_cloudwatch::{
     CloudWatch, CloudWatchClient, Datapoint, Dimension, DimensionFilter, GetMetricStatisticsInput,
@@ -6,8 +6,6 @@ use rusoto_cloudwatch::{
 };
 use std::time::Duration;
 use tracing::{trace, warn};
-
-type Result<T, E = AwsError> = std::result::Result<T, E>;
 
 #[derive(Clone)]
 pub struct CwClient {
@@ -50,12 +48,7 @@ impl CwClient {
             ..Default::default()
         };
 
-        self.client
-            .get_metric_statistics(req)
-            .await
-            .map_err(|err| AwsError::Internal {
-                error: err.to_string(),
-            })
+        Ok(self.client.get_metric_statistics(req).await?)
     }
 
     async fn filter_resource(
@@ -221,9 +214,7 @@ impl CwClient {
                 next_token: None,
             })
             .await
-            .map_err(|err| AwsError::Internal {
-                error: err.to_string(),
-            })
+            .map_err(|err| err.to_string())
             .unwrap()
             .metrics;
 

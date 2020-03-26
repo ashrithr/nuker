@@ -351,22 +351,22 @@ impl Ec2Service {
     }
 
     async fn disable_termination_protection(&self, instance_id: &str) -> Result<()> {
-        let resp = self
-            .client
-            .describe_instance_attribute(DescribeInstanceAttributeRequest {
-                attribute: "disableApiTermination".into(),
-                instance_id: instance_id.into(),
-                ..Default::default()
-            })
-            .await?;
+        if !self.dry_run {
+            let resp = self
+                .client
+                .describe_instance_attribute(DescribeInstanceAttributeRequest {
+                    attribute: "disableApiTermination".into(),
+                    instance_id: instance_id.into(),
+                    ..Default::default()
+                })
+                .await?;
 
-        if resp.disable_api_termination.unwrap().value.unwrap() {
-            debug!(
-                "Terminating protection was enabled for: {}. Trying to Disable it.",
-                instance_id
-            );
+            if resp.disable_api_termination.unwrap().value.unwrap() {
+                debug!(
+                    "Terminating protection was enabled for: {}. Trying to Disable it.",
+                    instance_id
+                );
 
-            if !self.dry_run {
                 self.client
                     .modify_instance_attribute(ModifyInstanceAttributeRequest {
                         attribute: Some("disableApiTermination".into()),
@@ -598,11 +598,15 @@ impl NukerService for Ec2Service {
     }
 
     async fn stop(&self, resource: &Resource) -> Result<()> {
-        self.stop_resource(resource).await
+        self.stop_resource(resource).await?;
+
+        Ok(())
     }
 
     async fn delete(&self, resource: &Resource) -> Result<()> {
-        self.delete_resource(resource).await
+        self.delete_resource(resource).await?;
+
+        Ok(())
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {

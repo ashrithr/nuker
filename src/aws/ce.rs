@@ -8,8 +8,6 @@ use rusoto_ce::{
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 
-type Result<T, E = AwsError> = std::result::Result<T, E>;
-
 pub struct CeClient {
     pub client: CostExplorerClient,
     pub dur: i64,

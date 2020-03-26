@@ -1,5 +1,6 @@
 //! Represents a Nukable service
 use crate::resource::{EnforcementState, Resource};
+use crate::Result;
 use async_trait::async_trait;
 use dyn_clone::DynClone;
 use std::{
@@ -8,8 +9,6 @@ use std::{
     fmt::{Display, Error as FmtError, Formatter},
     str::FromStr,
 };
-
-type Result<T, E = crate::error::Error> = std::result::Result<T, E>;
 
 pub const EC2_TYPE: &str = "ec2";
 pub const EBS_TYPE: &str = "ebs";

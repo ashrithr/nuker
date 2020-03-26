@@ -6,8 +6,10 @@ use crate::{
 use colored::*;
 use rusoto_core::Region;
 use std::{io, process::exit, str::FromStr};
-use tracing::{debug, trace};
+use tracing::{debug, error, trace};
 use tracing_futures::Instrument;
+
+const PROMPT_YES: &str = "yes";
 
 static REGIONS: &'static [Region] = &[
     Region::ApEast1,
@@ -53,7 +55,7 @@ impl Nuker {
 
         if !self.args.dry_run && !self.args.force {
             let input: String = self.get_input("Are you sure you want to continue (yes/no)?");
-            if &input.to_lowercase() != "yes" {
+            if &input.to_lowercase() != PROMPT_YES {
                 exit(1);
             }
         }
@@ -92,11 +94,16 @@ impl Nuker {
                     .locate_resources()
                     .instrument(tracing::trace_span!("nuker", region = region.as_str()))
                     .await;
+
                 client.print_resources();
-                let _ = client
+
+                if let Err(err) = client
                     .cleanup_resources()
                     .instrument(tracing::trace_span!("nuker", region = region.as_str()))
-                    .await;
+                    .await
+                {
+                    error!("Failed cleaning up resources: {:?}", err);
+                }
             }));
         }
 
