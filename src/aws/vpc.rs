@@ -76,9 +76,13 @@ impl VpcService {
                 }
             };
 
-            let dependencies = self
-                .find_dependencies(vpc_id.as_str(), enforcement_state)
-                .await?;
+            let dependencies: Option<Vec<Resource>> = match enforcement_state {
+                EnforcementState::Delete => Some(
+                    self.find_dependencies(vpc_id.as_str(), enforcement_state)
+                        .await?,
+                ),
+                _ => None,
+            };
 
             resources.push(Resource {
                 id: vpc_id.into(),
@@ -88,11 +92,7 @@ impl VpcService {
                 tags: self.package_tags_as_ntags(vpc.tags),
                 state: vpc.state,
                 enforcement_state,
-                dependencies: if dependencies.is_empty() {
-                    None
-                } else {
-                    Some(dependencies)
-                },
+                dependencies,
             });
         }
 
