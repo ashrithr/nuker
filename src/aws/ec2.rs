@@ -8,14 +8,15 @@ use async_trait::async_trait;
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_ec2::{
-    Address, DeleteNetworkInterfaceRequest, DescribeAddressesRequest,
+    Address, DeleteNetworkInterfaceRequest, DeleteSecurityGroupRequest, DescribeAddressesRequest,
     DescribeInstanceAttributeRequest, DescribeInstancesRequest, DescribeInstancesResult,
-    DescribeNetworkInterfacesRequest, DescribeSecurityGroupsRequest, Ec2, Ec2Client, Filter,
-    Instance, ModifyInstanceAttributeRequest, NetworkInterface, ReleaseAddressRequest,
-    StopInstancesRequest, Tag, TerminateInstancesRequest,
+    DescribeNetworkInterfaceAttributeRequest, DescribeNetworkInterfacesRequest,
+    DescribeSecurityGroupsRequest, DetachNetworkInterfaceRequest, Ec2, Ec2Client, Filter, Instance,
+    ModifyInstanceAttributeRequest, NetworkInterface, ReleaseAddressRequest, StopInstancesRequest,
+    Tag, TerminateInstancesRequest,
 };
 use std::sync::Arc;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 const RUNNING_STATE: i64 = 16;
 const STOPPED_STATE: i64 = 80;
@@ -351,85 +352,60 @@ impl Ec2Service {
     }
 
     async fn disable_termination_protection(&self, instance_id: &str) -> Result<()> {
-        if !self.dry_run {
-            let resp = self
-                .client
-                .describe_instance_attribute(DescribeInstanceAttributeRequest {
-                    attribute: "disableApiTermination".into(),
+        let resp = self
+            .client
+            .describe_instance_attribute(DescribeInstanceAttributeRequest {
+                attribute: "disableApiTermination".into(),
+                instance_id: instance_id.into(),
+                ..Default::default()
+            })
+            .await?;
+
+        if resp.disable_api_termination.unwrap().value.unwrap() {
+            debug!(
+                "Terminating protection was enabled for: {}. Trying to Disable it.",
+                instance_id
+            );
+
+            self.client
+                .modify_instance_attribute(ModifyInstanceAttributeRequest {
+                    attribute: Some("disableApiTermination".into()),
                     instance_id: instance_id.into(),
                     ..Default::default()
                 })
                 .await?;
+        }
 
-            if resp.disable_api_termination.unwrap().value.unwrap() {
-                debug!(
-                    "Terminating protection was enabled for: {}. Trying to Disable it.",
-                    instance_id
-                );
+        Ok(())
+    }
 
-                self.client
-                    .modify_instance_attribute(ModifyInstanceAttributeRequest {
-                        attribute: Some("disableApiTermination".into()),
-                        instance_id: instance_id.into(),
-                        ..Default::default()
-                    })
+    async fn delete_instance(&self, resource: &Resource) -> Result<()> {
+        if !self.dry_run {
+            if self.config.termination_protection.ignore {
+                self.disable_termination_protection(resource.id.as_ref())
                     .await?;
             }
+
+            self.client
+                .terminate_instances(TerminateInstancesRequest {
+                    instance_ids: vec![resource.id.clone()],
+                    ..Default::default()
+                })
+                .await?;
         }
 
         Ok(())
     }
 
-    async fn delete_resource(&self, resource: &Resource) -> Result<()> {
-        debug!(resource = resource.id.as_str(), "Deleting");
-
-        match resource.resource_type {
-            ResourceType::Ec2Instance => {
-                if self.config.termination_protection.ignore {
-                    self.disable_termination_protection(resource.id.as_ref())
-                        .await?;
-                }
-
-                if !self.dry_run {
-                    self.client
-                        .terminate_instances(TerminateInstancesRequest {
-                            instance_ids: vec![resource.id.clone()],
-                            ..Default::default()
-                        })
-                        .await?;
-                }
-            }
-            ResourceType::Ec2Interface => {
-                self.delete_interface(resource).await?;
-            }
-            ResourceType::Ec2Address => {
-                self.delete_address(resource).await?;
-            }
-            _ => {}
-        }
-
-        Ok(())
-    }
-
-    async fn stop_resource(&self, resource: &Resource) -> Result<()> {
-        match resource.resource_type {
-            ResourceType::Ec2Instance => {
-                debug!(resource = resource.id.as_str(), "Stopping");
-
-                if !self.dry_run {
-                    self.client
-                        .stop_instances(StopInstancesRequest {
-                            instance_ids: vec![resource.id.clone()],
-                            force: Some(true),
-                            ..Default::default()
-                        })
-                        .await?;
-                }
-            }
-            ResourceType::Ec2Interface | ResourceType::Ec2Address => {
-                self.delete_resource(resource).await?;
-            }
-            _ => {}
+    async fn stop_instance(&self, resource: &Resource) -> Result<()> {
+        if !self.dry_run {
+            self.client
+                .stop_instances(StopInstancesRequest {
+                    instance_ids: vec![resource.id.clone()],
+                    force: Some(true),
+                    ..Default::default()
+                })
+                .await?;
         }
 
         Ok(())
@@ -520,8 +496,40 @@ impl Ec2Service {
         Ok(interfaces)
     }
 
+    async fn detach_interface(&self, resource: &Resource) -> Result<()> {
+        // aws ec2 describe-network-interface-attribute --network-interface-id eni-686ea200 --attribute attachment
+        match self
+            .client
+            .describe_network_interface_attribute(DescribeNetworkInterfaceAttributeRequest {
+                network_interface_id: resource.id.to_string(),
+                attribute: Some("attachment".to_string()),
+                ..Default::default()
+            })
+            .await
+        {
+            Ok(result) => {
+                if let Some(attachment) = result.attachment {
+                    self.client
+                        .detach_network_interface(DetachNetworkInterfaceRequest {
+                            attachment_id: attachment.attachment_id.unwrap(),
+                            force: Some(true),
+                            ..Default::default()
+                        })
+                        .await?;
+                }
+            }
+            Err(err) => {
+                warn!(resource = resource.id.as_str(), error = ?err, "Failed getting attachment id.")
+            }
+        }
+
+        Ok(())
+    }
+
     async fn delete_interface(&self, resource: &Resource) -> Result<()> {
         if !self.dry_run {
+            self.detach_interface(resource).await?;
+
             self.client
                 .delete_network_interface(DeleteNetworkInterfaceRequest {
                     network_interface_id: resource.id.clone(),
@@ -555,6 +563,19 @@ impl Ec2Service {
             self.client
                 .release_address(ReleaseAddressRequest {
                     allocation_id: Some(resource.id.to_owned()),
+                    ..Default::default()
+                })
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn delete_sg(&self, resource: &Resource) -> Result<()> {
+        if !self.dry_run {
+            self.client
+                .delete_security_group(DeleteSecurityGroupRequest {
+                    group_id: Some(resource.id.to_string()),
                     ..Default::default()
                 })
                 .await?;
@@ -598,15 +619,24 @@ impl NukerService for Ec2Service {
     }
 
     async fn stop(&self, resource: &Resource) -> Result<()> {
-        self.stop_resource(resource).await?;
+        debug!(resource = resource.id.as_str(), "Stopping");
 
-        Ok(())
+        match resource.resource_type {
+            ResourceType::Ec2Instance => self.stop_instance(resource).await,
+            _ => Ok(()),
+        }
     }
 
     async fn delete(&self, resource: &Resource) -> Result<()> {
-        self.delete_resource(resource).await?;
+        debug!(resource = resource.id.as_str(), "Deleting.");
 
-        Ok(())
+        match resource.resource_type {
+            ResourceType::Ec2Address => self.delete_address(resource).await,
+            ResourceType::Ec2Instance => self.delete_instance(resource).await,
+            ResourceType::Ec2Interface => self.delete_interface(resource).await,
+            ResourceType::Ec2Sg => self.delete_sg(resource).await,
+            _ => Ok(()),
+        }
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {
