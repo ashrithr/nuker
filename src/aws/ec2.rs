@@ -379,38 +379,6 @@ impl Ec2Service {
         Ok(())
     }
 
-    async fn delete_instance(&self, resource: &Resource) -> Result<()> {
-        if !self.dry_run {
-            if self.config.termination_protection.ignore {
-                self.disable_termination_protection(resource.id.as_ref())
-                    .await?;
-            }
-
-            self.client
-                .terminate_instances(TerminateInstancesRequest {
-                    instance_ids: vec![resource.id.clone()],
-                    ..Default::default()
-                })
-                .await?;
-        }
-
-        Ok(())
-    }
-
-    async fn stop_instance(&self, resource: &Resource) -> Result<()> {
-        if !self.dry_run {
-            self.client
-                .stop_instances(StopInstancesRequest {
-                    instance_ids: vec![resource.id.clone()],
-                    force: Some(true),
-                    ..Default::default()
-                })
-                .await?;
-        }
-
-        Ok(())
-    }
-
     async fn get_open_sgs(&self) -> Result<Vec<String>> {
         self.get_security_groups(Some(vec![
             Filter {
@@ -526,21 +494,6 @@ impl Ec2Service {
         Ok(())
     }
 
-    async fn delete_interface(&self, resource: &Resource) -> Result<()> {
-        if !self.dry_run {
-            self.detach_interface(resource).await?;
-
-            self.client
-                .delete_network_interface(DeleteNetworkInterfaceRequest {
-                    network_interface_id: resource.id.clone(),
-                    ..Default::default()
-                })
-                .await?
-        }
-
-        Ok(())
-    }
-
     async fn get_addresses(&self) -> Result<Vec<Address>> {
         let mut addresses: Vec<Address> = Vec::new();
 
@@ -556,6 +509,53 @@ impl Ec2Service {
         }
 
         Ok(addresses)
+    }
+
+    async fn stop_instance(&self, resource: &Resource) -> Result<()> {
+        if !self.dry_run {
+            self.client
+                .stop_instances(StopInstancesRequest {
+                    instance_ids: vec![resource.id.clone()],
+                    force: Some(true),
+                    ..Default::default()
+                })
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn delete_instance(&self, resource: &Resource) -> Result<()> {
+        if !self.dry_run {
+            if self.config.termination_protection.ignore {
+                self.disable_termination_protection(resource.id.as_ref())
+                    .await?;
+            }
+
+            self.client
+                .terminate_instances(TerminateInstancesRequest {
+                    instance_ids: vec![resource.id.clone()],
+                    ..Default::default()
+                })
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn delete_interface(&self, resource: &Resource) -> Result<()> {
+        if !self.dry_run {
+            self.detach_interface(resource).await?;
+
+            self.client
+                .delete_network_interface(DeleteNetworkInterfaceRequest {
+                    network_interface_id: resource.id.clone(),
+                    ..Default::default()
+                })
+                .await?
+        }
+
+        Ok(())
     }
 
     async fn delete_address(&self, resource: &Resource) -> Result<()> {

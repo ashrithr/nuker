@@ -9,7 +9,7 @@ allowed_instance_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
     "t3.micro", "t3.small", "t3.medium", "t3.large", "t3.xlarge"]
 # The following resources will be ignored from rule enforcement
 # ignore = ["instance-id1", "instance-id2"]
-ignore = []
+ignore = ["i-08e2164ae5e00da0f"]
 
     # Defines required tags on each instance.
     [[ec2.required_tags]]
@@ -190,7 +190,7 @@ enabled = true
 # State to enforce. Possible state is 'Deleted'.
 target_state = "Deleted"
 # The following resources will be ignored from rule enforcement
-ignore = []
+ignore = ["vpc-00d617aef710f2cde", "vpc-05310d35f662aa11a", "vpc-07c7ca01551c50cbb"]
 # Clean up empty VPC's. A VPC is considered empty when it doesn't have any
 # resources associated with it.
 cleanup_empty = true
