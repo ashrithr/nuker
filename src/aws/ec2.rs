@@ -8,12 +8,12 @@ use async_trait::async_trait;
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_ec2::{
-    Address, DeleteNetworkInterfaceRequest, DeleteSecurityGroupRequest, DescribeAddressesRequest,
-    DescribeInstanceAttributeRequest, DescribeInstancesRequest, DescribeInstancesResult,
-    DescribeNetworkInterfaceAttributeRequest, DescribeNetworkInterfacesRequest,
-    DescribeSecurityGroupsRequest, DetachNetworkInterfaceRequest, Ec2, Ec2Client, Filter, Instance,
-    ModifyInstanceAttributeRequest, NetworkInterface, ReleaseAddressRequest, StopInstancesRequest,
-    Tag, TerminateInstancesRequest,
+    Address, AttributeBooleanValue, DeleteNetworkInterfaceRequest, DeleteSecurityGroupRequest,
+    DescribeAddressesRequest, DescribeInstanceAttributeRequest, DescribeInstancesRequest,
+    DescribeInstancesResult, DescribeNetworkInterfaceAttributeRequest,
+    DescribeNetworkInterfacesRequest, DescribeSecurityGroupsRequest, DetachNetworkInterfaceRequest,
+    Ec2, Ec2Client, Filter, Instance, ModifyInstanceAttributeRequest, NetworkInterface,
+    ReleaseAddressRequest, StopInstancesRequest, Tag, TerminateInstancesRequest,
 };
 use std::sync::Arc;
 use tracing::{debug, trace, warn};
@@ -369,7 +369,7 @@ impl Ec2Service {
 
             self.client
                 .modify_instance_attribute(ModifyInstanceAttributeRequest {
-                    attribute: Some("disableApiTermination".into()),
+                    disable_api_termination: Some(AttributeBooleanValue { value: Some(false) }),
                     instance_id: instance_id.into(),
                     ..Default::default()
                 })
