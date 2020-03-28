@@ -1,8 +1,10 @@
 use crate::{
-    aws::{cloudwatch::CwClient, util, Result},
+    aws::{cloudwatch::CwClient, util},
     config::{RdsConfig, RequiredTags},
+    handle_future, handle_future_with_return,
     resource::{EnforcementState, NTag, Resource, ResourceType},
     service::NukerService,
+    Result,
 };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -119,7 +121,7 @@ impl RdsService {
                 region: self.region.clone(),
                 resource_type: ResourceType::RDS,
                 tags: self
-                    .package_tags_as_ntags(self.list_tags(instance.db_instance_arn.clone()).await?),
+                    .package_tags_as_ntags(self.list_tags(instance.db_instance_arn.clone()).await),
                 state: instance.db_instance_status.clone(),
                 enforcement_state,
                 dependencies: None,
@@ -132,10 +134,7 @@ impl RdsService {
     async fn resource_tags_does_not_match(&self, instance: &DBInstance) -> bool {
         if self.config.required_tags.is_some() {
             !self.check_tags(
-                &self
-                    .list_tags(instance.db_instance_arn.clone())
-                    .await
-                    .unwrap_or_default(),
+                &self.list_tags(instance.db_instance_arn.clone()).await,
                 &self.config.required_tags.as_ref().unwrap(),
             )
         } else {
@@ -214,7 +213,6 @@ impl RdsService {
                 .cw_client
                 .filter_db_instance(&instance.db_instance_identifier.as_ref().unwrap())
                 .await
-                .unwrap()
         } else {
             false
         }
@@ -225,46 +223,52 @@ impl RdsService {
         let mut instances: Vec<DBInstance> = Vec::new();
 
         loop {
-            let result = self
+            let req = self
                 .client
                 .describe_db_instances(DescribeDBInstancesMessage {
                     filters: Some(filter.clone()),
                     marker: next_token,
                     ..Default::default()
-                })
-                .await?;
+                });
 
-            if let Some(db_instances) = result.db_instances {
-                let mut temp_instances: Vec<DBInstance> = db_instances
-                    .into_iter()
-                    .filter(|i| {
-                        i.engine != Some(AURORA_MYSQL_ENGINE.into())
-                            && i.engine != Some(AURORA_POSTGRES_ENGINE.into())
-                    })
-                    .collect();
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(db_instances) = result.db_instances {
+                    let mut temp_instances: Vec<DBInstance> = db_instances
+                        .into_iter()
+                        .filter(|i| {
+                            i.engine != Some(AURORA_MYSQL_ENGINE.into())
+                                && i.engine != Some(AURORA_POSTGRES_ENGINE.into())
+                        })
+                        .collect();
 
-                instances.append(&mut temp_instances);
-            }
+                    instances.append(&mut temp_instances);
+                }
 
-            if result.marker.is_none() {
-                break;
+                if result.marker.is_none() {
+                    break;
+                } else {
+                    next_token = result.marker;
+                }
             } else {
-                next_token = result.marker;
+                break;
             }
         }
 
         Ok(instances)
     }
 
-    async fn list_tags(&self, arn: Option<String>) -> Result<Option<Vec<Tag>>> {
-        let result = self
+    async fn list_tags(&self, arn: Option<String>) -> Option<Vec<Tag>> {
+        let req = self
             .client
             .list_tags_for_resource(ListTagsForResourceMessage {
                 resource_name: arn.unwrap(),
                 ..Default::default()
-            })
-            .await?;
-        Ok(result.tag_list)
+            });
+
+        handle_future_with_return!(req)
+            .ok()
+            .map(|r| r.tag_list)
+            .unwrap_or_default()
     }
 
     fn check_tags(&self, tags: &Option<Vec<Tag>>, required_tags: &Vec<RequiredTags>) -> bool {
@@ -275,36 +279,37 @@ impl RdsService {
     async fn disable_termination_protection(&self, instance_id: &str) -> Result<()> {
         // TODO: This call can be saved by saving the termination protection state in the
         // Resource struct, while scanning for instances.
-        let resp = self
+        let req = self
             .client
             .describe_db_instances(DescribeDBInstancesMessage {
                 db_instance_identifier: Some(instance_id.to_owned()),
                 ..Default::default()
-            })
-            .await?;
+            });
 
-        if resp.db_instances.is_some() {
-            if resp
-                .db_instances
-                .unwrap()
-                .first()
-                .unwrap()
-                .deletion_protection
-                == Some(true)
-            {
-                debug!(
-                    "Termination protection is enabled for: {}. Trying to disable it.",
-                    instance_id
-                );
+        if let Ok(resp) = handle_future_with_return!(req) {
+            if resp.db_instances.is_some() {
+                if resp
+                    .db_instances
+                    .unwrap()
+                    .first()
+                    .unwrap()
+                    .deletion_protection
+                    == Some(true)
+                {
+                    debug!(
+                        "Termination protection is enabled for: {}. Trying to disable it.",
+                        instance_id
+                    );
 
-                if !self.dry_run {
-                    self.client
-                        .modify_db_instance(ModifyDBInstanceMessage {
+                    if !self.dry_run {
+                        let req = self.client.modify_db_instance(ModifyDBInstanceMessage {
                             db_instance_identifier: instance_id.to_owned(),
                             deletion_protection: Some(false),
                             ..Default::default()
-                        })
-                        .await?;
+                        });
+
+                        handle_future!(req);
+                    }
                 }
             }
         }
@@ -320,14 +325,14 @@ impl RdsService {
                 self.disable_termination_protection(&instance_id).await?;
             }
 
-            self.client
-                .delete_db_instance(DeleteDBInstanceMessage {
-                    db_instance_identifier: instance_id,
-                    delete_automated_backups: Some(false),
-                    skip_final_snapshot: Some(true),
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.delete_db_instance(DeleteDBInstanceMessage {
+                db_instance_identifier: instance_id,
+                delete_automated_backups: Some(false),
+                skip_final_snapshot: Some(true),
+                ..Default::default()
+            });
+
+            handle_future!(req);
         }
 
         Ok(())
@@ -337,12 +342,12 @@ impl RdsService {
         debug!(resource = instance_id.as_str(), "Stopping");
 
         if !self.dry_run {
-            self.client
-                .stop_db_instance(StopDBInstanceMessage {
-                    db_instance_identifier: instance_id,
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.stop_db_instance(StopDBInstanceMessage {
+                db_instance_identifier: instance_id,
+                ..Default::default()
+            });
+
+            handle_future!(req);
         }
 
         Ok(())

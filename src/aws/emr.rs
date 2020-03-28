@@ -1,8 +1,10 @@
 use crate::{
-    aws::{cloudwatch::CwClient, util, Result},
+    aws::{cloudwatch::CwClient, util},
     config::EmrConfig,
+    handle_future, handle_future_with_return,
     resource::{EnforcementState, Resource, ResourceType},
     service::NukerService,
+    Result,
 };
 use async_trait::async_trait;
 use rusoto_core::{HttpClient, Region};
@@ -179,7 +181,6 @@ impl EmrService {
                 .cw_client
                 .filter_emr_cluster(&cluster.id.as_ref().unwrap())
                 .await
-                .unwrap()
         } else {
             false
         }
@@ -224,17 +225,16 @@ impl EmrService {
 
     async fn get_instance_types(&self, cluster_id: &str) -> Result<Vec<String>> {
         let mut instance_types = Vec::new();
-        let result = self
-            .client
-            .list_instances(ListInstancesInput {
-                cluster_id: cluster_id.to_owned(),
-                ..Default::default()
-            })
-            .await?;
+        let req = self.client.list_instances(ListInstancesInput {
+            cluster_id: cluster_id.to_owned(),
+            ..Default::default()
+        });
 
-        for instance in result.instances.unwrap_or_default() {
-            if let Some(it) = instance.instance_type {
-                instance_types.push(it);
+        if let Ok(result) = handle_future_with_return!(req) {
+            for instance in result.instances.unwrap_or_default() {
+                if let Some(it) = instance.instance_type {
+                    instance_types.push(it);
+                }
             }
         }
 
@@ -246,42 +246,43 @@ impl EmrService {
         let mut clusters: Vec<ClusterSummary> = Vec::new();
 
         loop {
-            let result = self
-                .client
-                .list_clusters(ListClustersInput {
-                    marker: next_token,
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.list_clusters(ListClustersInput {
+                marker: next_token,
+                ..Default::default()
+            });
 
-            if let Some(cs) = result.clusters {
-                for c in cs {
-                    clusters.push(c);
-                    //     // TODO: https://github.com/rusoto/rusoto/issues/1266
-                    //
-                    //     match self
-                    //         .client
-                    //         .describe_cluster(DescribeClusterInput {
-                    //             cluster_id: c.id.unwrap_or_default(),
-                    //         })
-                    //         .await
-                    //     {
-                    //         Ok(result) => {
-                    //             if let Some(cluster) = result.cluster {
-                    //                 clusters.push(cluster);
-                    //             }
-                    //         }
-                    //         Err(e) => {
-                    //             warn!("Failed 'describe-cluster'. Err: {:?}", e);
-                    //         }
-                    //     }
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(cs) = result.clusters {
+                    for c in cs {
+                        clusters.push(c);
+                        //     // TODO: https://github.com/rusoto/rusoto/issues/1266
+                        //
+                        //     match self
+                        //         .client
+                        //         .describe_cluster(DescribeClusterInput {
+                        //             cluster_id: c.id.unwrap_or_default(),
+                        //         })
+                        //         .await
+                        //     {
+                        //         Ok(result) => {
+                        //             if let Some(cluster) = result.cluster {
+                        //                 clusters.push(cluster);
+                        //             }
+                        //         }
+                        //         Err(e) => {
+                        //             warn!("Failed 'describe-cluster'. Err: {:?}", e);
+                        //         }
+                        //     }
+                    }
                 }
-            }
 
-            if result.marker.is_none() {
-                break;
+                if result.marker.is_none() {
+                    break;
+                } else {
+                    next_token = result.marker;
+                }
             } else {
-                next_token = result.marker;
+                break;
             }
         }
 
@@ -290,12 +291,13 @@ impl EmrService {
 
     async fn disable_termination_protection(&self, cluster_ids: Vec<String>) -> Result<()> {
         if !self.dry_run && !cluster_ids.is_empty() {
-            self.client
+            let req = self
+                .client
                 .set_termination_protection(SetTerminationProtectionInput {
                     job_flow_ids: cluster_ids,
                     termination_protected: false,
-                })
-                .await?
+                });
+            handle_future!(req);
         }
 
         Ok(())
@@ -308,11 +310,10 @@ impl EmrService {
         }
 
         if !self.dry_run && !cluster_ids.is_empty() {
-            self.client
-                .terminate_job_flows(TerminateJobFlowsInput {
-                    job_flow_ids: cluster_ids.to_owned(),
-                })
-                .await?;
+            let req = self.client.terminate_job_flows(TerminateJobFlowsInput {
+                job_flow_ids: cluster_ids.to_owned(),
+            });
+            handle_future!(req);
         }
 
         Ok(())
@@ -324,37 +325,39 @@ impl EmrService {
         let ec2_client = self.ec2_client.as_ref().unwrap();
 
         loop {
-            let result = ec2_client
-                .describe_security_groups(DescribeSecurityGroupsRequest {
-                    filters: Some(vec![
-                        Filter {
-                            name: Some("ip-permission.cidr".to_string()),
-                            values: Some(self.config.security_groups.source_cidr.clone()),
-                        },
-                        Filter {
-                            name: Some("ip-permission.from-port".to_string()),
-                            values: Some(vec![self.config.security_groups.from_port.to_string()]),
-                        },
-                        Filter {
-                            name: Some("ip-permission.to-port".to_string()),
-                            values: Some(vec![self.config.security_groups.to_port.to_string()]),
-                        },
-                    ]),
-                    next_token,
-                    ..Default::default()
-                })
-                .await?;
+            let req = ec2_client.describe_security_groups(DescribeSecurityGroupsRequest {
+                filters: Some(vec![
+                    Filter {
+                        name: Some("ip-permission.cidr".to_string()),
+                        values: Some(self.config.security_groups.source_cidr.clone()),
+                    },
+                    Filter {
+                        name: Some("ip-permission.from-port".to_string()),
+                        values: Some(vec![self.config.security_groups.from_port.to_string()]),
+                    },
+                    Filter {
+                        name: Some("ip-permission.to-port".to_string()),
+                        values: Some(vec![self.config.security_groups.to_port.to_string()]),
+                    },
+                ]),
+                next_token,
+                ..Default::default()
+            });
 
-            if let Some(sgs) = result.security_groups {
-                for sg in sgs {
-                    security_groups.push(sg.group_id.unwrap_or_default())
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(sgs) = result.security_groups {
+                    for sg in sgs {
+                        security_groups.push(sg.group_id.unwrap_or_default())
+                    }
                 }
-            }
 
-            if result.next_token.is_none() {
-                break;
+                if result.next_token.is_none() {
+                    break;
+                } else {
+                    next_token = result.next_token;
+                }
             } else {
-                next_token = result.next_token;
+                break;
             }
         }
 

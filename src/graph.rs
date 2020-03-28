@@ -1,8 +1,7 @@
 //! Graph utility to create DAG for tracking `Resource` dependencies.
 
 use crate::resource::{EnforcementState, Resource, ResourceType};
-use crate::Result;
-use failure::format_err;
+use crate::{Error, Result};
 use petgraph::{
     algo::{is_cyclic_directed, toposort},
     dot::{Config, Dot},
@@ -75,8 +74,8 @@ impl Dag {
         }
 
         if !is_dag(&self.graph) {
-            return Err(format_err!(
-                "Failed constructing dependency graph for the resources"
+            return Err(Error::Dag(
+                "Failed constructing dependency graph for the resources".to_string(),
             ));
         }
 
@@ -115,7 +114,7 @@ impl Dag {
                     .node_weight(err.node_id())
                     .map(|weight| format!("Error graph has cycle at node: {:?}", weight));
 
-                Err(format_err!("{}", error.unwrap_or_default()))
+                Err(Error::Dag(error.unwrap_or_default()))
             }
         }
     }

@@ -1,8 +1,10 @@
 use crate::aws::cloudwatch::CwClient;
-use crate::aws::{util, Result};
+use crate::aws::util;
 use crate::config::{EcsConfig, RequiredTags};
 use crate::resource::{EnforcementState, NTag, Resource, ResourceType};
 use crate::service::NukerService;
+use crate::Result;
+use crate::{handle_future, handle_future_with_return};
 use async_trait::async_trait;
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
@@ -126,11 +128,7 @@ impl EcsService {
 
     async fn is_resource_idle(&self, cluster_name: &String) -> bool {
         if self.config.idle_rules.is_some() {
-            !self
-                .cw_client
-                .filter_ecs_cluster(&cluster_name)
-                .await
-                .unwrap()
+            !self.cw_client.filter_ecs_cluster(&cluster_name).await
         } else {
             false
         }
@@ -142,73 +140,77 @@ impl EcsService {
         let mut next_token: Option<String> = None;
 
         loop {
-            let result = self
-                .client
-                .list_clusters(ListClustersRequest {
-                    next_token,
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.list_clusters(ListClustersRequest {
+                next_token,
+                ..Default::default()
+            });
 
-            if let Some(cluster_arns) = result.cluster_arns {
-                for cluster_arn in cluster_arns {
-                    _clusters.push(cluster_arn);
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(cluster_arns) = result.cluster_arns {
+                    for cluster_arn in cluster_arns {
+                        _clusters.push(cluster_arn);
+                    }
                 }
-            }
 
-            if result.next_token.is_none() {
-                break;
+                if result.next_token.is_none() {
+                    break;
+                } else {
+                    next_token = result.next_token;
+                }
             } else {
-                next_token = result.next_token;
+                break;
             }
         }
 
-        let result = self
-            .client
-            .describe_clusters(DescribeClustersRequest {
+        if _clusters.len() > 0 {
+            let req = self.client.describe_clusters(DescribeClustersRequest {
                 clusters: Some(_clusters),
                 ..Default::default()
-            })
-            .await?
-            .clusters;
+            });
 
-        if let Some(cs) = result {
-            for mut c in cs {
-                c.tags = self.get_tags(&c.cluster_arn.as_ref().unwrap()).await?;
-                clusters.push(c);
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(cs) = result.clusters {
+                    for mut c in cs {
+                        c.tags = self.get_tags(&c.cluster_arn.as_ref().unwrap()).await;
+                        clusters.push(c);
+                    }
+                }
             }
         }
 
         Ok(clusters)
     }
 
-    async fn get_tags(&self, cluster_arn: &String) -> Result<Option<Vec<Tag>>> {
-        Ok(self
+    async fn get_tags(&self, cluster_arn: &String) -> Option<Vec<Tag>> {
+        let req = self
             .client
             .list_tags_for_resource(ListTagsForResourceRequest {
                 resource_arn: cluster_arn.to_string(),
-            })
-            .await?
-            .tags)
+            });
+
+        if let Ok(result) = handle_future_with_return!(req) {
+            result.tags
+        } else {
+            None
+        }
     }
 
     async fn get_instance_types(&self, cluster_name: &String) -> Result<Vec<String>> {
         let mut instance_types: Vec<String> = Vec::new();
 
-        let result = self
-            .client
-            .list_attributes(ListAttributesRequest {
-                target_type: "container-instance".to_string(),
-                cluster: Some(cluster_name.to_string()),
-                attribute_name: Some("ecs.instance-type".to_string()),
-                ..Default::default()
-            })
-            .await?;
+        let req = self.client.list_attributes(ListAttributesRequest {
+            target_type: "container-instance".to_string(),
+            cluster: Some(cluster_name.to_string()),
+            attribute_name: Some("ecs.instance-type".to_string()),
+            ..Default::default()
+        });
 
-        if let Some(attributes) = result.attributes {
-            for attribute in attributes {
-                if let Some(instance_type) = attribute.value {
-                    instance_types.push(instance_type);
+        if let Ok(result) = handle_future_with_return!(req) {
+            if let Some(attributes) = result.attributes {
+                for attribute in attributes {
+                    if let Some(instance_type) = attribute.value {
+                        instance_types.push(instance_type);
+                    }
                 }
             }
         }
@@ -218,23 +220,24 @@ impl EcsService {
 
     async fn deregister_instnaces(&self, resource: &Resource) -> Result<()> {
         if !self.dry_run {
-            let result = self
+            let req = self
                 .client
                 .list_container_instances(ListContainerInstancesRequest {
                     cluster: resource.arn.clone(),
                     ..Default::default()
-                })
-                .await?;
-
-            if let Some(instance_arns) = result.container_instance_arns {
-                for instance_arn in instance_arns {
-                    self.client
-                        .deregister_container_instance(DeregisterContainerInstanceRequest {
-                            container_instance: instance_arn,
-                            cluster: resource.arn.clone(),
-                            force: Some(true),
-                        })
-                        .await?;
+                });
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(instance_arns) = result.container_instance_arns {
+                    for instance_arn in instance_arns {
+                        let req = self.client.deregister_container_instance(
+                            DeregisterContainerInstanceRequest {
+                                container_instance: instance_arn,
+                                cluster: resource.arn.clone(),
+                                force: Some(true),
+                            },
+                        );
+                        handle_future!(req);
+                    }
                 }
             }
         }
@@ -248,11 +251,10 @@ impl EcsService {
         if !self.dry_run {
             self.deregister_instnaces(resource).await?;
 
-            self.client
-                .delete_cluster(DeleteClusterRequest {
-                    cluster: resource.id.clone(),
-                })
-                .await?;
+            let req = self.client.delete_cluster(DeleteClusterRequest {
+                cluster: resource.id.clone(),
+            });
+            handle_future!(req);
         }
 
         Ok(())

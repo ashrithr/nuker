@@ -1,9 +1,18 @@
-pub mod aws;
-pub mod config;
+mod aws;
+mod config;
 mod error;
-pub mod graph;
-pub mod nuke;
+mod graph;
+#[macro_use]
+mod macros;
+mod nuke;
 mod resource;
 mod service;
 
-type Result<T, E = failure::Error> = std::result::Result<T, E>;
+pub use config::parse_args;
+pub use config::parse_config_file;
+pub use error::NError as Error;
+pub use macros::*;
+pub use nuke::Nuker;
+use std::result::Result as StdResult;
+
+pub type Result<T> = StdResult<T, Error>;

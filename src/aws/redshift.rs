@@ -1,8 +1,10 @@
 use crate::{
-    aws::{cloudwatch::CwClient, util, Result},
+    aws::{cloudwatch::CwClient, util},
     config::{RedshiftConfig, RequiredTags},
+    handle_future, handle_future_with_return,
     resource::{EnforcementState, NTag, Resource, ResourceType},
     service::NukerService,
+    Result,
 };
 use async_trait::async_trait;
 use rusoto_core::{HttpClient, Region};
@@ -136,7 +138,6 @@ impl RedshiftService {
                 .cw_client
                 .filter_rs_cluster(&cluster.cluster_identifier.as_ref().unwrap())
                 .await
-                .unwrap()
         } else {
             false
         }
@@ -147,35 +148,26 @@ impl RedshiftService {
         let mut clusters: Vec<Cluster> = Vec::new();
 
         loop {
-            let result = self
-                .client
-                .describe_clusters(DescribeClustersMessage {
-                    marker: next_token,
-                    ..Default::default()
-                })
-                .await?;
-
-            if let Some(cls) = result.clusters {
-                for c in cls {
-                    clusters.push(c);
-                }
-            }
-
-            if result.marker.is_none() {
-                break;
-            } else {
-                next_token = result.marker;
-            }
-        }
-
-        if !self.config.ignore.is_empty() {
-            debug!("Ignoring Redshift Clusters: {:?}", self.config.ignore);
-            clusters.retain(|c| {
-                !self
-                    .config
-                    .ignore
-                    .contains(&c.cluster_identifier.clone().unwrap())
+            let req = self.client.describe_clusters(DescribeClustersMessage {
+                marker: next_token,
+                ..Default::default()
             });
+
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(cls) = result.clusters {
+                    for c in cls {
+                        clusters.push(c);
+                    }
+                }
+
+                if result.marker.is_none() {
+                    break;
+                } else {
+                    next_token = result.marker;
+                }
+            } else {
+                break;
+            }
         }
 
         Ok(clusters)
@@ -190,12 +182,12 @@ impl RedshiftService {
         debug!(resource = cluster_id.as_str(), "Deleting");
 
         if !self.dry_run {
-            self.client
-                .delete_cluster(DeleteClusterMessage {
-                    cluster_identifier: cluster_id,
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.delete_cluster(DeleteClusterMessage {
+                cluster_identifier: cluster_id,
+                ..Default::default()
+            });
+
+            handle_future!(req);
         }
 
         Ok(())
@@ -208,14 +200,14 @@ impl RedshiftService {
         debug!(resource = cluster_id.as_str(), "Deleting");
 
         if !self.dry_run {
-            self.client
-                .delete_cluster(DeleteClusterMessage {
-                    cluster_identifier: cluster_id.clone(),
-                    final_cluster_snapshot_identifier: Some(cluster_id),
-                    final_cluster_snapshot_retention_period: Some(7), // retain for 7 days
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.delete_cluster(DeleteClusterMessage {
+                cluster_identifier: cluster_id.clone(),
+                final_cluster_snapshot_identifier: Some(cluster_id),
+                final_cluster_snapshot_retention_period: Some(7), // retain for 7 days
+                ..Default::default()
+            });
+
+            handle_future!(req);
         }
 
         Ok(())

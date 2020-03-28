@@ -1,4 +1,4 @@
-use crate::aws::Result;
+use crate::Result;
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_sts::{GetCallerIdentityRequest, Sts, StsClient};

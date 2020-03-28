@@ -1,8 +1,10 @@
 use crate::{
-    aws::{cloudwatch::CwClient, util, Result},
+    aws::{cloudwatch::CwClient, util},
     config::{Ec2Config, RequiredTags},
+    handle_future, handle_future_with_return,
     resource::{EnforcementState, NTag, Resource, ResourceType},
     service::NukerService,
+    Result,
 };
 use async_trait::async_trait;
 use rusoto_core::{HttpClient, Region};
@@ -10,10 +12,10 @@ use rusoto_credential::ProfileProvider;
 use rusoto_ec2::{
     Address, AttributeBooleanValue, DeleteNetworkInterfaceRequest, DeleteSecurityGroupRequest,
     DescribeAddressesRequest, DescribeInstanceAttributeRequest, DescribeInstancesRequest,
-    DescribeInstancesResult, DescribeNetworkInterfaceAttributeRequest,
-    DescribeNetworkInterfacesRequest, DescribeSecurityGroupsRequest, DetachNetworkInterfaceRequest,
-    Ec2, Ec2Client, Filter, Instance, ModifyInstanceAttributeRequest, NetworkInterface,
-    ReleaseAddressRequest, StopInstancesRequest, Tag, TerminateInstancesRequest,
+    DescribeNetworkInterfaceAttributeRequest, DescribeNetworkInterfacesRequest,
+    DescribeSecurityGroupsRequest, DetachNetworkInterfaceRequest, Ec2, Ec2Client, Filter, Instance,
+    ModifyInstanceAttributeRequest, NetworkInterface, ReleaseAddressRequest, StopInstancesRequest,
+    Tag, TerminateInstancesRequest,
 };
 use std::sync::Arc;
 use tracing::{debug, trace, warn};
@@ -234,7 +236,6 @@ impl Ec2Service {
                 .cw_client
                 .filter_instance(&instance.instance_id.as_ref().unwrap())
                 .await
-                .unwrap()
         } else {
             false
         }
@@ -311,33 +312,34 @@ impl Ec2Service {
         let mut instances: Vec<Instance> = Vec::new();
 
         loop {
-            let result: DescribeInstancesResult = self
-                .client
-                .describe_instances(DescribeInstancesRequest {
-                    dry_run: None,
-                    filters: Some(filter.clone()),
-                    instance_ids: None,
-                    max_results: None,
-                    next_token,
-                })
-                .await?;
+            let req = self.client.describe_instances(DescribeInstancesRequest {
+                dry_run: None,
+                filters: Some(filter.clone()),
+                instance_ids: None,
+                max_results: None,
+                next_token,
+            });
 
-            if let Some(reservations) = result.reservations {
-                let reservations: Vec<Vec<Instance>> = reservations
-                    .into_iter()
-                    .filter_map(|reservation| reservation.instances)
-                    .collect();
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(reservations) = result.reservations {
+                    let reservations: Vec<Vec<Instance>> = reservations
+                        .into_iter()
+                        .filter_map(|reservation| reservation.instances)
+                        .collect();
 
-                let mut temp_instances: Vec<Instance> =
-                    reservations.into_iter().flatten().collect();
+                    let mut temp_instances: Vec<Instance> =
+                        reservations.into_iter().flatten().collect();
 
-                instances.append(&mut temp_instances);
-            }
+                    instances.append(&mut temp_instances);
+                }
 
-            if result.next_token.is_none() {
-                break;
+                if result.next_token.is_none() {
+                    break;
+                } else {
+                    next_token = result.next_token;
+                }
             } else {
-                next_token = result.next_token;
+                break;
             }
         }
 
@@ -352,60 +354,31 @@ impl Ec2Service {
     }
 
     async fn disable_termination_protection(&self, instance_id: &str) -> Result<()> {
-        let resp = self
+        let req = self
             .client
             .describe_instance_attribute(DescribeInstanceAttributeRequest {
                 attribute: "disableApiTermination".into(),
                 instance_id: instance_id.into(),
                 ..Default::default()
-            })
-            .await?;
+            });
 
-        if resp.disable_api_termination.unwrap().value.unwrap() {
-            debug!(
-                "Terminating protection was enabled for: {}. Trying to Disable it.",
-                instance_id
-            );
+        if let Ok(resp) = handle_future_with_return!(req) {
+            if resp.disable_api_termination.unwrap().value.unwrap() {
+                debug!(
+                    "Terminating protection was enabled for: {}. Trying to Disable it.",
+                    instance_id
+                );
 
-            self.client
-                .modify_instance_attribute(ModifyInstanceAttributeRequest {
-                    disable_api_termination: Some(AttributeBooleanValue { value: Some(false) }),
-                    instance_id: instance_id.into(),
-                    ..Default::default()
-                })
-                .await?;
-        }
+                let req = self
+                    .client
+                    .modify_instance_attribute(ModifyInstanceAttributeRequest {
+                        disable_api_termination: Some(AttributeBooleanValue { value: Some(false) }),
+                        instance_id: instance_id.into(),
+                        ..Default::default()
+                    });
 
-        Ok(())
-    }
-
-    async fn delete_instance(&self, resource: &Resource) -> Result<()> {
-        if !self.dry_run {
-            if self.config.termination_protection.ignore {
-                self.disable_termination_protection(resource.id.as_ref())
-                    .await?;
+                handle_future!(req);
             }
-
-            self.client
-                .terminate_instances(TerminateInstancesRequest {
-                    instance_ids: vec![resource.id.clone()],
-                    ..Default::default()
-                })
-                .await?;
-        }
-
-        Ok(())
-    }
-
-    async fn stop_instance(&self, resource: &Resource) -> Result<()> {
-        if !self.dry_run {
-            self.client
-                .stop_instances(StopInstancesRequest {
-                    instance_ids: vec![resource.id.clone()],
-                    force: Some(true),
-                    ..Default::default()
-                })
-                .await?;
         }
 
         Ok(())
@@ -442,25 +415,28 @@ impl Ec2Service {
         let mut security_groups: Vec<String> = Vec::new();
 
         loop {
-            let result = self
+            let req = self
                 .client
                 .describe_security_groups(DescribeSecurityGroupsRequest {
                     filters: filters.clone(),
                     next_token,
                     ..Default::default()
-                })
-                .await?;
+                });
 
-            if let Some(sgs) = result.security_groups {
-                for sg in sgs {
-                    security_groups.push(sg.group_id.unwrap_or_default())
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(sgs) = result.security_groups {
+                    for sg in sgs {
+                        security_groups.push(sg.group_id.unwrap_or_default())
+                    }
                 }
-            }
 
-            if result.next_token.is_none() {
-                break;
+                if result.next_token.is_none() {
+                    break;
+                } else {
+                    next_token = result.next_token;
+                }
             } else {
-                next_token = result.next_token;
+                break;
             }
         }
 
@@ -472,24 +448,27 @@ impl Ec2Service {
         let mut interfaces: Vec<NetworkInterface> = Vec::new();
 
         loop {
-            let result = self
+            let req = self
                 .client
                 .describe_network_interfaces(DescribeNetworkInterfacesRequest {
                     next_token,
                     ..Default::default()
-                })
-                .await?;
+                });
 
-            if let Some(nics) = result.network_interfaces {
-                for nic in nics {
-                    interfaces.push(nic);
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(nics) = result.network_interfaces {
+                    for nic in nics {
+                        interfaces.push(nic);
+                    }
                 }
-            }
 
-            if result.next_token.is_none() {
-                break;
+                if result.next_token.is_none() {
+                    break;
+                } else {
+                    next_token = result.next_token;
+                }
             } else {
-                next_token = result.next_token;
+                break;
             }
         }
 
@@ -497,7 +476,6 @@ impl Ec2Service {
     }
 
     async fn detach_interface(&self, resource: &Resource) -> Result<()> {
-        // aws ec2 describe-network-interface-attribute --network-interface-id eni-686ea200 --attribute attachment
         match self
             .client
             .describe_network_interface_attribute(DescribeNetworkInterfaceAttributeRequest {
@@ -509,13 +487,14 @@ impl Ec2Service {
         {
             Ok(result) => {
                 if let Some(attachment) = result.attachment {
-                    self.client
+                    let req = self
+                        .client
                         .detach_network_interface(DetachNetworkInterfaceRequest {
                             attachment_id: attachment.attachment_id.unwrap(),
                             force: Some(true),
                             ..Default::default()
-                        })
-                        .await?;
+                        });
+                    handle_future!(req);
                 }
             }
             Err(err) => {
@@ -526,46 +505,75 @@ impl Ec2Service {
         Ok(())
     }
 
-    async fn delete_interface(&self, resource: &Resource) -> Result<()> {
-        if !self.dry_run {
-            self.detach_interface(resource).await?;
-
-            self.client
-                .delete_network_interface(DeleteNetworkInterfaceRequest {
-                    network_interface_id: resource.id.clone(),
-                    ..Default::default()
-                })
-                .await?
-        }
-
-        Ok(())
-    }
-
     async fn get_addresses(&self) -> Result<Vec<Address>> {
         let mut addresses: Vec<Address> = Vec::new();
 
-        let result = self
-            .client
-            .describe_addresses(DescribeAddressesRequest {
-                ..Default::default()
-            })
-            .await?;
+        let req = self.client.describe_addresses(DescribeAddressesRequest {
+            ..Default::default()
+        });
 
-        if result.addresses.is_some() {
-            addresses.append(&mut result.addresses.unwrap())
+        if let Ok(result) = handle_future_with_return!(req) {
+            if result.addresses.is_some() {
+                addresses.append(&mut result.addresses.unwrap())
+            }
         }
 
         Ok(addresses)
     }
 
+    async fn stop_instance(&self, resource: &Resource) -> Result<()> {
+        if !self.dry_run {
+            let req = self.client.stop_instances(StopInstancesRequest {
+                instance_ids: vec![resource.id.clone()],
+                force: Some(true),
+                ..Default::default()
+            });
+            handle_future!(req);
+        }
+
+        Ok(())
+    }
+
+    async fn delete_instance(&self, resource: &Resource) -> Result<()> {
+        if !self.dry_run {
+            if self.config.termination_protection.ignore {
+                self.disable_termination_protection(resource.id.as_ref())
+                    .await?;
+            }
+
+            let req = self.client.terminate_instances(TerminateInstancesRequest {
+                instance_ids: vec![resource.id.clone()],
+                ..Default::default()
+            });
+            handle_future!(req);
+        }
+
+        Ok(())
+    }
+
+    async fn delete_interface(&self, resource: &Resource) -> Result<()> {
+        if !self.dry_run {
+            self.detach_interface(resource).await?;
+
+            let req = self
+                .client
+                .delete_network_interface(DeleteNetworkInterfaceRequest {
+                    network_interface_id: resource.id.clone(),
+                    ..Default::default()
+                });
+            handle_future!(req);
+        }
+
+        Ok(())
+    }
+
     async fn delete_address(&self, resource: &Resource) -> Result<()> {
         if !self.dry_run {
-            self.client
-                .release_address(ReleaseAddressRequest {
-                    allocation_id: Some(resource.id.to_owned()),
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.release_address(ReleaseAddressRequest {
+                allocation_id: Some(resource.id.to_owned()),
+                ..Default::default()
+            });
+            handle_future!(req);
         }
 
         Ok(())
@@ -573,12 +581,13 @@ impl Ec2Service {
 
     async fn delete_sg(&self, resource: &Resource) -> Result<()> {
         if !self.dry_run {
-            self.client
+            let req = self
+                .client
                 .delete_security_group(DeleteSecurityGroupRequest {
                     group_id: Some(resource.id.to_string()),
                     ..Default::default()
-                })
-                .await?;
+                });
+            handle_future!(req);
         }
 
         Ok(())

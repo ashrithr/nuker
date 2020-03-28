@@ -1,8 +1,10 @@
 use crate::{
-    aws::{sts::StsService, util, Result},
+    aws::{sts::StsService, util},
     config::{GlueConfig, RequiredTags},
+    handle_future, handle_future_with_return,
     resource::{EnforcementState, NTag, Resource, ResourceType},
     service::NukerService,
+    Result,
 };
 use async_trait::async_trait;
 use rusoto_core::{HttpClient, Region};
@@ -55,28 +57,29 @@ impl GlueService {
         let mut dev_endpoints: Vec<DevEndpoint> = Vec::new();
 
         loop {
-            let result = self
-                .client
-                .get_dev_endpoints(GetDevEndpointsRequest {
-                    next_token,
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.get_dev_endpoints(GetDevEndpointsRequest {
+                next_token,
+                ..Default::default()
+            });
 
-            if let Some(de) = result.dev_endpoints {
-                for e in de {
-                    dev_endpoints.push(e);
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(de) = result.dev_endpoints {
+                    for e in de {
+                        dev_endpoints.push(e);
+                    }
                 }
-            }
 
-            if result.next_token.is_none() {
-                break;
-            } else if result.next_token.is_some()
-                && result.next_token.as_ref().clone().unwrap().is_empty()
-            {
-                break;
+                if result.next_token.is_none() {
+                    break;
+                } else if result.next_token.is_some()
+                    && result.next_token.as_ref().clone().unwrap().is_empty()
+                {
+                    break;
+                } else {
+                    next_token = result.next_token;
+                }
             } else {
-                next_token = result.next_token;
+                break;
             }
         }
 
@@ -161,23 +164,22 @@ impl GlueService {
     async fn get_tags(&self, endpoint: &DevEndpoint) -> Result<Vec<NTag>> {
         let mut ntags: Vec<NTag> = Vec::new();
 
-        let result = self
-            .client
-            .get_tags(GetTagsRequest {
-                resource_arn: format!(
-                    "arn:aws:glue:{}:{}:devEndpoint/{}",
-                    self.region.name(),
-                    self.sts_service.get_account_number().await?,
-                    endpoint.endpoint_name.as_ref().unwrap()
-                ),
-            })
-            .await?;
+        let req = self.client.get_tags(GetTagsRequest {
+            resource_arn: format!(
+                "arn:aws:glue:{}:{}:devEndpoint/{}",
+                self.region.name(),
+                self.sts_service.get_account_number().await?,
+                endpoint.endpoint_name.as_ref().unwrap()
+            ),
+        });
 
-        for (key, value) in result.tags.unwrap_or_default() {
-            ntags.push(NTag {
-                key: Some(key),
-                value: Some(value),
-            })
+        if let Ok(result) = handle_future_with_return!(req) {
+            for (key, value) in result.tags.unwrap_or_default() {
+                ntags.push(NTag {
+                    key: Some(key),
+                    value: Some(value),
+                })
+            }
         }
 
         Ok(ntags)
@@ -191,11 +193,10 @@ impl GlueService {
         debug!(resource = endpoint_name, "Deleting");
 
         if !self.dry_run {
-            self.client
-                .delete_dev_endpoint(DeleteDevEndpointRequest {
-                    endpoint_name: endpoint_name.into(),
-                })
-                .await?;
+            let req = self.client.delete_dev_endpoint(DeleteDevEndpointRequest {
+                endpoint_name: endpoint_name.into(),
+            });
+            handle_future!(req);
         }
 
         Ok(())
