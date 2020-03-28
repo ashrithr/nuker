@@ -1,8 +1,10 @@
 use crate::{
-    aws::{cloudwatch::CwClient, util, Result},
+    aws::{cloudwatch::CwClient, util},
     config::EbsConfig,
+    handle_future, handle_future_with_return,
     resource::{EnforcementState, NTag, Resource, ResourceType},
     service::NukerService,
+    Result,
 };
 use async_trait::async_trait;
 use rusoto_core::{credential::ProfileProvider, HttpClient, Region};
@@ -147,7 +149,6 @@ impl EbsService {
                 .cw_client
                 .filter_volume(&volume.volume_id.as_ref().unwrap())
                 .await
-                .unwrap()
         } else {
             false
         }
@@ -184,24 +185,25 @@ impl EbsService {
         let mut volumes: Vec<Volume> = Vec::new();
 
         loop {
-            let result = self
-                .client
-                .describe_volumes(DescribeVolumesRequest {
-                    next_token,
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.describe_volumes(DescribeVolumesRequest {
+                next_token,
+                ..Default::default()
+            });
 
-            if let Some(vs) = result.volumes {
-                for v in vs {
-                    volumes.push(v);
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(vs) = result.volumes {
+                    for v in vs {
+                        volumes.push(v);
+                    }
                 }
-            }
 
-            if result.next_token.is_none() {
-                break;
+                if result.next_token.is_none() {
+                    break;
+                } else {
+                    next_token = result.next_token;
+                }
             } else {
-                next_token = result.next_token;
+                break;
             }
         }
 
@@ -213,28 +215,29 @@ impl EbsService {
         let mut snapshots: Vec<Snapshot> = Vec::new();
 
         loop {
-            let result = self
-                .client
-                .describe_snapshots(DescribeSnapshotsRequest {
-                    next_token,
-                    filters: Some(vec![Filter {
-                        name: Some("owner-alias".to_string()),
-                        values: Some(vec!["self".to_string()]),
-                    }]),
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.describe_snapshots(DescribeSnapshotsRequest {
+                next_token,
+                filters: Some(vec![Filter {
+                    name: Some("owner-alias".to_string()),
+                    values: Some(vec!["self".to_string()]),
+                }]),
+                ..Default::default()
+            });
 
-            if let Some(snaps) = result.snapshots {
-                for s in snaps {
-                    snapshots.push(s);
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(snaps) = result.snapshots {
+                    for s in snaps {
+                        snapshots.push(s);
+                    }
                 }
-            }
 
-            if result.next_token.is_none() {
-                break;
+                if result.next_token.is_none() {
+                    break;
+                } else {
+                    next_token = result.next_token;
+                }
             } else {
-                next_token = result.next_token;
+                break;
             }
         }
 
@@ -245,12 +248,11 @@ impl EbsService {
         debug!("Detaching Volume: {}", vol_id);
 
         if !self.dry_run {
-            self.client
-                .detach_volume(DetachVolumeRequest {
-                    volume_id: vol_id.to_string(),
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.detach_volume(DetachVolumeRequest {
+                volume_id: vol_id.to_string(),
+                ..Default::default()
+            });
+            handle_future!(req);
         }
 
         Ok(())
@@ -264,12 +266,11 @@ impl EbsService {
                 self.detach_volume(&resource.id).await?;
             }
 
-            self.client
-                .delete_volume(DeleteVolumeRequest {
-                    volume_id: resource.id.to_owned(),
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.delete_volume(DeleteVolumeRequest {
+                volume_id: resource.id.to_owned(),
+                ..Default::default()
+            });
+            handle_future!(req);
         }
 
         Ok(())
@@ -279,12 +280,11 @@ impl EbsService {
         debug!(resource = resource.id.as_str(), "Deleting");
 
         if !self.dry_run {
-            self.client
-                .delete_snapshot(DeleteSnapshotRequest {
-                    snapshot_id: resource.id.to_owned(),
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.delete_snapshot(DeleteSnapshotRequest {
+                snapshot_id: resource.id.to_owned(),
+                ..Default::default()
+            });
+            handle_future!(req);
         }
 
         Ok(())

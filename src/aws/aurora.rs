@@ -1,8 +1,10 @@
 use crate::{
-    aws::{cloudwatch::CwClient, util, Result},
+    aws::{cloudwatch::CwClient, util},
     config::{AuroraConfig, RequiredTags},
+    handle_future, handle_future_with_return,
     resource::{EnforcementState, NTag, Resource, ResourceType},
     service::NukerService,
+    Result,
 };
 use async_trait::async_trait;
 use rusoto_core::{HttpClient, Region};
@@ -109,7 +111,7 @@ impl AuroraService {
                 region: self.region.clone(),
                 resource_type: ResourceType::Aurora,
                 tags: self
-                    .package_tags_as_ntags(self.list_tags(cluster.db_cluster_arn.clone()).await?),
+                    .package_tags_as_ntags(self.list_tags(cluster.db_cluster_arn.clone()).await),
                 state: cluster.status.clone(),
                 enforcement_state,
                 dependencies: None,
@@ -122,10 +124,7 @@ impl AuroraService {
     async fn resource_tags_does_not_match(&self, cluster: &DBCluster) -> bool {
         if self.config.required_tags.is_some() {
             !self.check_tags(
-                &self
-                    .list_tags(cluster.db_cluster_arn.clone())
-                    .await
-                    .unwrap_or_default(),
+                &self.list_tags(cluster.db_cluster_arn.clone()).await,
                 &self.config.required_tags.as_ref().unwrap(),
             )
         } else {
@@ -155,7 +154,6 @@ impl AuroraService {
                 .cw_client
                 .filter_db_cluster(&cluster.db_cluster_identifier.as_ref().unwrap())
                 .await
-                .unwrap()
         } else {
             false
         }
@@ -166,50 +164,45 @@ impl AuroraService {
         let mut clusters: Vec<DBCluster> = Vec::new();
 
         loop {
-            let result = self
-                .client
-                .describe_db_clusters(DescribeDBClustersMessage {
-                    filters: Some(filter.clone()),
-                    marker: next_token,
-                    ..Default::default()
-                })
-                .await?;
-
-            if let Some(db_clusters) = result.db_clusters {
-                let mut temp_clusters: Vec<DBCluster> = db_clusters.into_iter().collect();
-
-                clusters.append(&mut temp_clusters);
-            }
-
-            if result.marker.is_none() {
-                break;
-            } else {
-                next_token = result.marker;
-            }
-        }
-
-        if !self.config.ignore.is_empty() {
-            debug!("Ignoring the DB clusters: {:?}", self.config.ignore);
-            clusters.retain(|c| {
-                !self
-                    .config
-                    .ignore
-                    .contains(&c.db_cluster_identifier.clone().unwrap())
+            let req = self.client.describe_db_clusters(DescribeDBClustersMessage {
+                filters: Some(filter.clone()),
+                marker: next_token,
+                ..Default::default()
             });
+
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(db_clusters) = result.db_clusters {
+                    let mut temp_clusters: Vec<DBCluster> = db_clusters.into_iter().collect();
+
+                    clusters.append(&mut temp_clusters);
+                }
+
+                if result.marker.is_none() {
+                    break;
+                } else {
+                    next_token = result.marker;
+                }
+            } else {
+                break;
+            }
         }
 
         Ok(clusters)
     }
 
-    async fn list_tags(&self, arn: Option<String>) -> Result<Option<Vec<Tag>>> {
-        let result = self
+    async fn list_tags(&self, arn: Option<String>) -> Option<Vec<Tag>> {
+        let req = self
             .client
             .list_tags_for_resource(ListTagsForResourceMessage {
                 resource_name: arn.unwrap(),
                 ..Default::default()
-            })
-            .await?;
-        Ok(result.tag_list)
+            });
+
+        if let Ok(result) = handle_future_with_return!(req) {
+            result.tag_list
+        } else {
+            None
+        }
     }
 
     fn check_tags(&self, tags: &Option<Vec<Tag>>, required_tags: &Vec<RequiredTags>) -> bool {
@@ -223,24 +216,25 @@ impl AuroraService {
 
         if let Some(db_cluster_members) = &db_cluster_identifier.db_cluster_members {
             for db_member in db_cluster_members {
-                let result = self
+                let req = self
                     .client
                     .describe_db_instances(DescribeDBInstancesMessage {
                         db_instance_identifier: db_member.db_instance_identifier.clone(),
                         ..Default::default()
-                    })
-                    .await?;
+                    });
 
-                if let Some(instance) = result.db_instances {
-                    instance_types.push(
-                        instance
-                            .first()
-                            .unwrap()
-                            .db_instance_class
-                            .as_ref()
-                            .unwrap()
-                            .to_string(),
-                    );
+                if let Ok(result) = handle_future_with_return!(req) {
+                    if let Some(instance) = result.db_instances {
+                        instance_types.push(
+                            instance
+                                .first()
+                                .unwrap()
+                                .db_instance_class
+                                .as_ref()
+                                .unwrap()
+                                .to_string(),
+                        );
+                    }
                 }
             }
         }
@@ -248,23 +242,21 @@ impl AuroraService {
         Ok(instance_types)
     }
 
-    async fn disable_termination_protection(&self, cluster_id: &str) -> Result<()> {
-        let resp = self
-            .client
-            .describe_db_clusters(DescribeDBClustersMessage {
-                db_cluster_identifier: Some(cluster_id.to_owned()),
-                ..Default::default()
-            })
-            .await?;
+    async fn disable_termination_protection(&self, cluster_id: &str) {
+        let req = self.client.describe_db_clusters(DescribeDBClustersMessage {
+            db_cluster_identifier: Some(cluster_id.to_owned()),
+            ..Default::default()
+        });
 
-        if resp.db_clusters.is_some() {
-            if resp
-                .db_clusters
-                .unwrap()
-                .first()
-                .unwrap()
-                .deletion_protection
-                == Some(true)
+        if let Ok(resp) = handle_future_with_return!(req) {
+            if resp.db_clusters.is_some()
+                && resp
+                    .db_clusters
+                    .unwrap()
+                    .first()
+                    .unwrap()
+                    .deletion_protection
+                    == Some(true)
             {
                 debug!(
                     "Termination protection is enabled for: {}. Trying to disable it.",
@@ -272,52 +264,45 @@ impl AuroraService {
                 );
 
                 if !self.dry_run {
-                    self.client
-                        .modify_db_cluster(ModifyDBClusterMessage {
-                            db_cluster_identifier: cluster_id.to_owned(),
-                            deletion_protection: Some(false),
-                            apply_immediately: Some(true),
-                            ..Default::default()
-                        })
-                        .await?;
+                    let req = self.client.modify_db_cluster(ModifyDBClusterMessage {
+                        db_cluster_identifier: cluster_id.to_owned(),
+                        deletion_protection: Some(false),
+                        apply_immediately: Some(true),
+                        ..Default::default()
+                    });
+                    handle_future!(req);
                 }
             }
         }
-
-        Ok(())
     }
 
     async fn stop_resource(&self, cluster_id: String) -> Result<()> {
         debug!(resource = cluster_id.as_str(), "Stopping");
 
         if !self.dry_run {
-            self.client
-                .stop_db_cluster(StopDBClusterMessage {
-                    db_cluster_identifier: cluster_id,
-                })
-                .await?;
+            let req = self.client.stop_db_cluster(StopDBClusterMessage {
+                db_cluster_identifier: cluster_id,
+            });
+            handle_future!(req);
         }
 
         Ok(())
     }
 
-    async fn terminate_db_instance(&self, instance_id: Option<String>) -> Result<()> {
+    async fn terminate_db_instance(&self, instance_id: Option<String>) {
         debug!(
             resource = instance_id.as_ref().unwrap().as_str(),
             "Deleting"
         );
 
         if !self.dry_run && instance_id.is_some() {
-            self.client
-                .delete_db_instance(DeleteDBInstanceMessage {
-                    db_instance_identifier: instance_id.unwrap(),
-                    skip_final_snapshot: Some(true),
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.delete_db_instance(DeleteDBInstanceMessage {
+                db_instance_identifier: instance_id.unwrap(),
+                skip_final_snapshot: Some(true),
+                ..Default::default()
+            });
+            handle_future!(req);
         }
-
-        Ok(())
     }
 
     async fn terminate_resource(&self, cluster_id: String) -> Result<()> {
@@ -325,36 +310,33 @@ impl AuroraService {
 
         if !self.dry_run {
             if self.config.termination_protection.ignore {
-                self.disable_termination_protection(&cluster_id).await?;
+                self.disable_termination_protection(&cluster_id).await;
             }
 
             // Delete all cluster members
-            if let Some(db_clusters) = self
-                .client
-                .describe_db_clusters(DescribeDBClustersMessage {
-                    db_cluster_identifier: Some(cluster_id.clone()),
-                    ..Default::default()
-                })
-                .await?
-                .db_clusters
-            {
-                for db_cluster in db_clusters {
-                    if let Some(cluster_members) = db_cluster.db_cluster_members {
-                        for member in cluster_members {
-                            self.terminate_db_instance(member.db_instance_identifier)
-                                .await?
+            let req = self.client.describe_db_clusters(DescribeDBClustersMessage {
+                db_cluster_identifier: Some(cluster_id.clone()),
+                ..Default::default()
+            });
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(db_clusters) = result.db_clusters {
+                    for db_cluster in db_clusters {
+                        if let Some(cluster_members) = db_cluster.db_cluster_members {
+                            for member in cluster_members {
+                                self.terminate_db_instance(member.db_instance_identifier)
+                                    .await
+                            }
                         }
                     }
                 }
-            }
 
-            self.client
-                .delete_db_cluster(DeleteDBClusterMessage {
+                let req = self.client.delete_db_cluster(DeleteDBClusterMessage {
                     db_cluster_identifier: cluster_id,
                     skip_final_snapshot: Some(true),
                     ..Default::default()
-                })
-                .await?;
+                });
+                handle_future!(req);
+            }
         }
 
         Ok(())

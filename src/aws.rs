@@ -26,6 +26,7 @@ use crate::{
     config::Config,
     graph::Dag,
     resource::Resource,
+    scan_resources,
     service::{self, NukerService},
     Result,
 };
@@ -34,34 +35,8 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
-use tracing::{error, trace};
+use tracing::trace;
 use tracing_futures::Instrument;
-
-macro_rules! scan_resources {
-    ($resource_type:expr, $resources:expr, $handles:expr, $service:expr, $region:expr) => {
-        $handles.push(tokio::spawn(async move {
-            match $service
-                .scan()
-                .instrument(tracing::trace_span!(
-                    $resource_type,
-                    region = $region.as_str()
-                ))
-                .await
-            {
-                Ok(rs) => {
-                    if !rs.is_empty() {
-                        for r in rs {
-                            $resources.lock().unwrap().push(r);
-                        }
-                    }
-                }
-                Err(err) => {
-                    error!("Error occurred locating resources: {}", err);
-                }
-            }
-        }));
-    };
-}
 
 /// AWS Nuker for nuking resources in AWS.
 pub struct AwsNuker {

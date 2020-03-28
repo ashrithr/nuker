@@ -1,15 +1,16 @@
 use crate::aws::cloudwatch::CwClient;
-use crate::aws::{util, Result};
+use crate::aws::util;
 use crate::config::{ElbConfig, RequiredTags};
 use crate::resource::{EnforcementState, NTag, Resource, ResourceType};
 use crate::service::NukerService;
+use crate::Result;
+use crate::{handle_future, handle_future_with_return};
 use async_trait::async_trait;
-use failure::format_err;
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_elbv2::{
-    DeleteLoadBalancerInput, DescribeLoadBalancersInput, DescribeTagsInput, Elb, ElbClient,
-    LoadBalancer, Tag,
+    DeleteLoadBalancerInput, DescribeLoadBalancersInput, DescribeTagsInput, DescribeTagsOutput,
+    Elb, ElbClient, LoadBalancer, Tag,
 };
 use std::sync::Arc;
 use tracing::{debug, trace};
@@ -65,7 +66,7 @@ impl ElbService {
         for lb in lbs {
             let lb_name = lb.load_balancer_name.as_ref().unwrap().clone();
             let lb_arn = lb.load_balancer_arn.as_ref().unwrap().clone();
-            let tags = self.list_tags(&lb).await?;
+            let tags = self.list_tags(&lb).await;
             let state = lb.state.as_ref().unwrap().clone().code;
 
             let enforcement_state: EnforcementState = {
@@ -122,21 +123,24 @@ impl ElbService {
         }
     }
 
-    async fn list_tags(&self, lb: &LoadBalancer) -> Result<Option<Vec<Tag>>> {
+    async fn list_tags(&self, lb: &LoadBalancer) -> Option<Vec<Tag>> {
         let arn = lb.load_balancer_arn.as_ref().unwrap().clone();
-        if let Some(tags_description) = self
-            .client
-            .describe_tags(DescribeTagsInput {
-                resource_arns: vec![arn],
+        let req = self.client.describe_tags(DescribeTagsInput {
+            resource_arns: vec![arn],
+        });
+
+        handle_future_with_return!(req)
+            .and_then(|mut result: DescribeTagsOutput| {
+                Ok(result
+                    .tag_descriptions
+                    .as_mut()
+                    .unwrap()
+                    .pop()
+                    .unwrap_or_default()
+                    .tags)
             })
-            .await?
-            .tag_descriptions
-            .as_mut()
-        {
-            Ok(tags_description.pop().unwrap_or_default().tags)
-        } else {
-            Err(format_err!("Failed to get tags"))
-        }
+            .ok()
+            .unwrap_or_default()
     }
 
     async fn is_resource_idle(&self, lb: &LoadBalancer) -> bool {
@@ -159,7 +163,6 @@ impl ElbService {
                         .cw_client
                         .filter_alb_load_balancer(&dimension_value)
                         .await
-                        .unwrap()
                 } else {
                     false
                 }
@@ -170,7 +173,6 @@ impl ElbService {
                         .cw_client
                         .filter_nlb_load_balancer(&dimension_value)
                         .await
-                        .unwrap()
                 } else {
                     false
                 }
@@ -200,24 +202,27 @@ impl ElbService {
         let mut lbs: Vec<LoadBalancer> = Vec::new();
 
         loop {
-            let result = self
+            let req = self
                 .client
                 .describe_load_balancers(DescribeLoadBalancersInput {
                     marker: next_token,
                     ..Default::default()
-                })
-                .await?;
+                });
 
-            if let Some(load_balancers) = result.load_balancers {
-                for lb in load_balancers {
-                    lbs.push(lb);
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(load_balancers) = result.load_balancers {
+                    for lb in load_balancers {
+                        lbs.push(lb);
+                    }
                 }
-            }
 
-            if result.next_marker.is_none() {
-                break;
+                if result.next_marker.is_none() {
+                    break;
+                } else {
+                    next_token = result.next_marker;
+                }
             } else {
-                next_token = result.next_marker;
+                break;
             }
         }
 
@@ -228,12 +233,11 @@ impl ElbService {
         debug!(resource = lb_arn.as_ref().unwrap().as_str(), "Deleting");
 
         if !self.dry_run && lb_arn.is_some() {
-            self.client
-                .delete_load_balancer(DeleteLoadBalancerInput {
-                    load_balancer_arn: lb_arn.unwrap(),
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.delete_load_balancer(DeleteLoadBalancerInput {
+                load_balancer_arn: lb_arn.unwrap(),
+                ..Default::default()
+            });
+            handle_future!(req);
         }
 
         Ok(())

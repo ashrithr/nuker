@@ -35,14 +35,6 @@ pub enum ResourceType {
     Root, // for tracking DAG dependencies
 }
 
-// impl fmt::Display for ResourceType {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         match *self {
-
-//         }
-//     }
-// }
-
 impl ResourceType {
     pub fn name(&self) -> &str {
         match *self {

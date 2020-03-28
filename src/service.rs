@@ -1,6 +1,7 @@
 //! Represents a Nukable service
 use crate::resource::{EnforcementState, Resource};
 use crate::Result;
+use crate::StdResult;
 use async_trait::async_trait;
 use dyn_clone::DynClone;
 use std::{
@@ -60,7 +61,7 @@ impl ParseServiceError {
 impl Error for ParseServiceError {}
 
 impl Display for ParseServiceError {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
+    fn fmt(&self, f: &mut Formatter) -> StdResult<(), FmtError> {
         write!(f, "{}", self.message)
     }
 }
@@ -68,7 +69,7 @@ impl Display for ParseServiceError {
 impl FromStr for Service {
     type Err = ParseServiceError;
 
-    fn from_str(s: &str) -> Result<Service, ParseServiceError> {
+    fn from_str(s: &str) -> StdResult<Service, ParseServiceError> {
         let v: &str = &s.to_lowercase();
         match v {
             AURORA_TYPE => Ok(Service::Aurora),

@@ -1,8 +1,10 @@
 use crate::{
-    aws::{util, Result},
+    aws::util,
     config::{RequiredTags, SagemakerConfig},
+    handle_future, handle_future_with_return,
     resource::{EnforcementState, NTag, Resource, ResourceType},
     service::NukerService,
+    Result,
 };
 use async_trait::async_trait;
 use rusoto_core::{HttpClient, Region};
@@ -53,24 +55,27 @@ impl SagemakerService {
         let mut notebooks: Vec<NotebookInstanceSummary> = Vec::new();
 
         loop {
-            let result = self
+            let req = self
                 .client
                 .list_notebook_instances(ListNotebookInstancesInput {
                     next_token,
                     ..Default::default()
-                })
-                .await?;
+                });
 
-            if let Some(ns) = result.notebook_instances {
-                for n in ns {
-                    notebooks.push(n);
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(ns) = result.notebook_instances {
+                    for n in ns {
+                        notebooks.push(n);
+                    }
                 }
-            }
 
-            if result.next_token.is_none() {
-                break;
+                if result.next_token.is_none() {
+                    break;
+                } else {
+                    next_token = result.next_token;
+                }
             } else {
-                next_token = result.next_token;
+                break;
             }
         }
 
@@ -85,7 +90,7 @@ impl SagemakerService {
 
         for notebook in notebooks {
             let notebook_id = notebook.notebook_instance_name.clone();
-            let tags = self.get_tags(&notebook).await?;
+            let tags = self.get_tags(&notebook).await;
             let ntags = self.package_tags_as_ntags(tags);
 
             let enforcement_state: EnforcementState = {
@@ -181,16 +186,16 @@ impl SagemakerService {
         })
     }
 
-    async fn get_tags(&self, notebook: &NotebookInstanceSummary) -> Result<Option<Vec<Tag>>> {
-        let result = self
-            .client
-            .list_tags(ListTagsInput {
-                resource_arn: notebook.notebook_instance_arn.clone(),
-                ..Default::default()
-            })
-            .await?;
+    async fn get_tags(&self, notebook: &NotebookInstanceSummary) -> Option<Vec<Tag>> {
+        let req = self.client.list_tags(ListTagsInput {
+            resource_arn: notebook.notebook_instance_arn.clone(),
+            ..Default::default()
+        });
 
-        Ok(result.tags)
+        handle_future_with_return!(req)
+            .ok()
+            .map(|r| r.tags)
+            .unwrap_or_default()
     }
 
     fn check_tags(&self, ntags: Option<Vec<NTag>>, required_tags: &Vec<RequiredTags>) -> bool {
@@ -201,11 +206,13 @@ impl SagemakerService {
         debug!(resource = notebook_id, "Deleting");
 
         if !self.dry_run {
-            self.client
+            let req = self
+                .client
                 .delete_notebook_instance(DeleteNotebookInstanceInput {
                     notebook_instance_name: notebook_id.to_owned(),
-                })
-                .await?;
+                });
+
+            handle_future!(req);
         }
 
         Ok(())
@@ -215,11 +222,12 @@ impl SagemakerService {
         debug!(resource = notebook_id, "Stopping");
 
         if !self.dry_run {
-            self.client
+            let req = self
+                .client
                 .stop_notebook_instance(StopNotebookInstanceInput {
                     notebook_instance_name: notebook_id.to_owned(),
-                })
-                .await?;
+                });
+            handle_future!(req);
         }
 
         Ok(())

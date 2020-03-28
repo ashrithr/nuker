@@ -1,4 +1,4 @@
-use crate::{config::IdleRules, resource::ResourceType, Result};
+use crate::{config::IdleRules, handle_future_with_return, resource::ResourceType};
 use chrono::{DateTime, TimeZone, Utc};
 use rusoto_cloudwatch::{
     CloudWatch, CloudWatchClient, Datapoint, Dimension, DimensionFilter, GetMetricStatisticsInput,
@@ -31,7 +31,7 @@ impl CwClient {
         metric_name: String,
         min_duration: Duration,
         granularity: Duration,
-    ) -> Result<GetMetricStatisticsOutput> {
+    ) -> Option<GetMetricStatisticsOutput> {
         let end_time = Utc::now();
 
         let req = GetMetricStatisticsInput {
@@ -48,7 +48,8 @@ impl CwClient {
             ..Default::default()
         };
 
-        Ok(self.client.get_metric_statistics(req).await?)
+        let req = self.client.get_metric_statistics(req);
+        handle_future_with_return!(req).ok()
     }
 
     async fn filter_resource(
@@ -56,7 +57,7 @@ impl CwClient {
         resource_id: &str,
         dimension: &str,
         resource_type: ResourceType,
-    ) -> Result<bool> {
+    ) -> bool {
         let mut result = false;
         let idle_rules = match resource_type {
             ResourceType::Ec2Instance | ResourceType::Ec2Address | ResourceType::Ec2Interface => {
@@ -96,7 +97,8 @@ impl CwClient {
                             idle_rule.duration,
                             idle_rule.granularity,
                         )
-                        .await?
+                        .await
+                        .unwrap_or_default()
                         .datapoints
                         .unwrap_or_default();
 
@@ -114,25 +116,25 @@ impl CwClient {
             }
         }
 
-        Ok(result)
+        result
     }
 
-    pub async fn filter_instance(&self, instance_id: &str) -> Result<bool> {
+    pub async fn filter_instance(&self, instance_id: &str) -> bool {
         self.filter_resource(instance_id, "InstanceId", ResourceType::Ec2Instance)
             .await
     }
 
-    pub async fn filter_volume(&self, volume_id: &str) -> Result<bool> {
+    pub async fn filter_volume(&self, volume_id: &str) -> bool {
         self.filter_resource(volume_id, "VolumeId", ResourceType::EbsVolume)
             .await
     }
 
-    pub async fn filter_db_instance(&self, instance_name: &str) -> Result<bool> {
+    pub async fn filter_db_instance(&self, instance_name: &str) -> bool {
         self.filter_resource(instance_name, "DBInstanceIdentifier", ResourceType::RDS)
             .await
     }
 
-    pub async fn filter_db_cluster(&self, cluster_identifier: &str) -> Result<bool> {
+    pub async fn filter_db_cluster(&self, cluster_identifier: &str) -> bool {
         self.filter_resource(
             cluster_identifier,
             "DBClusterIdentifier",
@@ -141,32 +143,32 @@ impl CwClient {
         .await
     }
 
-    pub async fn filter_rs_cluster(&self, cluster_id: &String) -> Result<bool> {
+    pub async fn filter_rs_cluster(&self, cluster_id: &String) -> bool {
         self.filter_resource(cluster_id, "ClusterIdentifier", ResourceType::Redshift)
             .await
     }
 
-    pub async fn filter_es_domain(&self, domain_name: &String) -> Result<bool> {
+    pub async fn filter_es_domain(&self, domain_name: &String) -> bool {
         self.filter_resource(domain_name, "DomainName", ResourceType::EsDomain)
             .await
     }
 
-    pub async fn filter_alb_load_balancer(&self, lb_name: &String) -> Result<bool> {
+    pub async fn filter_alb_load_balancer(&self, lb_name: &String) -> bool {
         self.filter_resource(lb_name, "LoadBalancer", ResourceType::ElbAlb)
             .await
     }
 
-    pub async fn filter_nlb_load_balancer(&self, lb_name: &String) -> Result<bool> {
+    pub async fn filter_nlb_load_balancer(&self, lb_name: &String) -> bool {
         self.filter_resource(lb_name, "LoadBalancer", ResourceType::ElbNlb)
             .await
     }
 
-    pub async fn filter_ecs_cluster(&self, cluster_name: &String) -> Result<bool> {
+    pub async fn filter_ecs_cluster(&self, cluster_name: &String) -> bool {
         self.filter_resource(cluster_name, "ClusterName", ResourceType::EcsCluster)
             .await
     }
 
-    pub async fn filter_emr_cluster(&self, cluster_id: &String) -> Result<bool> {
+    pub async fn filter_emr_cluster(&self, cluster_id: &String) -> bool {
         // FIXME: make this code generic
         let mut result = false;
 
@@ -181,7 +183,8 @@ impl CwClient {
                         idle_rule.duration,
                         idle_rule.granularity,
                     )
-                    .await?
+                    .await
+                    .unwrap_or_default()
                     .datapoints
                     .unwrap_or_default();
 
@@ -191,7 +194,7 @@ impl CwClient {
             }
         }
 
-        Ok(result)
+        result
     }
 
     /// Validates if a given metric is valid for the provided namespace

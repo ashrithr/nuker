@@ -190,11 +190,7 @@ enabled = true
 # State to enforce. Possible state is 'Deleted'.
 target_state = "Deleted"
 # The following resources will be ignored from rule enforcement
-<<<<<<< HEAD
-ignore = ["vpc-00d617aef710f2cde", "vpc-05310d35f662aa11a", "vpc-07c7ca01551c50cbb"]
-=======
 ignore = ["vpc-00d617aef710f2cde", "vpc-07c7ca01551c50cbb", "vpc-05310d35f662aa11a"]
->>>>>>> error-handling
 # Clean up empty VPC's. A VPC is considered empty when it doesn't have any
 # resources associated with it.
 cleanup_empty = true

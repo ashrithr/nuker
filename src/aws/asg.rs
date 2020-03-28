@@ -1,7 +1,9 @@
-use crate::aws::{util, Result};
+use crate::aws::util;
 use crate::config::{AutoScalingConfig, RequiredTags};
 use crate::resource::{EnforcementState, NTag, Resource, ResourceType};
 use crate::service::NukerService;
+use crate::Result;
+use crate::{handle_future, handle_future_with_return};
 use async_trait::async_trait;
 use rusoto_autoscaling::{
     AutoScalingGroup, AutoScalingGroupNamesType, Autoscaling, AutoscalingClient,
@@ -99,43 +101,47 @@ impl AsgService {
         }
     }
 
-    async fn get_asgs(&self) -> Result<Vec<AutoScalingGroup>> {
+    async fn get_asgs(&self) -> Vec<AutoScalingGroup> {
         let mut asgs: Vec<AutoScalingGroup> = Vec::new();
         let mut next_token: Option<String> = None;
 
         loop {
-            let result = self
+            let req = self
                 .client
                 .describe_auto_scaling_groups(AutoScalingGroupNamesType {
                     next_token,
                     ..Default::default()
-                })
-                .await?;
+                });
 
-            for asg in result.auto_scaling_groups {
-                asgs.push(asg);
-            }
+            if let Ok(result) = handle_future_with_return!(req) {
+                for asg in result.auto_scaling_groups {
+                    asgs.push(asg);
+                }
 
-            if result.next_token.is_none() {
-                break;
+                if result.next_token.is_none() {
+                    break;
+                } else {
+                    next_token = result.next_token;
+                }
             } else {
-                next_token = result.next_token;
+                break;
             }
         }
 
-        Ok(asgs)
+        asgs
     }
 
     async fn delete_asg(&self, resource: &Resource) -> Result<()> {
         debug!(resource = resource.id.as_str(), "Deleting");
 
         if !self.dry_run {
-            self.client
+            let req = self
+                .client
                 .delete_auto_scaling_group(DeleteAutoScalingGroupType {
                     auto_scaling_group_name: resource.id.clone(),
                     force_delete: Some(true),
-                })
-                .await?;
+                });
+            handle_future!(req);
         }
 
         Ok(())
@@ -178,7 +184,7 @@ impl AsgService {
 impl NukerService for AsgService {
     async fn scan(&self) -> Result<Vec<Resource>> {
         trace!("Initialized ASG resource scanner");
-        let asgs = self.get_asgs().await?;
+        let asgs = self.get_asgs().await;
 
         Ok(self.package_asgs_as_resources(asgs).await?)
     }

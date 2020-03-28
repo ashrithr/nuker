@@ -1,11 +1,10 @@
-use nuker::{config, nuke};
 use tracing::{info, trace};
 use tracing_futures::Instrument;
 
 #[tokio::main]
 async fn main() -> Result<(), failure::Error> {
-    let args = config::parse_args();
-    let config = config::parse_config_file(&args.config);
+    let args = nuker::parse_args();
+    let config = nuker::parse_config_file(&args.config);
 
     setup_tracing(args.verbose);
 
@@ -15,7 +14,7 @@ async fn main() -> Result<(), failure::Error> {
     );
     trace!("{:?}", config);
 
-    let mut nuker = nuke::Nuker::new(config, args);
+    let mut nuker = nuker::Nuker::new(config, args);
 
     nuker
         .run()

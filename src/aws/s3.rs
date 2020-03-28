@@ -1,11 +1,11 @@
 use crate::{
-    aws::Result,
     config::S3Config,
+    handle_future_with_return,
     resource::{EnforcementState, NTag, Resource, ResourceType},
     service::NukerService,
+    Error, Result,
 };
 use async_trait::async_trait;
-use failure::format_err;
 use rusoto_core::{HttpClient, Region};
 use rusoto_credential::ProfileProvider;
 use rusoto_s3::{
@@ -297,67 +297,68 @@ impl S3Service {
 
         // Delete all objects from the bucket
         loop {
-            let result = self
-                .client
-                .list_objects_v2(ListObjectsV2Request {
-                    bucket: bucket.to_owned(),
-                    continuation_token: next_token,
-                    ..Default::default()
-                })
-                .await?;
+            let req = self.client.list_objects_v2(ListObjectsV2Request {
+                bucket: bucket.to_owned(),
+                continuation_token: next_token,
+                ..Default::default()
+            });
 
-            if let Some(objects) = result.contents {
-                debug!(
-                    resource = bucket,
-                    objects_count = objects.len(),
-                    "Deleting Objects"
-                );
+            if let Ok(result) = handle_future_with_return!(req) {
+                if let Some(objects) = result.contents {
+                    debug!(
+                        resource = bucket,
+                        objects_count = objects.len(),
+                        "Deleting Objects"
+                    );
 
-                match self
-                    .client
-                    .delete_objects(DeleteObjectsRequest {
-                        bucket: bucket.to_owned(),
-                        // bypass_governance_retention: Some(true),
-                        delete: Delete {
-                            objects: objects
-                                .iter()
-                                .map(|o| ObjectIdentifier {
-                                    key: o.key.as_ref().unwrap().to_owned(),
-                                    ..Default::default()
-                                })
-                                .collect(),
+                    match self
+                        .client
+                        .delete_objects(DeleteObjectsRequest {
+                            bucket: bucket.to_owned(),
+                            // bypass_governance_retention: Some(true),
+                            delete: Delete {
+                                objects: objects
+                                    .iter()
+                                    .map(|o| ObjectIdentifier {
+                                        key: o.key.as_ref().unwrap().to_owned(),
+                                        ..Default::default()
+                                    })
+                                    .collect(),
+                                ..Default::default()
+                            },
                             ..Default::default()
-                        },
-                        ..Default::default()
-                    })
-                    .await
-                {
-                    Ok(r) => {
-                        if let Some(errors) = r.errors {
-                            for error in errors {
-                                warn!(
+                        })
+                        .await
+                    {
+                        Ok(r) => {
+                            if let Some(errors) = r.errors {
+                                for error in errors {
+                                    warn!(
+                                        resource = bucket,
+                                        "Failed delete_object with errors: {:?}", error
+                                    );
+                                }
+                            } else {
+                                debug!(
                                     resource = bucket,
-                                    "Failed delete_object with errors: {:?}", error
+                                    deleted_count = r.deleted.unwrap().len(),
+                                    "Successfully deleted objects"
                                 );
                             }
-                        } else {
-                            debug!(
-                                resource = bucket,
-                                deleted_count = r.deleted.unwrap().len(),
-                                "Successfully deleted objects"
-                            );
+                        }
+                        Err(err) => {
+                            warn!(resource = bucket, error = ?err, "Failed delete_objects");
                         }
                     }
-                    Err(err) => {
-                        warn!(resource = bucket, error = ?err, "Failed delete_objects");
-                    }
                 }
-            }
 
-            if result.next_continuation_token.is_none() {
-                break;
+                if result.next_continuation_token.is_none() {
+                    break;
+                } else {
+                    next_token = result.next_continuation_token;
+                }
             } else {
-                next_token = result.next_continuation_token;
+                break;
             }
         }
 
@@ -533,7 +534,7 @@ impl S3Service {
                                 }
                                 Err(err) => {
                                     warn!(resource = bucket, error = ?err, "Failed disabling versioning");
-                                    return Err(format_err!("Failed disabling versioning"));
+                                    return Err(Error::from(err));
                                 }
                             }
                         }

@@ -1,8 +1,10 @@
 use crate::{
-    aws::{cloudwatch::CwClient, util, Result},
+    aws::{cloudwatch::CwClient, util},
     config::{EsConfig, RequiredTags},
+    handle_future, handle_future_with_return,
     resource::{EnforcementState, NTag, Resource, ResourceType},
     service::NukerService,
+    Result,
 };
 use async_trait::async_trait;
 use rusoto_core::{HttpClient, Region};
@@ -108,7 +110,7 @@ impl EsService {
                 arn: Some(domain_arn.clone()),
                 region: self.region.clone(),
                 resource_type: ResourceType::EsDomain,
-                tags: self.package_tags_as_ntags(self.list_tags(domain_arn.clone()).await?),
+                tags: self.package_tags_as_ntags(self.list_tags(domain_arn.clone()).await),
                 state: domain_state,
                 enforcement_state,
                 dependencies: None,
@@ -121,7 +123,7 @@ impl EsService {
     async fn resource_tags_does_not_match(&self, domain: &ElasticsearchDomainStatus) -> bool {
         if self.config.required_tags.is_some() {
             !self.check_tags(
-                &self.list_tags(domain.arn.clone()).await.unwrap_or_default(),
+                &self.list_tags(domain.arn.clone()).await,
                 &self.config.required_tags.as_ref().unwrap(),
             )
         } else {
@@ -145,11 +147,7 @@ impl EsService {
 
     async fn is_resource_idle(&self, domain: &ElasticsearchDomainStatus) -> bool {
         if self.config.idle_rules.is_some() {
-            !self
-                .cw_client
-                .filter_es_domain(&domain.domain_name)
-                .await
-                .unwrap()
+            !self.cw_client.filter_es_domain(&domain.domain_name).await
         } else {
             false
         }
@@ -158,17 +156,15 @@ impl EsService {
     async fn get_clusters(&self) -> Result<Vec<ElasticsearchDomainStatus>> {
         let mut clusters: Vec<ElasticsearchDomainStatus> = Vec::new();
 
-        if let Ok(domains) = self.get_domains().await {
+        if let Some(domains) = self.get_domains().await {
             for domain in domains {
                 if let Some(domain_name) = domain.domain_name {
-                    clusters.push(
-                        self.client
-                            .describe_elasticsearch_domain(DescribeElasticsearchDomainRequest {
-                                domain_name,
-                            })
-                            .await?
-                            .domain_status,
-                    )
+                    let req = self.client.describe_elasticsearch_domain(
+                        DescribeElasticsearchDomainRequest { domain_name },
+                    );
+                    if let Ok(result) = handle_future_with_return!(req) {
+                        clusters.push(result.domain_status)
+                    }
                 }
             }
         }
@@ -176,21 +172,22 @@ impl EsService {
         Ok(clusters)
     }
 
-    async fn get_domains(&self) -> Result<Vec<DomainInfo>> {
-        Ok(self
-            .client
-            .list_domain_names()
-            .await?
+    async fn get_domains(&self) -> Option<Vec<DomainInfo>> {
+        let req = self.client.list_domain_names();
+
+        handle_future_with_return!(req)
+            .ok()
+            .unwrap_or_default()
             .domain_names
-            .unwrap_or_default())
     }
 
-    async fn list_tags(&self, arn: String) -> Result<Option<Vec<Tag>>> {
-        Ok(self
-            .client
-            .list_tags(ListTagsRequest { arn })
-            .await?
-            .tag_list)
+    async fn list_tags(&self, arn: String) -> Option<Vec<Tag>> {
+        let req = self.client.list_tags(ListTagsRequest { arn });
+
+        handle_future_with_return!(req)
+            .ok()
+            .unwrap_or_default()
+            .tag_list
     }
 
     fn check_tags(&self, tags: &Option<Vec<Tag>>, required_tags: &Vec<RequiredTags>) -> bool {
@@ -213,10 +210,12 @@ impl EsService {
         debug!(resource = domain_name.as_str(), "Deleting");
 
         if !self.dry_run {
-            self.client
-                .delete_elasticsearch_domain(DeleteElasticsearchDomainRequest { domain_name })
-                .await?;
+            let req = self
+                .client
+                .delete_elasticsearch_domain(DeleteElasticsearchDomainRequest { domain_name });
+            handle_future!(req);
         }
+
         Ok(())
     }
 }
