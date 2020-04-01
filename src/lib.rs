@@ -18,6 +18,7 @@ pub use error::NError as Error;
 pub use event::Event;
 pub use macros::*;
 pub use nuke::Nuker;
+use std::error::Error as StdError;
 use std::result::Result as StdResult;
 use tokio::sync::mpsc::Receiver as NReceiver;
 use tokio::sync::mpsc::Sender as NSender;

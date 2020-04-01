@@ -1,7 +1,8 @@
-use crate::{client::*, config::TargetState, service::*};
+use crate::{client::*, config::TargetState, service::*, StdError, StdResult};
 use colored::*;
 use rusoto_core::Region;
 use std::fmt;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ResourceType {
@@ -224,9 +225,51 @@ impl ResourceType {
 pub enum ResourceState {
     Running,
     Stopped,
+    Stopping,
+    ShuttingDown,
     Deleted,
     Failed,
     Unknown,
+    Pending,
+}
+
+impl FromStr for ResourceState {
+    type Err = ParseResourceStateError;
+
+    fn from_str(s: &str) -> StdResult<ResourceState, ParseResourceStateError> {
+        let v: &str = &s.to_lowercase();
+        match v {
+            "running" => Ok(ResourceState::Running),
+            "stopped" => Ok(ResourceState::Stopped),
+            "stopping" => Ok(ResourceState::Stopping),
+            "shutting-down" => Ok(ResourceState::ShuttingDown),
+            "terminated" => Ok(ResourceState::Deleted),
+            "pending" => Ok(ResourceState::Pending),
+            s => Err(ParseResourceStateError::new(s)),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ParseResourceStateError {
+    message: String,
+}
+
+impl ParseResourceStateError {
+    /// Parses a region given as a string literal into a type `Region'
+    pub fn new(input: &str) -> Self {
+        ParseResourceStateError {
+            message: format!("Not a valid AWS region: {}", input),
+        }
+    }
+}
+
+impl StdError for ParseResourceStateError {}
+
+impl fmt::Display for ParseResourceStateError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> StdResult<(), fmt::Error> {
+        write!(f, "{}", self.message)
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

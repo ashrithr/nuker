@@ -1,3 +1,4 @@
+use crate::resource::ParseResourceStateError;
 use failure::Fail;
 use rusoto_core::{request::BufferedHttpResponse, RusotoError};
 use serde::Deserialize;
@@ -29,6 +30,8 @@ pub enum NError {
     Validation(String),
     #[fail(display = "dag failure: {}", _0)]
     Dag(String),
+    #[fail(display = "invalid resource state: {}", e)]
+    InvalidResourceState { e: ParseResourceStateError },
     #[fail(display = "failed with provided credentials: {}", e)]
     InvalidCredentials {
         e: rusoto_credential::CredentialsError,
@@ -69,6 +72,12 @@ impl<E: StdError + 'static> From<RusotoError<E>> for NError {
                 msg: format!("{}", err),
             },
         }
+    }
+}
+
+impl From<ParseResourceStateError> for NError {
+    fn from(error: ParseResourceStateError) -> Self {
+        NError::InvalidResourceState { e: error }
     }
 }
 

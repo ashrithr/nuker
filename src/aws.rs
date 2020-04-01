@@ -12,21 +12,14 @@ mod cloudwatch;
 // mod redshift;
 // mod s3;
 // mod sagemaker;
-// mod sts;
-// mod util;
+mod sts;
 // mod vpc;
 mod ec2_instance;
 
 pub use cloudwatch::CwClient;
 
 use crate::{
-    // aws::{
-    //     asg::AsgService, aurora::AuroraService, cloudwatch::CwClient, ebs::EbsService,
-    //     ec2::Ec2Service, ecs::EcsService, elb::ElbService, emr::EmrService, es::EsService,
-    //     glue::GlueService, rds::RdsService, redshift::RedshiftService, s3::S3Service,
-    //     sagemaker::SagemakerService, vpc::VpcService,
-    // },
-    aws::ec2_instance::Ec2Instance,
+    aws::{ec2_instance::Ec2Instance, sts::StsService},
     client::NukerClient,
     config::Config,
     graph::Dag,
@@ -47,18 +40,24 @@ use tracing_futures::Instrument;
 
 type ClientType = ResourceType;
 
+#[derive(Clone)]
+pub struct ClientDetails {
+    account_number: String,
+    region: Region,
+    client: Client,
+}
+
 /// AWS Nuker for nuking resources in AWS.
 pub struct AwsNuker {
     pub region: Region,
     pub config: Config,
-    // services_map: HashMap<String, Box<dyn NukerService>>,
     clients: HashMap<ClientType, Box<dyn NukerClient>>,
     resources: Arc<Mutex<Vec<Resource>>>,
     dag: Dag,
 }
 
 impl AwsNuker {
-    pub fn new(
+    pub async fn new(
         profile: Option<String>,
         region: Region,
         mut config: Config,
@@ -67,7 +66,14 @@ impl AwsNuker {
         // let mut services_map: HashMap<String, Box<dyn NukerService>> = HashMap::new();
         let client = Client::new_with(credentials_provider(&profile)?, HttpClient::new()?);
         let mut clients: HashMap<ClientType, Box<dyn NukerClient>> = HashMap::new();
+        let sts_client = StsService::new(&client, &region)?;
         let cw_client = create_cw_client(&profile, &region, &mut config)?;
+
+        let client_details = ClientDetails {
+            account_number: sts_client.get_account_number().await?,
+            region: region.clone(),
+            client,
+        };
 
         /*
         services_map.insert(
@@ -224,8 +230,7 @@ impl AwsNuker {
             clients.insert(
                 ClientType::Ec2Instance,
                 Box::new(Ec2Instance::new(
-                    &client,
-                    &region,
+                    &client_details,
                     std::mem::replace(&mut config.ec2, None).unwrap(),
                     cw_client,
                     dry_run,

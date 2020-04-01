@@ -67,23 +67,29 @@ impl Nuker {
             debug!("Scanning for resources across all regions - {:?}", REGIONS);
 
             for region in REGIONS.iter() {
-                clients.push(AwsNuker::new(
-                    self.args.profile.clone(),
-                    region.to_owned(),
-                    self.config.clone(),
-                    self.args.dry_run,
-                )?);
+                clients.push(
+                    AwsNuker::new(
+                        self.args.profile.clone(),
+                        region.to_owned(),
+                        self.config.clone(),
+                        self.args.dry_run,
+                    )
+                    .await?,
+                );
             }
         } else {
             debug!("Scanning for resources in regions: {:?}", self.args.regions);
 
             for region in &self.args.regions {
-                clients.push(AwsNuker::new(
-                    self.args.profile.clone(),
-                    Region::from_str(region)?,
-                    self.config.clone(),
-                    self.args.dry_run,
-                )?);
+                clients.push(
+                    AwsNuker::new(
+                        self.args.profile.clone(),
+                        Region::from_str(region)?,
+                        self.config.clone(),
+                        self.args.dry_run,
+                    )
+                    .await?,
+                );
             }
         }
 

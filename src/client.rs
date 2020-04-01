@@ -4,6 +4,7 @@ use crate::resource::{EnforcementState, Resource, ResourceState, ResourceType};
 use crate::CwClient;
 use crate::Event;
 use crate::NSender;
+use crate::Result;
 use async_trait::async_trait;
 use dyn_clone::DynClone;
 use std::sync::Arc;
@@ -12,7 +13,7 @@ use std::sync::Arc;
 pub trait ResourceScanner {
     /// Scans for all the resources that are scannable by a Resource Scanner
     /// before applying any Filter's and Rule's
-    async fn scan(&self) -> Vec<Resource>;
+    async fn scan(&self) -> Result<Vec<Resource>>;
 
     /// Find dependent resources for a given Resource
     async fn dependencies(&self, resource: &Resource) -> Option<Vec<Resource>>;
@@ -94,7 +95,7 @@ pub trait ResourceFilter {
         }
     }
 
-    /// Additional filters to apply
+    /// Additional filters to apply that are not generic for all resource types
     fn additional_filters(&self, resource: &Resource, config: &ResourceConfig) -> bool;
 
     /// Filters a provided resource using the available filters
