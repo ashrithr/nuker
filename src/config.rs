@@ -27,20 +27,20 @@ pub struct Args {
 /// This struct is built from reading the configuration file
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
-    pub ec2: Ec2Config,
-    pub ebs: EbsConfig,
-    pub elb: ElbConfig,
-    pub rds: RdsConfig,
-    pub aurora: AuroraConfig,
-    pub s3: S3Config,
-    pub emr: EmrConfig,
-    pub redshift: RedshiftConfig,
-    pub glue: GlueConfig,
-    pub sagemaker: SagemakerConfig,
-    pub es: EsConfig,
-    pub asg: AutoScalingConfig,
-    pub ecs: EcsConfig,
-    pub vpc: VpcConfig,
+    pub ec2: Option<Ec2Config>,
+    pub ebs: Option<EbsConfig>,
+    pub elb: Option<ElbConfig>,
+    pub rds: Option<RdsConfig>,
+    pub aurora: Option<AuroraConfig>,
+    pub s3: Option<S3Config>,
+    pub emr: Option<EmrConfig>,
+    pub redshift: Option<RedshiftConfig>,
+    pub glue: Option<GlueConfig>,
+    pub sagemaker: Option<SagemakerConfig>,
+    pub es: Option<EsConfig>,
+    pub asg: Option<AutoScalingConfig>,
+    pub ecs: Option<EcsConfig>,
+    pub vpc: Option<VpcConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone, Eq, PartialEq)]

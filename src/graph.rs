@@ -1,6 +1,6 @@
 //! Graph utility to create DAG for tracking `Resource` dependencies.
 
-use crate::resource::{EnforcementState, Resource, ResourceType};
+use crate::resource::Resource;
 use crate::{Error, Result};
 use petgraph::{
     algo::{is_cyclic_directed, toposort},
@@ -8,7 +8,6 @@ use petgraph::{
     stable_graph::NodeIndex,
     EdgeType, Graph,
 };
-use rusoto_core::Region;
 use std::collections::HashMap;
 use tracing::trace;
 
@@ -21,31 +20,27 @@ pub enum Relation {
 pub struct Dag {
     pub graph: Graph<Resource, Relation>,
     pub id_map: HashMap<String, NodeIndex<u32>>,
+    pub root_node: NodeIndex<u32>,
 }
 
 impl Dag {
+    /// Create a Dag with "root" node
     pub fn new() -> Self {
-        let graph: Graph<Resource, Relation> = Graph::new();
+        let mut graph: Graph<Resource, Relation> = Graph::new();
         let id_map: HashMap<String, NodeIndex<u32>> = HashMap::new();
 
-        Dag { graph, id_map }
+        let root_node = graph.add_node(Resource::default());
+
+        Dag {
+            graph,
+            id_map,
+            root_node,
+        }
     }
 
     /// Builds a DAG from provided resources
     pub fn build_graph(&mut self, resources: &[Resource]) -> Result<()> {
-        let root_node = self.graph.add_node(Resource {
-            id: "root".to_string(),
-            arn: None,
-            resource_type: ResourceType::Root,
-            region: Region::Custom {
-                name: "".to_string(),
-                endpoint: "".to_string(),
-            },
-            tags: None,
-            state: None,
-            enforcement_state: EnforcementState::Skip,
-            dependencies: None,
-        });
+        let root_node = self.graph.add_node(Resource::default());
 
         for resource in resources {
             let r_index = if self.id_map.contains_key(&resource.id) {
@@ -87,6 +82,38 @@ impl Dag {
         }
 
         Ok(())
+    }
+
+    /// Add a given Resource to the DAG
+    pub fn add_node_to_dag(&mut self, mut r: Resource) {
+        let resource_id = r.id.clone();
+        let resource_deps = std::mem::replace(&mut r.dependencies, None);
+
+        let r_index = if self.id_map.contains_key(&r.id) {
+            *self.id_map.get(&r.id).unwrap()
+        } else {
+            let rid = self.graph.add_node(r);
+            self.id_map.insert(resource_id, rid);
+            rid
+        };
+
+        self.graph.add_edge(self.root_node, r_index, Relation::Root);
+
+        if let Some(deps) = resource_deps {
+            for dep in deps {
+                let dep_id = dep.id.clone();
+                let dep_index = if self.id_map.contains_key(&dep.id) {
+                    *self.id_map.get(&dep.id).unwrap()
+                } else {
+                    let rid = self.graph.add_node(dep);
+                    self.id_map.insert(dep_id, rid);
+                    self.graph.add_edge(self.root_node, rid, Relation::Root);
+                    rid
+                };
+
+                self.graph.add_edge(dep_index, r_index, Relation::Depends);
+            }
+        }
     }
 
     /// Order the resources based on their dependencies by performing topological

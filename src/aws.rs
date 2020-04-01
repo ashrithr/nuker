@@ -1,28 +1,31 @@
-mod asg;
-mod aurora;
+// mod asg;
+// mod aurora;
 mod cloudwatch;
-mod ebs;
-mod ec2;
-mod ecs;
-mod elb;
-mod emr;
-mod es;
-mod glue;
-mod rds;
-mod redshift;
-mod s3;
-mod sagemaker;
-mod sts;
-mod util;
-mod vpc;
+// mod ebs;
+// mod ec2;
+// mod ecs;
+// mod elb;
+// mod emr;
+// mod es;
+// mod glue;
+// mod rds;
+// mod redshift;
+// mod s3;
+// mod sagemaker;
+// mod sts;
+// mod util;
+// mod vpc;
+mod ec2_instance;
 
 use crate::{
-    aws::{
-        asg::AsgService, aurora::AuroraService, cloudwatch::CwClient, ebs::EbsService,
-        ec2::Ec2Service, ecs::EcsService, elb::ElbService, emr::EmrService, es::EsService,
-        glue::GlueService, rds::RdsService, redshift::RedshiftService, s3::S3Service,
-        sagemaker::SagemakerService, vpc::VpcService,
-    },
+    // aws::{
+    //     asg::AsgService, aurora::AuroraService, cloudwatch::CwClient, ebs::EbsService,
+    //     ec2::Ec2Service, ecs::EcsService, elb::ElbService, emr::EmrService, es::EsService,
+    //     glue::GlueService, rds::RdsService, redshift::RedshiftService, s3::S3Service,
+    //     sagemaker::SagemakerService, vpc::VpcService,
+    // },
+    aws::{cloudwatch::CwClient, ec2_instance::Ec2Instance},
+    client::{ClientType, NukerClient},
     config::Config,
     graph::Dag,
     resource::Resource,
@@ -30,7 +33,9 @@ use crate::{
     service::{self, NukerService},
     Result,
 };
-use rusoto_core::Region;
+use rusoto_core::{Client, HttpClient, Region};
+use rusoto_credential::{ChainProvider, ProfileProvider};
+use std::time::Duration;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -42,21 +47,25 @@ use tracing_futures::Instrument;
 pub struct AwsNuker {
     pub region: Region,
     pub config: Config,
-    services_map: HashMap<String, Box<dyn NukerService>>,
+    // services_map: HashMap<String, Box<dyn NukerService>>,
+    clients: HashMap<ClientType, Box<dyn NukerClient>>,
     resources: Arc<Mutex<Vec<Resource>>>,
     dag: Dag,
 }
 
 impl AwsNuker {
     pub fn new(
-        profile_name: Option<String>,
+        profile: Option<String>,
         region: Region,
         config: Config,
         dry_run: bool,
     ) -> Result<AwsNuker> {
-        let mut services_map: HashMap<String, Box<dyn NukerService>> = HashMap::new();
-        let cw_client = create_cw_client(&profile_name, &region, &config)?;
+        // let mut services_map: HashMap<String, Box<dyn NukerService>> = HashMap::new();
+        let client = Client::new_with(credentials_provider(profile)?, HttpClient::new()?);
+        let mut clients: HashMap<ClientType, Box<dyn NukerClient>> = HashMap::new();
+        let cw_client = create_cw_client(&profile, &region, &config)?;
 
+        /*
         services_map.insert(
             service::EC2_TYPE.to_string(),
             Box::new(Ec2Service::new(
@@ -205,19 +214,30 @@ impl AwsNuker {
                 dry_run,
             )?),
         );
+        */
+
+        clients.insert(
+            ClientType::Ec2Instance,
+            Box::new(Ec2Instance::new(
+                &client,
+                &region,
+                std::mem::replace(config.ec2, None),
+            )),
+        );
 
         Ok(AwsNuker {
             region,
             config,
-            services_map,
+            clients,
             resources: Arc::new(Mutex::new(Vec::new())),
             dag: Dag::new(),
         })
     }
 
     pub async fn locate_resources(&mut self) {
-        let mut handles = Vec::new();
+        // let mut handles = Vec::new();
 
+        /*
         for (_name, service) in &self.services_map {
             let service = dyn_clone::clone_box(&*service);
             let resources = self.resources.clone();
@@ -254,8 +274,11 @@ impl AwsNuker {
                 scan_resources!(service::VPC_TYPE, resources, handles, service, region);
             }
         }
+        */
 
-        futures::future::join_all(handles).await;
+        // futures::future::join_all(handles).await;
+
+        unimplemented!()
     }
 
     pub fn print_resources(&self) {
@@ -271,48 +294,57 @@ impl AwsNuker {
     }
 
     pub async fn cleanup_resources(&mut self) -> Result<()> {
+        /*
         for resource in self.order_deps()? {
-            self.services_map
-                .get(&resource.resource_type.name().to_string())
+            self.clients
+                .get(&resource.resource_type)
                 .unwrap()
                 .cleanup(&resource)
                 .await?;
         }
         trace!("Done cleaning up resources");
+        */
 
         Ok(())
     }
 }
 
+pub fn credentials_provider(profile: Option<String>) -> Result<ChainProvider> {
+    let profile_provider = match profile {
+        Some(profile) => {
+            let mut p = ProfileProvider::new()?;
+            p.set_profile(profile);
+            p
+        }
+        None => ProfileProvider::new()?,
+    };
+
+    let mut provider = ChainProvider::with_profile_provider(profile_provider);
+    Ok(provider.set_timeout(Duration::from_millis(250)))
+}
+
 fn create_cw_client(
-    profile_name: &Option<String>,
+    profile: &Option<String>,
     region: &Region,
     config: &Config,
 ) -> Result<Arc<Box<CwClient>>> {
-    let cw_client: rusoto_cloudwatch::CloudWatchClient = if let Some(profile) = profile_name {
-        let mut pp = rusoto_credential::ProfileProvider::new()?;
-        pp.set_profile(profile);
-
-        rusoto_cloudwatch::CloudWatchClient::new_with(
-            rusoto_core::HttpClient::new()?,
-            pp,
+    let cw_client: rusoto_cloudwatch::CloudWatchClient =
+        rusoto_cloudwatch::CloudWatchClient::new_with_client(
+            credentials_provider(profile)?,
             region.to_owned(),
-        )
-    } else {
-        rusoto_cloudwatch::CloudWatchClient::new(region.to_owned())
-    };
+        );
 
     Ok(Arc::new(Box::new(CwClient {
         client: cw_client,
-        ec2_idle_rules: config.ec2.idle_rules.clone(),
-        ebs_idle_rules: config.ebs.idle_rules.clone(),
-        elb_alb_idle_rules: config.elb.alb_idle_rules.clone(),
-        elb_nlb_idle_rules: config.elb.nlb_idle_rules.clone(),
-        rds_idle_rules: config.rds.idle_rules.clone(),
-        aurora_idle_rules: config.aurora.idle_rules.clone(),
-        redshift_idle_rules: config.redshift.idle_rules.clone(),
-        emr_idle_rules: config.emr.idle_rules.clone(),
-        es_idle_rules: config.es.idle_rules.clone(),
-        ecs_idle_rules: config.ecs.idle_rules.clone(),
+        ec2_idle_rules: std::mem::replace(config.ec2.idle_rules, None),
+        ebs_idle_rules: std::mem::replace(config.ebs.idle_rules.clone(), None),
+        elb_alb_idle_rules: std::mem::replace(config.elb.alb_idle_rules.clone(), None),
+        elb_nlb_idle_rules: std::mem::replace(config.elb.nlb_idle_rules.clone(), None),
+        rds_idle_rules: std::mem::replace(config.rds.idle_rules.clone(), None),
+        aurora_idle_rules: std::mem::replace(config.aurora.idle_rules.clone(), None),
+        redshift_idle_rules: std::mem::replace(config.redshift.idle_rules.clone(), None),
+        emr_idle_rules: std::mem::replace(config.emr.idle_rules.clone(), None),
+        es_idle_rules: std::mem::replace(config.es.idle_rules.clone(), None),
+        ecs_idle_rules: std::mem::replace(config.ecs.idle_rules.clone(), None),
     })))
 }

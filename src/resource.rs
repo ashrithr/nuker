@@ -1,4 +1,4 @@
-use crate::{config::TargetState, service::*};
+use crate::{client::*, config::TargetState, service::*};
 use colored::*;
 use rusoto_core::Region;
 use std::fmt;
@@ -221,6 +221,15 @@ impl ResourceType {
 }
 
 #[derive(Debug, Copy, Clone)]
+pub enum ResourceState {
+    Running,
+    Stopped,
+    Deleted,
+    Failed,
+    Unknown,
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum EnforcementState {
     Stop,
     Delete,
@@ -257,12 +266,30 @@ impl EnforcementState {
 pub struct Resource {
     pub id: String,
     pub arn: Option<String>,
-    pub resource_type: ResourceType,
+    pub type_: ClientType,
     pub region: Region,
     pub tags: Option<Vec<NTag>>,
-    pub state: Option<String>,
+    pub state: Option<ResourceState>,
     pub enforcement_state: EnforcementState,
     pub dependencies: Option<Vec<Resource>>,
+}
+
+impl Default for Resource {
+    fn default() -> Self {
+        Resource {
+            id: "root".to_string(),
+            arn: None,
+            type_: ClientType::Root,
+            region: Region::Custom {
+                name: "".to_string(),
+                endpoint: "".to_string(),
+            },
+            tags: None,
+            state: None,
+            enforcement_state: EnforcementState::Skip,
+            dependencies: None,
+        }
+    }
 }
 
 impl fmt::Display for Resource {
