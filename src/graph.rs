@@ -126,7 +126,7 @@ impl Dag {
             Ok(order) => {
                 for i in order {
                     if let Some(resource) = self.graph.node_weight(i) {
-                        if resource.resource_type.is_root() {
+                        if resource.type_.is_root() {
                             continue;
                         }
                         resources.push(resource.clone());

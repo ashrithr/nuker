@@ -9,7 +9,9 @@ mod event;
 mod nuke;
 mod resource;
 mod service;
+mod util;
 
+pub use aws::CwClient;
 pub use config::parse_args;
 pub use config::parse_config_file;
 pub use error::NError as Error;

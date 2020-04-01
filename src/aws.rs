@@ -17,6 +17,8 @@ mod cloudwatch;
 // mod vpc;
 mod ec2_instance;
 
+pub use cloudwatch::CwClient;
+
 use crate::{
     // aws::{
     //     asg::AsgService, aurora::AuroraService, cloudwatch::CwClient, ebs::EbsService,
@@ -24,11 +26,11 @@ use crate::{
     //     glue::GlueService, rds::RdsService, redshift::RedshiftService, s3::S3Service,
     //     sagemaker::SagemakerService, vpc::VpcService,
     // },
-    aws::{cloudwatch::CwClient, ec2_instance::Ec2Instance},
-    client::{ClientType, NukerClient},
+    aws::ec2_instance::Ec2Instance,
+    client::NukerClient,
     config::Config,
     graph::Dag,
-    resource::Resource,
+    resource::{Resource, ResourceType},
     scan_resources,
     service::{self, NukerService},
     Result,
@@ -42,6 +44,8 @@ use std::{
 };
 use tracing::trace;
 use tracing_futures::Instrument;
+
+type ClientType = ResourceType;
 
 /// AWS Nuker for nuking resources in AWS.
 pub struct AwsNuker {
@@ -57,13 +61,13 @@ impl AwsNuker {
     pub fn new(
         profile: Option<String>,
         region: Region,
-        config: Config,
+        mut config: Config,
         dry_run: bool,
     ) -> Result<AwsNuker> {
         // let mut services_map: HashMap<String, Box<dyn NukerService>> = HashMap::new();
-        let client = Client::new_with(credentials_provider(profile)?, HttpClient::new()?);
+        let client = Client::new_with(credentials_provider(&profile)?, HttpClient::new()?);
         let mut clients: HashMap<ClientType, Box<dyn NukerClient>> = HashMap::new();
-        let cw_client = create_cw_client(&profile, &region, &config)?;
+        let cw_client = create_cw_client(&profile, &region, &mut config)?;
 
         /*
         services_map.insert(
@@ -216,14 +220,18 @@ impl AwsNuker {
         );
         */
 
-        clients.insert(
-            ClientType::Ec2Instance,
-            Box::new(Ec2Instance::new(
-                &client,
-                &region,
-                std::mem::replace(config.ec2, None),
-            )),
-        );
+        if config.ec2.is_some() {
+            clients.insert(
+                ClientType::Ec2Instance,
+                Box::new(Ec2Instance::new(
+                    &client,
+                    &region,
+                    std::mem::replace(&mut config.ec2, None).unwrap(),
+                    cw_client,
+                    dry_run,
+                )),
+            );
+        }
 
         Ok(AwsNuker {
             region,
@@ -309,7 +317,7 @@ impl AwsNuker {
     }
 }
 
-pub fn credentials_provider(profile: Option<String>) -> Result<ChainProvider> {
+pub fn credentials_provider(profile: &Option<String>) -> Result<ChainProvider> {
     let profile_provider = match profile {
         Some(profile) => {
             let mut p = ProfileProvider::new()?;
@@ -320,31 +328,72 @@ pub fn credentials_provider(profile: Option<String>) -> Result<ChainProvider> {
     };
 
     let mut provider = ChainProvider::with_profile_provider(profile_provider);
-    Ok(provider.set_timeout(Duration::from_millis(250)))
+    provider.set_timeout(Duration::from_millis(250));
+    Ok(provider)
 }
 
 fn create_cw_client(
     profile: &Option<String>,
     region: &Region,
-    config: &Config,
+    config: &mut Config,
 ) -> Result<Arc<Box<CwClient>>> {
     let cw_client: rusoto_cloudwatch::CloudWatchClient =
         rusoto_cloudwatch::CloudWatchClient::new_with_client(
-            credentials_provider(profile)?,
+            Client::new_with(credentials_provider(profile)?, HttpClient::new()?),
             region.to_owned(),
         );
 
     Ok(Arc::new(Box::new(CwClient {
         client: cw_client,
-        ec2_idle_rules: std::mem::replace(config.ec2.idle_rules, None),
-        ebs_idle_rules: std::mem::replace(config.ebs.idle_rules.clone(), None),
-        elb_alb_idle_rules: std::mem::replace(config.elb.alb_idle_rules.clone(), None),
-        elb_nlb_idle_rules: std::mem::replace(config.elb.nlb_idle_rules.clone(), None),
-        rds_idle_rules: std::mem::replace(config.rds.idle_rules.clone(), None),
-        aurora_idle_rules: std::mem::replace(config.aurora.idle_rules.clone(), None),
-        redshift_idle_rules: std::mem::replace(config.redshift.idle_rules.clone(), None),
-        emr_idle_rules: std::mem::replace(config.emr.idle_rules.clone(), None),
-        es_idle_rules: std::mem::replace(config.es.idle_rules.clone(), None),
-        ecs_idle_rules: std::mem::replace(config.ecs.idle_rules.clone(), None),
+        ec2_idle_rules: if let Some(ec2) = &mut config.ec2 {
+            std::mem::replace(&mut ec2.idle_rules, None)
+        } else {
+            None
+        },
+        ebs_idle_rules: if let Some(ebs) = &mut config.ebs {
+            std::mem::replace(&mut ebs.idle_rules, None)
+        } else {
+            None
+        },
+        elb_alb_idle_rules: if let Some(elb_alb) = &mut config.elb {
+            std::mem::replace(&mut elb_alb.alb_idle_rules, None)
+        } else {
+            None
+        },
+        elb_nlb_idle_rules: if let Some(elb_nlb) = &mut config.elb {
+            std::mem::replace(&mut elb_nlb.nlb_idle_rules, None)
+        } else {
+            None
+        },
+        rds_idle_rules: if let Some(rds) = &mut config.rds {
+            std::mem::replace(&mut rds.idle_rules, None)
+        } else {
+            None
+        },
+        aurora_idle_rules: if let Some(aurora) = &mut config.aurora {
+            std::mem::replace(&mut aurora.idle_rules, None)
+        } else {
+            None
+        },
+        redshift_idle_rules: if let Some(redshift) = &mut config.redshift {
+            std::mem::replace(&mut redshift.idle_rules, None)
+        } else {
+            None
+        },
+        emr_idle_rules: if let Some(emr) = &mut config.emr {
+            std::mem::replace(&mut emr.idle_rules, None)
+        } else {
+            None
+        },
+        es_idle_rules: if let Some(es) = &mut config.es {
+            std::mem::replace(&mut es.idle_rules, None)
+        } else {
+            None
+        },
+        ecs_idle_rules: if let Some(ecs) = &mut config.ecs {
+            std::mem::replace(&mut ecs.idle_rules, None)
+        } else {
+            None
+        },
     })))
 }

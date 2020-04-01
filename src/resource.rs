@@ -3,7 +3,7 @@ use colored::*;
 use rusoto_core::Region;
 use std::fmt;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ResourceType {
     Ec2Instance,
     Ec2Interface,
@@ -266,11 +266,13 @@ impl EnforcementState {
 pub struct Resource {
     pub id: String,
     pub arn: Option<String>,
-    pub type_: ClientType,
+    pub type_: ResourceType,
     pub region: Region,
     pub tags: Option<Vec<NTag>>,
     pub state: Option<ResourceState>,
+    pub start_time: Option<String>,
     pub enforcement_state: EnforcementState,
+    pub resource_type: Option<String>,
     pub dependencies: Option<Vec<Resource>>,
 }
 
@@ -279,14 +281,16 @@ impl Default for Resource {
         Resource {
             id: "root".to_string(),
             arn: None,
-            type_: ClientType::Root,
+            type_: ResourceType::Root,
             region: Region::Custom {
                 name: "".to_string(),
                 endpoint: "".to_string(),
             },
             tags: None,
             state: None,
+            start_time: None,
             enforcement_state: EnforcementState::Skip,
+            resource_type: None,
             dependencies: None,
         }
     }
@@ -298,7 +302,7 @@ impl fmt::Display for Resource {
             f,
             "[{}] - {} - {}",
             self.region.name().bold(),
-            self.resource_type.name(),
+            self.type_.name(),
             self.id.bold()
         )?;
 

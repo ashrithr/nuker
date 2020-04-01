@@ -141,20 +141,20 @@ impl Nuker {
 
         for exclude in excludes {
             match exclude {
-                Service::Aurora => self.config.aurora.enabled = false,
-                Service::Ebs => self.config.ebs.enabled = false,
-                Service::Ec2 => self.config.ec2.enabled = false,
-                Service::Elb => self.config.elb.enabled = false,
-                Service::Emr => self.config.emr.enabled = false,
-                Service::Es => self.config.es.enabled = false,
-                Service::Glue => self.config.glue.enabled = false,
-                Service::Rds => self.config.rds.enabled = false,
-                Service::Redshift => self.config.redshift.enabled = false,
-                Service::S3 => self.config.s3.enabled = false,
-                Service::Sagemaker => self.config.sagemaker.enabled = false,
-                Service::Asg => self.config.asg.enabled = false,
-                Service::Ecs => self.config.ecs.enabled = false,
-                Service::Vpc => self.config.vpc.enabled = false,
+                Service::Aurora => self.config.aurora = None,
+                Service::Ebs => self.config.ebs = None,
+                Service::Ec2 => self.config.ec2 = None,
+                Service::Elb => self.config.elb = None,
+                Service::Emr => self.config.emr = None,
+                Service::Es => self.config.es = None,
+                Service::Glue => self.config.glue = None,
+                Service::Rds => self.config.rds = None,
+                Service::Redshift => self.config.redshift = None,
+                Service::S3 => self.config.s3 = None,
+                Service::Sagemaker => self.config.sagemaker = None,
+                Service::Asg => self.config.asg = None,
+                Service::Ecs => self.config.ecs = None,
+                Service::Vpc => self.config.vpc = None,
             }
         }
     }

@@ -27,7 +27,7 @@ pub struct Args {
 /// This struct is built from reading the configuration file
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
-    pub ec2: Option<Ec2Config>,
+    pub ec2: Option<ResourceConfig>,
     pub ebs: Option<EbsConfig>,
     pub elb: Option<ElbConfig>,
     pub rds: Option<RdsConfig>,
@@ -76,7 +76,6 @@ pub struct TerminationProtection {
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct ManageStopped {
-    pub enabled: bool,
     #[serde(with = "humantime_serde")]
     pub older_than: Duration,
     #[serde(skip)]
@@ -85,7 +84,6 @@ pub struct ManageStopped {
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct SecurityGroups {
-    pub enabled: bool,
     pub source_cidr: Vec<String>,
     pub from_port: u16,
     pub to_port: u16,
@@ -102,15 +100,27 @@ pub struct Eip {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct ResourceConfig {
+    pub target_state: TargetState,
+    pub required_tags: Option<Vec<RequiredTags>>,
+    pub allowed_types: Option<Vec<String>>,
+    pub whitelist: Option<Vec<String>>,
+    pub idle_rules: Option<Vec<IdleRules>>,
+    pub termination_protection: Option<TerminationProtection>,
+    pub manage_stopped: Option<ManageStopped>,
+    #[serde(with = "humantime_serde")]
+    pub max_run_time: Option<Duration>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Ec2Config {
-    pub enabled: bool,
     pub target_state: TargetState,
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
     pub ignore: Vec<String>,
     pub idle_rules: Option<Vec<IdleRules>>,
     pub termination_protection: TerminationProtection,
-    pub manage_stopped: ManageStopped,
+    pub manage_stopped: Option<ManageStopped>,
     pub security_groups: SecurityGroups,
     pub eni: Eni,
     pub eip: Eip,
@@ -118,7 +128,6 @@ pub struct Ec2Config {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct EbsConfig {
-    pub enabled: bool,
     pub target_state: TargetState,
     pub ignore: Vec<String>,
     pub idle_rules: Option<Vec<IdleRules>>,
@@ -138,7 +147,6 @@ pub struct Vgw {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct VpcConfig {
-    pub enabled: bool,
     pub target_state: TargetState,
     pub ignore: Vec<String>,
     pub cleanup_empty: bool,
@@ -149,7 +157,6 @@ pub struct VpcConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct EmrConfig {
-    pub enabled: bool,
     pub target_state: TargetState,
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
@@ -163,7 +170,6 @@ pub struct EmrConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct RdsConfig {
-    pub enabled: bool,
     pub target_state: TargetState,
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
@@ -175,7 +181,6 @@ pub struct RdsConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AuroraConfig {
-    pub enabled: bool,
     pub target_state: TargetState,
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
@@ -186,7 +191,6 @@ pub struct AuroraConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct RedshiftConfig {
-    pub enabled: bool,
     pub target_state: TargetState,
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
@@ -196,7 +200,6 @@ pub struct RedshiftConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct S3Config {
-    pub enabled: bool,
     pub target_state: TargetState,
     pub check_dns_compliant_naming: Option<bool>,
     pub required_naming_prefix: Option<String>,
@@ -208,7 +211,6 @@ pub struct S3Config {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct GlueConfig {
-    pub enabled: bool,
     pub target_state: TargetState,
     pub required_tags: Option<Vec<RequiredTags>>,
     pub ignore: Vec<String>,
@@ -218,7 +220,6 @@ pub struct GlueConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SagemakerConfig {
-    pub enabled: bool,
     pub target_state: TargetState,
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
@@ -229,7 +230,6 @@ pub struct SagemakerConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct EsConfig {
-    pub enabled: bool,
     pub target_state: TargetState,
     pub required_tags: Option<Vec<RequiredTags>>,
     pub allowed_instance_types: Vec<String>,
@@ -239,7 +239,6 @@ pub struct EsConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ElbConfig {
-    pub enabled: bool,
     pub target_state: TargetState,
     pub required_tags: Option<Vec<RequiredTags>>,
     pub ignore: Vec<String>,
@@ -249,7 +248,6 @@ pub struct ElbConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AutoScalingConfig {
-    pub enabled: bool,
     pub target_state: TargetState,
     pub required_tags: Option<Vec<RequiredTags>>,
     pub ignore: Vec<String>,
@@ -257,7 +255,6 @@ pub struct AutoScalingConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct EcsConfig {
-    pub enabled: bool,
     pub target_state: TargetState,
     pub allowed_instance_types: Vec<String>,
     pub required_tags: Option<Vec<RequiredTags>>,
@@ -430,61 +427,74 @@ pub fn parse_config(buffer: &str) -> Config {
     let mut config: Config = toml::from_str(buffer).expect("could not parse toml configuration");
 
     // Compile all regex expressions up front
-    if config.ec2.required_tags.is_some() {
-        for rt in config.ec2.required_tags.as_mut().unwrap() {
-            if rt.pattern.is_some() {
-                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+    if let Some(ec2) = &mut config.ec2 {
+        if ec2.required_tags.is_some() {
+            for rt in ec2.required_tags.as_mut().unwrap() {
+                if rt.pattern.is_some() {
+                    rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+                }
+            }
+        }
+
+        if let Some(manage_stopped) = &mut ec2.manage_stopped {
+            manage_stopped.dt_extract_regex = compile_regex(r"^.*\((?P<datetime>.*)\)$");
+        }
+    }
+
+    if let Some(rds) = &mut config.rds {
+        if rds.required_tags.is_some() {
+            for rt in rds.required_tags.as_mut().unwrap() {
+                if rt.pattern.is_some() {
+                    rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+                }
             }
         }
     }
 
-    if config.ec2.manage_stopped.enabled {
-        config.ec2.manage_stopped.dt_extract_regex = compile_regex(r"^.*\((?P<datetime>.*)\)$");
-    }
-
-    if config.rds.required_tags.is_some() {
-        for rt in config.rds.required_tags.as_mut().unwrap() {
-            if rt.pattern.is_some() {
-                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+    if let Some(aurora) = &mut config.aurora {
+        if aurora.required_tags.is_some() {
+            for rt in aurora.required_tags.as_mut().unwrap() {
+                if rt.pattern.is_some() {
+                    rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+                }
             }
         }
     }
 
-    if config.aurora.required_tags.is_some() {
-        for rt in config.aurora.required_tags.as_mut().unwrap() {
-            if rt.pattern.is_some() {
-                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+    if let Some(redshift) = &mut config.redshift {
+        if redshift.required_tags.is_some() {
+            for rt in redshift.required_tags.as_mut().unwrap() {
+                if rt.pattern.is_some() {
+                    rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+                }
             }
         }
     }
 
-    if config.redshift.required_tags.is_some() {
-        for rt in config.redshift.required_tags.as_mut().unwrap() {
-            if rt.pattern.is_some() {
-                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+    if let Some(emr) = &mut config.emr {
+        if emr.required_tags.is_some() {
+            for rt in emr.required_tags.as_mut().unwrap() {
+                if rt.pattern.is_some() {
+                    rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+                }
             }
         }
     }
 
-    if config.emr.required_tags.is_some() {
-        for rt in config.emr.required_tags.as_mut().unwrap() {
-            if rt.pattern.is_some() {
-                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+    if let Some(glue) = &mut config.glue {
+        if glue.required_tags.is_some() {
+            for rt in glue.required_tags.as_mut().unwrap() {
+                if rt.pattern.is_some() {
+                    rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+                }
             }
         }
     }
 
-    if config.glue.required_tags.is_some() {
-        for rt in config.glue.required_tags.as_mut().unwrap() {
-            if rt.pattern.is_some() {
-                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
-            }
+    if let Some(s3) = &mut config.s3 {
+        if s3.required_naming_prefix.is_some() {
+            s3.required_naming_regex = compile_regex(&s3.required_naming_prefix.as_ref().unwrap());
         }
-    }
-
-    if config.s3.enabled && config.s3.required_naming_prefix.is_some() {
-        config.s3.required_naming_regex =
-            compile_regex(&config.s3.required_naming_prefix.as_ref().unwrap());
     }
 
     config
