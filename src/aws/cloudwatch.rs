@@ -1,4 +1,4 @@
-use crate::{config::IdleRules, handle_future_with_return, resource::ResourceType};
+use crate::{client::ClientType, config::IdleRules, handle_future_with_return};
 use chrono::{DateTime, TimeZone, Utc};
 use rusoto_cloudwatch::{
     CloudWatch, CloudWatchClient, Datapoint, Dimension, DimensionFilter, GetMetricStatisticsInput,
@@ -56,22 +56,20 @@ impl CwClient {
         &self,
         resource_id: &str,
         dimension: &str,
-        resource_type: ResourceType,
+        resource_type: ClientType,
     ) -> bool {
         let mut result = false;
         let idle_rules = match resource_type {
-            ResourceType::Ec2Instance | ResourceType::Ec2Address | ResourceType::Ec2Interface => {
-                &self.ec2_idle_rules
-            }
-            ResourceType::EbsVolume | ResourceType::EbsSnapshot => &self.ebs_idle_rules,
-            ResourceType::ElbAlb => &self.elb_alb_idle_rules,
-            ResourceType::ElbNlb => &self.elb_nlb_idle_rules,
-            ResourceType::RdsInstance => &self.rds_idle_rules,
-            ResourceType::RdsCluster => &self.aurora_idle_rules,
-            ResourceType::Redshift => &self.redshift_idle_rules,
-            ResourceType::EmrCluster => &self.emr_idle_rules,
-            ResourceType::EsDomain => &self.es_idle_rules,
-            ResourceType::EcsCluster => &self.ecs_idle_rules,
+            ClientType::Ec2Instance => &self.ec2_idle_rules,
+            ClientType::EbsVolume => &self.ebs_idle_rules,
+            ClientType::ElbAlb => &self.elb_alb_idle_rules,
+            ClientType::ElbNlb => &self.elb_nlb_idle_rules,
+            ClientType::RdsInstance => &self.rds_idle_rules,
+            ClientType::RdsCluster => &self.aurora_idle_rules,
+            ClientType::Redshift => &self.redshift_idle_rules,
+            ClientType::EmrCluster => &self.emr_idle_rules,
+            ClientType::EsDomain => &self.es_idle_rules,
+            ClientType::EcsCluster => &self.ecs_idle_rules,
             _ => &None,
         };
 
@@ -120,12 +118,12 @@ impl CwClient {
     }
 
     pub async fn filter_instance(&self, instance_id: &str) -> bool {
-        self.filter_resource(instance_id, "InstanceId", ResourceType::Ec2Instance)
+        self.filter_resource(instance_id, "InstanceId", ClientType::Ec2Instance)
             .await
     }
 
     pub async fn filter_volume(&self, volume_id: &str) -> bool {
-        self.filter_resource(volume_id, "VolumeId", ResourceType::EbsVolume)
+        self.filter_resource(volume_id, "VolumeId", ClientType::EbsVolume)
             .await
     }
 
@@ -133,7 +131,7 @@ impl CwClient {
         self.filter_resource(
             instance_name,
             "DBInstanceIdentifier",
-            ResourceType::RdsInstance,
+            ClientType::RdsInstance,
         )
         .await
     }
@@ -142,33 +140,33 @@ impl CwClient {
         self.filter_resource(
             cluster_identifier,
             "DBClusterIdentifier",
-            ResourceType::RdsCluster,
+            ClientType::RdsCluster,
         )
         .await
     }
 
     pub async fn filter_rs_cluster(&self, cluster_id: &str) -> bool {
-        self.filter_resource(cluster_id, "ClusterIdentifier", ResourceType::Redshift)
+        self.filter_resource(cluster_id, "ClusterIdentifier", ClientType::Redshift)
             .await
     }
 
     pub async fn filter_es_domain(&self, domain_name: &str) -> bool {
-        self.filter_resource(domain_name, "DomainName", ResourceType::EsDomain)
+        self.filter_resource(domain_name, "DomainName", ClientType::EsDomain)
             .await
     }
 
     pub async fn filter_alb_load_balancer(&self, lb_name: &str) -> bool {
-        self.filter_resource(lb_name, "LoadBalancer", ResourceType::ElbAlb)
+        self.filter_resource(lb_name, "LoadBalancer", ClientType::ElbAlb)
             .await
     }
 
     pub async fn filter_nlb_load_balancer(&self, lb_name: &str) -> bool {
-        self.filter_resource(lb_name, "LoadBalancer", ResourceType::ElbNlb)
+        self.filter_resource(lb_name, "LoadBalancer", ClientType::ElbNlb)
             .await
     }
 
     pub async fn filter_ecs_cluster(&self, cluster_name: &str) -> bool {
-        self.filter_resource(cluster_name, "ClusterName", ResourceType::EcsCluster)
+        self.filter_resource(cluster_name, "ClusterName", ClientType::EcsCluster)
             .await
     }
 

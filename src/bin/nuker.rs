@@ -1,5 +1,4 @@
 use tracing::{info, trace};
-use tracing_futures::Instrument;
 
 #[tokio::main]
 async fn main() -> Result<(), failure::Error> {
@@ -16,16 +15,14 @@ async fn main() -> Result<(), failure::Error> {
 
     let mut nuker = nuker::Nuker::new(config, args);
 
-    nuker
-        .run()
-        .instrument(tracing::trace_span!("nuker"))
-        .await?;
+    nuker.run().await?;
 
     Ok(())
 }
 
 fn setup_tracing(verbose: u64) {
     use tracing::Level;
+    use tracing_subscriber::fmt::time::ChronoUtc;
     use tracing_subscriber::FmtSubscriber;
 
     let level = match verbose {
@@ -38,7 +35,8 @@ fn setup_tracing(verbose: u64) {
 
     let subscriber = FmtSubscriber::builder()
         .with_max_level(level)
-        .with_target(false)
+        .with_timer(ChronoUtc::with_format("%s".into()))
+        .with_target(true)
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("Setting default subscriber failed");

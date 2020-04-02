@@ -90,7 +90,7 @@ impl Dag {
             Ok(order) => {
                 for i in order {
                     if let Some(resource) = self.graph.node_weight(i) {
-                        if resource.type_.is_root() {
+                        if resource.type_.is_default() {
                             continue;
                         }
                         resources.push(resource.clone());

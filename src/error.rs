@@ -1,4 +1,3 @@
-use crate::resource::ParseResourceStateError;
 use failure::Fail;
 use rusoto_core::{request::BufferedHttpResponse, RusotoError};
 use serde::Deserialize;
@@ -30,8 +29,6 @@ pub enum NError {
     Validation(String),
     #[fail(display = "dag failure: {}", _0)]
     Dag(String),
-    #[fail(display = "invalid resource state: {}", e)]
-    InvalidResourceState { e: ParseResourceStateError },
     #[fail(display = "failed with provided credentials: {}", e)]
     InvalidCredentials {
         e: rusoto_credential::CredentialsError,
@@ -75,12 +72,6 @@ impl<E: StdError + 'static> From<RusotoError<E>> for NError {
     }
 }
 
-impl From<ParseResourceStateError> for NError {
-    fn from(error: ParseResourceStateError) -> Self {
-        NError::InvalidResourceState { e: error }
-    }
-}
-
 impl From<rusoto_core::region::ParseRegionError> for NError {
     fn from(error: rusoto_core::region::ParseRegionError) -> Self {
         NError::InvalidRegion { e: error }
@@ -98,24 +89,3 @@ impl From<rusoto_core::request::TlsError> for NError {
         NError::HttpsConnector { e: error }
     }
 }
-
-// impl fmt::Display for NError {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> StdResult<(), fmt::Error> {
-//         write!(
-//             f,
-//             "{}",
-//             match self {
-//                 NError::Rusoto { type_, msg } => match type_.as_str() {
-//                     "Unknown" => format!("Encountered Unknown Error: {}", msg),
-//                     service =>
-//                         format!("Encountered Service specific error: {} -> {}", service, msg),
-//                 },
-//                 NError::HttpDispatch(e) => format!("Encountered HTTP Dispatch Error: {}", e),
-//                 NError::Throttling(msg) => msg.to_string(),
-//                 NError::Validation(msg) => msg.to_string(),
-//                 NError::Dag(msg) => msg.to_string(),
-//                 NError::InvalidRegion(msg) => msg.to_string(),
-//             }
-//         )
-//     }
-// }

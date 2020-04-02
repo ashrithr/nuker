@@ -3,10 +3,13 @@ use crate::client::Client;
 use clap::{App, Arg};
 use regex::Regex;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::{fs::File, io::Read, str::FromStr, time::Duration};
 use tracing::warn;
 
 const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
+
+pub type Config = HashMap<Client, ResourceConfig>;
 
 /// Cli Args
 #[derive(Debug, Clone)]
@@ -26,13 +29,13 @@ pub struct Args {
 ///
 /// This struct is built from reading the configuration file
 #[derive(Debug, Deserialize, Clone)]
-pub struct Config {
+pub struct ParsedConfig {
     #[serde(default = "default_resource_config")]
     pub ec2_instance: ResourceConfig,
     #[serde(default = "default_resource_config")]
-    pub ec_sg: ResourceConfig,
+    pub ec2_sg: ResourceConfig,
     #[serde(default = "default_resource_config")]
-    pub ebs: ResourceConfig,
+    pub ebs_volume: ResourceConfig,
     #[serde(default = "default_resource_config")]
     pub elb: ResourceConfig,
     #[serde(default = "default_resource_config")]
@@ -469,7 +472,9 @@ pub fn parse_config_file(filename: &str) -> Config {
 }
 
 pub fn parse_config(buffer: &str) -> Config {
-    let mut config: Config = toml::from_str(buffer).expect("could not parse toml configuration");
+    let mut config: ParsedConfig =
+        toml::from_str(buffer).expect("could not parse toml configuration");
+    let mut config_map: HashMap<Client, ResourceConfig> = HashMap::new();
 
     // Compile all regex expressions up front
     if config.ec2_instance.required_tags.is_some() {
@@ -529,7 +534,11 @@ pub fn parse_config(buffer: &str) -> Config {
     //         compile_regex(&config.s3.required_naming_prefix.as_ref().unwrap());
     // }
 
-    config
+    config_map.insert(Client::Ec2Instance, config.ec2_instance);
+    config_map.insert(Client::RdsInstance, config.rds_instance);
+    config_map.insert(Client::RdsCluster, config.rds_cluster);
+
+    config_map
 }
 
 fn compile_regex(pattern: &str) -> Option<Regex> {

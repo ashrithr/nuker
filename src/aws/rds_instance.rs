@@ -1,7 +1,7 @@
 use crate::aws::ClientDetails;
-use crate::client::NukerClient;
+use crate::client::{ClientType, NukerClient};
 use crate::config::ResourceConfig;
-use crate::resource::{EnforcementState, NTag, Resource, ResourceState, ResourceType};
+use crate::resource::{EnforcementState, NTag, Resource, ResourceState};
 use crate::Result;
 use crate::{handle_future, handle_future_with_return};
 use async_trait::async_trait;
@@ -48,28 +48,35 @@ impl RdsInstanceClient {
         })
     }
 
-    async fn package_resources(&self, instances: Vec<DBInstance>) -> Result<Vec<Resource>> {
+    async fn package_resources(&self, mut instances: Vec<DBInstance>) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
 
-        for instance in instances {
-            let instance_id = instance.db_instance_identifier.as_ref().unwrap();
+        for instance in &mut instances {
+            let mut termination_protection: Option<bool> = None;
+
+            if let Some(ref tp) = self.config.termination_protection {
+                if tp.ignore {
+                    termination_protection = instance.deletion_protection;
+                }
+            }
 
             resources.push(Resource {
-                id: instance_id.to_owned(),
-                arn: instance.db_instance_arn.to_owned(),
-                type_: ResourceType::RdsInstance,
+                id: instance.db_instance_identifier.take().unwrap(),
+                arn: instance.db_instance_arn.take(),
+                type_: ClientType::RdsInstance,
                 region: self.region.clone(),
-                resource_type: instance.db_instance_class,
+                resource_type: instance.db_instance_class.take().map(|t| vec![t]),
                 tags: self.package_tags(
                     self.list_tags(instance.db_instance_arn.as_ref().unwrap())
                         .await,
                 ),
-                state: Some(ResourceState::from_str(
-                    instance.db_instance_status.as_ref().unwrap(),
-                )?),
-                start_time: instance.instance_create_time,
+                state: Some(
+                    ResourceState::from_str(instance.db_instance_status.as_ref().unwrap()).unwrap(),
+                ),
+                start_time: instance.instance_create_time.take(),
                 enforcement_state: EnforcementState::SkipUnknownState,
                 dependencies: None,
+                termination_protection,
             });
         }
 
@@ -130,41 +137,19 @@ impl RdsInstanceClient {
     }
 
     async fn disable_termination_protection(&self, instance_id: &str) -> Result<()> {
-        // TODO: This call can be saved by saving the termination protection state in the
-        // Resource struct, while scanning for instances.
-        let req = self
-            .client
-            .describe_db_instances(DescribeDBInstancesMessage {
-                db_instance_identifier: Some(instance_id.to_owned()),
+        debug!(
+            "Termination protection is enabled for: {}. Trying to disable it.",
+            instance_id
+        );
+
+        if !self.dry_run {
+            let req = self.client.modify_db_instance(ModifyDBInstanceMessage {
+                db_instance_identifier: instance_id.to_owned(),
+                deletion_protection: Some(false),
                 ..Default::default()
             });
 
-        if let Ok(resp) = handle_future_with_return!(req) {
-            if resp.db_instances.is_some() {
-                if resp
-                    .db_instances
-                    .unwrap()
-                    .first()
-                    .unwrap()
-                    .deletion_protection
-                    == Some(true)
-                {
-                    debug!(
-                        "Termination protection is enabled for: {}. Trying to disable it.",
-                        instance_id
-                    );
-
-                    if !self.dry_run {
-                        let req = self.client.modify_db_instance(ModifyDBInstanceMessage {
-                            db_instance_identifier: instance_id.to_owned(),
-                            deletion_protection: Some(false),
-                            ..Default::default()
-                        });
-
-                        handle_future!(req);
-                    }
-                }
-            }
+            handle_future!(req);
         }
 
         Ok(())
@@ -174,8 +159,8 @@ impl RdsInstanceClient {
         debug!(resource = resource.id.as_str(), "Deleting");
 
         if !self.dry_run {
-            if let Some(ref termination_protection) = self.config.termination_protection {
-                if termination_protection.ignore {
+            if let Some(tp_enabled) = resource.termination_protection {
+                if tp_enabled {
                     self.disable_termination_protection(resource.id.as_ref())
                         .await?;
                 }

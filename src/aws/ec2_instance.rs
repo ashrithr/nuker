@@ -1,7 +1,7 @@
 use crate::aws::ClientDetails;
-use crate::client::NukerClient;
+use crate::client::{ClientType, NukerClient};
 use crate::config::ResourceConfig;
-use crate::resource::{EnforcementState, NTag, Resource, ResourceState, ResourceType};
+use crate::resource::{EnforcementState, NTag, Resource, ResourceState};
 use crate::Result;
 use crate::{handle_future, handle_future_with_return};
 use async_trait::async_trait;
@@ -34,30 +34,44 @@ impl Ec2Instance {
         }
     }
 
-    async fn package_resources(&self, instances: Vec<Instance>) -> Result<Vec<Resource>> {
+    async fn package_resources(&self, mut instances: Vec<Instance>) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
 
-        for instance in instances {
-            let instance_id = instance.instance_id.as_ref().unwrap();
+        for instance in &mut instances {
+            let instance_id = instance.instance_id.take().unwrap();
+            let arn = format!(
+                "arn:aws:ec2:{}:{}:instance/{}",
+                self.region.name(),
+                self.account_num,
+                instance_id
+            );
+            let mut termination_protection: Option<bool> = None;
+
+            if let Some(ref tp) = self.config.termination_protection {
+                if tp.ignore {
+                    termination_protection = self
+                        .check_termination_protection(instance_id.as_str())
+                        .await;
+                }
+            }
 
             resources.push(Resource {
-                id: instance_id.to_owned(),
-                arn: Some(format!(
-                    "arn:aws:ec2:{}:{}:instance/{}",
-                    self.region.name(),
-                    self.account_num,
-                    instance_id
-                )),
-                type_: ResourceType::Ec2Instance,
+                id: instance_id,
+                arn: Some(arn),
+                type_: ClientType::Ec2Instance,
                 region: self.region.clone(),
-                tags: self.package_tags(instance.tags),
-                state: Some(ResourceState::from_str(
-                    instance.state.as_ref().unwrap().name.as_deref().unwrap(),
-                )?),
-                start_time: instance.launch_time,
+                tags: self.package_tags(instance.tags.take()),
+                state: Some(
+                    ResourceState::from_str(
+                        instance.state.as_ref().unwrap().name.as_deref().unwrap(),
+                    )
+                    .unwrap(),
+                ),
+                start_time: instance.launch_time.take(),
                 enforcement_state: EnforcementState::SkipUnknownState,
-                resource_type: instance.instance_type,
+                resource_type: instance.instance_type.take().map(|t| vec![t]),
                 dependencies: None,
+                termination_protection,
             });
         }
 
@@ -103,7 +117,9 @@ impl Ec2Instance {
         Ok(instances)
     }
 
-    async fn disable_termination_protection(&self, instance_id: &str) -> Result<()> {
+    async fn check_termination_protection(&self, instance_id: &str) -> Option<bool> {
+        let mut termination_protection: Option<bool> = None;
+
         let req = self
             .client
             .describe_instance_attribute(DescribeInstanceAttributeRequest {
@@ -114,22 +130,28 @@ impl Ec2Instance {
 
         if let Ok(resp) = handle_future_with_return!(req) {
             if resp.disable_api_termination.unwrap().value.unwrap() {
-                debug!(
-                    "Terminating protection was enabled for: {}. Trying to Disable it.",
-                    instance_id
-                );
-
-                let req = self
-                    .client
-                    .modify_instance_attribute(ModifyInstanceAttributeRequest {
-                        disable_api_termination: Some(AttributeBooleanValue { value: Some(false) }),
-                        instance_id: instance_id.into(),
-                        ..Default::default()
-                    });
-
-                handle_future!(req);
+                termination_protection = Some(true)
             }
         }
+
+        termination_protection
+    }
+
+    async fn disable_termination_protection(&self, instance_id: &str) -> Result<()> {
+        debug!(
+            "Terminating protection was enabled for: {}. Trying to Disable it.",
+            instance_id
+        );
+
+        let req = self
+            .client
+            .modify_instance_attribute(ModifyInstanceAttributeRequest {
+                disable_api_termination: Some(AttributeBooleanValue { value: Some(false) }),
+                instance_id: instance_id.into(),
+                ..Default::default()
+            });
+
+        handle_future!(req);
 
         Ok(())
     }
@@ -153,8 +175,8 @@ impl Ec2Instance {
         debug!(resource = resource.id.as_str(), "Deleting.");
 
         if !self.dry_run {
-            if let Some(ref termination_protection) = self.config.termination_protection {
-                if termination_protection.ignore {
+            if let Some(tp_enabled) = resource.termination_protection {
+                if tp_enabled {
                     self.disable_termination_protection(resource.id.as_ref())
                         .await?;
                 }

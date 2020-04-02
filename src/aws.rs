@@ -1,5 +1,6 @@
 mod cloudwatch;
 mod ec2_instance;
+mod rds_cluster;
 mod rds_instance;
 mod sts;
 
@@ -7,7 +8,10 @@ pub use cloudwatch::CwClient;
 
 use crate::Event;
 use crate::{
-    aws::{ec2_instance::Ec2Instance, rds_instance::RdsInstanceClient, sts::StsService},
+    aws::{
+        ec2_instance::Ec2Instance, rds_cluster::RdsClusterClient, rds_instance::RdsInstanceClient,
+        sts::StsService,
+    },
     client::Client,
     client::NukerClient,
     config::Config,
@@ -19,8 +23,7 @@ use rusoto_credential::{ChainProvider, ProfileProvider};
 use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tracing::{trace, trace_span};
-use tracing_futures::Instrument;
+use tracing::trace;
 
 #[derive(Clone)]
 pub struct ClientDetails {
@@ -62,12 +65,13 @@ impl AwsNuker {
         for client in Client::iter() {
             match client {
                 Client::Ec2Instance => {
+                    // TODO: Need a macro for this
                     if !excluded_clients.contains(&client) {
                         clients.insert(
                             Client::Ec2Instance,
                             Box::new(Ec2Instance::new(
                                 &client_details,
-                                &config.ec2_instance,
+                                &config.get(&client).unwrap(),
                                 dry_run,
                             )),
                         );
@@ -79,7 +83,19 @@ impl AwsNuker {
                             Client::RdsInstance,
                             Box::new(RdsInstanceClient::new(
                                 &client_details,
-                                &config.rds_instance,
+                                &config.get(&client).unwrap(),
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::RdsCluster => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::RdsCluster,
+                            Box::new(RdsClusterClient::new(
+                                &client_details,
+                                &config.get(&client).unwrap(),
                                 dry_run,
                             )),
                         );
@@ -102,6 +118,7 @@ impl AwsNuker {
         })
     }
 
+    /// Locates resources across all clients for a particular region
     pub async fn locate_resources(&mut self) {
         let mut handles = Vec::new();
 
@@ -110,36 +127,17 @@ impl AwsNuker {
             let tx = self.tx.clone();
             let client_type = client_type.clone();
             let cw_client = self.cw_client.clone();
+            let config = self.config.get(&client_type).unwrap().clone();
 
-            match client_type {
-                Client::Ec2Instance => {
-                    // TODO: convert config to a hashmap so that client specific config can be retrieved without this loop
-                    let config = self.config.ec2_instance.clone();
-
-                    handles.push(tokio::spawn(async move {
-                        client
-                            .publish(tx, client_type, config, cw_client)
-                            .instrument(trace_span!("ec2"))
-                            .await
-                    }));
-                }
-                Client::RdsInstance => {
-                    let config = self.config.rds_instance.clone();
-
-                    handles.push(tokio::spawn(async move {
-                        client
-                            .publish(tx, client_type, config, cw_client)
-                            .instrument(trace_span!("rds"))
-                            .await
-                    }));
-                }
-                _ => {} // TODO: remove this
-            }
+            handles.push(tokio::spawn(async move {
+                client.publish(tx, client_type, config, cw_client).await
+            }));
         }
 
         futures::future::join_all(handles).await;
     }
 
+    /// Builds a dependency graph of resources
     async fn build_dag(&mut self) -> Result<()> {
         let mut done: usize = 0;
 
@@ -169,6 +167,7 @@ impl AwsNuker {
         Ok(())
     }
 
+    /// Prints resources to console
     pub async fn print_resources(&mut self) -> Result<()> {
         self.build_dag().await?;
 
@@ -179,17 +178,16 @@ impl AwsNuker {
         Ok(())
     }
 
+    /// Cleans up resources for a particular region across all targeted clients
     pub async fn cleanup_resources(&mut self) -> Result<()> {
-        /*
-        for resource in self.order_deps()? {
+        for resource in self.dag.order_by_dependencies()? {
             self.clients
-                .get(&resource.resource_type)
+                .get(&resource.type_)
                 .unwrap()
                 .cleanup(&resource)
                 .await?;
         }
         trace!("Done cleaning up resources");
-        */
 
         Ok(())
     }
@@ -223,15 +221,24 @@ fn create_cw_client(
 
     Ok(Arc::new(Box::new(CwClient {
         client: cw_client,
-        ec2_idle_rules: std::mem::replace(&mut config.ec2_instance.idle_rules, None),
-        ebs_idle_rules: std::mem::replace(&mut config.ebs.idle_rules, None),
-        elb_alb_idle_rules: std::mem::replace(&mut config.elb.idle_rules, None),
-        elb_nlb_idle_rules: std::mem::replace(&mut config.elb.idle_rules, None),
-        rds_idle_rules: std::mem::replace(&mut config.rds_instance.idle_rules, None),
-        aurora_idle_rules: std::mem::replace(&mut config.rds_cluster.idle_rules, None),
-        redshift_idle_rules: std::mem::replace(&mut config.redshift.idle_rules, None),
-        emr_idle_rules: std::mem::replace(&mut config.emr.idle_rules, None),
-        es_idle_rules: std::mem::replace(&mut config.es.idle_rules, None),
-        ecs_idle_rules: std::mem::replace(&mut config.ecs.idle_rules, None),
+        ec2_idle_rules: std::mem::replace(
+            &mut config.get_mut(&Client::Ec2Instance).unwrap().idle_rules,
+            None,
+        ),
+        ebs_idle_rules: None,
+        elb_alb_idle_rules: None,
+        elb_nlb_idle_rules: None,
+        rds_idle_rules: std::mem::replace(
+            &mut config.get_mut(&Client::RdsInstance).unwrap().idle_rules,
+            None,
+        ),
+        aurora_idle_rules: std::mem::replace(
+            &mut config.get_mut(&Client::RdsCluster).unwrap().idle_rules,
+            None,
+        ),
+        redshift_idle_rules: None,
+        emr_idle_rules: None,
+        es_idle_rules: None,
+        ecs_idle_rules: None,
     })))
 }
