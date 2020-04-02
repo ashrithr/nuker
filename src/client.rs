@@ -5,12 +5,156 @@ use crate::CwClient;
 use crate::Event;
 use crate::NSender;
 use crate::Result;
+use crate::StdError;
+use crate::StdResult;
 use async_trait::async_trait;
 use dyn_clone::DynClone;
-use std::sync::Arc;
+use std::{
+    fmt::{Display, Error as FmtError, Formatter},
+    str::FromStr,
+    sync::Arc,
+};
+use tracing::{error, trace};
+
+pub const EC2_INSTANCE_TYPE: &str = "ec2_instance";
+pub const EC2_SG_TYPE: &str = "ec2_sg";
+pub const EC2_ENI_TYPE: &str = "ec2_eni";
+pub const EC2_ADDRESS_TYPE: &str = "ec2_address";
+pub const EBS_TYPE: &str = "ebs";
+pub const RDS_TYPE: &str = "rds";
+pub const AURORA_TYPE: &str = "rds_aurora";
+pub const S3_TYPE: &str = "s3";
+pub const EMR_TYPE: &str = "emr";
+pub const GLUE_TYPE: &str = "glue";
+pub const SAGEMAKER_TYPE: &str = "sagemaker";
+pub const REDSHIFT_TYPE: &str = "redshift";
+pub const ES_TYPE: &str = "es";
+pub const ELB_TYPE: &str = "elb";
+pub const ASG_TYPE: &str = "asg";
+pub const ECS_TYPE: &str = "ecs";
+pub const VPC_TYPE: &str = "vpc";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Client {
+    Aurora,
+    Ebs,
+    Ec2Instance,
+    Ec2Sg,
+    Ec2Address,
+    Ec2Eni,
+    Elb,
+    Emr,
+    Es,
+    Glue,
+    Rds,
+    Redshift,
+    S3,
+    Sagemaker,
+    Asg,
+    Ecs,
+    Vpc,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ParseClientError {
+    message: String,
+}
+
+impl ParseClientError {
+    /// Parses a region given as a string literal into a type `Region'
+    pub fn new(input: &str) -> Self {
+        ParseClientError {
+            message: format!("Not a valid supported Client: {}", input),
+        }
+    }
+}
+
+impl StdError for ParseClientError {}
+
+impl Display for ParseClientError {
+    fn fmt(&self, f: &mut Formatter) -> StdResult<(), FmtError> {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl FromStr for Client {
+    type Err = ParseClientError;
+
+    fn from_str(s: &str) -> StdResult<Client, ParseClientError> {
+        let v: &str = &s.to_lowercase();
+        match v {
+            AURORA_TYPE => Ok(Client::Aurora),
+            EBS_TYPE => Ok(Client::Ebs),
+            EC2_INSTANCE_TYPE => Ok(Client::Ec2Instance),
+            EC2_SG_TYPE => Ok(Client::Ec2Sg),
+            EC2_ENI_TYPE => Ok(Client::Ec2Eni),
+            EC2_ADDRESS_TYPE => Ok(Client::Ec2Address),
+            ELB_TYPE => Ok(Client::Elb),
+            EMR_TYPE => Ok(Client::Emr),
+            ES_TYPE => Ok(Client::Es),
+            GLUE_TYPE => Ok(Client::Glue),
+            RDS_TYPE => Ok(Client::Rds),
+            REDSHIFT_TYPE => Ok(Client::Redshift),
+            S3_TYPE => Ok(Client::S3),
+            SAGEMAKER_TYPE => Ok(Client::Sagemaker),
+            ASG_TYPE => Ok(Client::Asg),
+            ECS_TYPE => Ok(Client::Ecs),
+            VPC_TYPE => Ok(Client::Vpc),
+            s => Err(ParseClientError::new(s)),
+        }
+    }
+}
+
+impl Client {
+    pub fn name(&self) -> &str {
+        match *self {
+            Client::Aurora => AURORA_TYPE,
+            Client::Ebs => EBS_TYPE,
+            Client::Ec2Instance => EC2_INSTANCE_TYPE,
+            Client::Ec2Sg => EC2_SG_TYPE,
+            Client::Ec2Eni => EC2_ENI_TYPE,
+            Client::Ec2Address => EC2_ADDRESS_TYPE,
+            Client::Elb => ELB_TYPE,
+            Client::Emr => EMR_TYPE,
+            Client::Es => ES_TYPE,
+            Client::Glue => GLUE_TYPE,
+            Client::Rds => RDS_TYPE,
+            Client::Redshift => REDSHIFT_TYPE,
+            Client::S3 => S3_TYPE,
+            Client::Sagemaker => SAGEMAKER_TYPE,
+            Client::Asg => ASG_TYPE,
+            Client::Ecs => ECS_TYPE,
+            Client::Vpc => VPC_TYPE,
+        }
+    }
+
+    pub fn iter() -> impl Iterator<Item = Client> {
+        [
+            Client::Aurora,
+            Client::Ebs,
+            Client::Ec2Instance,
+            Client::Ec2Sg,
+            Client::Ec2Eni,
+            Client::Ec2Address,
+            Client::Elb,
+            Client::Emr,
+            Client::Es,
+            Client::Glue,
+            Client::Rds,
+            Client::Redshift,
+            Client::S3,
+            Client::Sagemaker,
+            Client::Asg,
+            Client::Ecs,
+            Client::Vpc,
+        ]
+        .iter()
+        .copied()
+    }
+}
 
 #[async_trait]
-pub trait ResourceScanner {
+pub trait NukerClient: Send + Sync + DynClone {
     /// Scans for all the resources that are scannable by a Resource Scanner
     /// before applying any Filter's and Rule's
     async fn scan(&self) -> Result<Vec<Resource>>;
@@ -19,11 +163,32 @@ pub trait ResourceScanner {
     async fn dependencies(&self, resource: &Resource) -> Option<Vec<Resource>>;
 
     /// Publishes the resources to shared Channel
-    async fn publish(&self, mut tx: NSender<Event>);
-}
+    async fn publish(
+        &self,
+        mut tx: NSender<Event>,
+        c: Client,
+        config: ResourceConfig,
+        cw_client: Arc<Box<CwClient>>,
+    ) {
+        if let Ok(resources) = self.scan().await {
+            for mut resource in resources {
+                resource.dependencies = self.dependencies(&resource).await;
+                resource.enforcement_state = self
+                    .filter_resource(&resource, &config, cw_client.clone())
+                    .await;
 
-#[async_trait]
-pub trait ResourceFilter {
+                if let Err(err) = tx.send(Event::Resource(resource)).await {
+                    error!(err = ?err, "Failed to publish event to the queue");
+                }
+            }
+        }
+
+        match tx.send(Event::Shutdown(c)).await {
+            Ok(()) => trace!("Complete Resource Scanner"),
+            Err(err) => error!(err = ?err, "Failed sending shutdown event"),
+        }
+    }
+
     /// Checks to see if the required tags for a particular resource exists or
     /// not.
     fn filter_by_tags(&self, resource: &Resource, config: &ResourceConfig) -> bool {
@@ -58,6 +223,7 @@ pub trait ResourceFilter {
         }
     }
 
+    /// Filters a resource based the provided whitelist
     fn filter_by_whitelist(&self, resource: &Resource, config: &ResourceConfig) -> bool {
         if let Some(ref whitelist) = config.whitelist {
             if whitelist.contains(&resource.id) {
@@ -67,7 +233,7 @@ pub trait ResourceFilter {
         false
     }
 
-    /// Filter resources that are not running
+    /// Filters a resource that are not running
     fn filter_by_state(&self, resource: &Resource) -> bool {
         if let Some(ref state) = resource.state {
             match state {
@@ -79,6 +245,7 @@ pub trait ResourceFilter {
         }
     }
 
+    /// Filters a resource based on its idle rules (Cloudwatch metrics)
     async fn filter_by_idle_rules(
         &self,
         resource: &Resource,
@@ -88,6 +255,29 @@ pub trait ResourceFilter {
         if let Some(ref _rules) = config.idle_rules {
             match resource.type_ {
                 ResourceType::Ec2Instance => cw_client.filter_instance(resource.id.as_str()).await,
+                ResourceType::EbsVolume => cw_client.filter_volume(resource.id.as_str()).await,
+                ResourceType::RdsInstance => {
+                    cw_client.filter_db_instance(resource.id.as_str()).await
+                }
+                ResourceType::RdsCluster => cw_client.filter_db_cluster(resource.id.as_str()).await,
+                ResourceType::Redshift => cw_client.filter_rs_cluster(resource.id.as_str()).await,
+                ResourceType::EsDomain => cw_client.filter_es_domain(resource.id.as_str()).await,
+                ResourceType::ElbAlb => {
+                    cw_client
+                        .filter_alb_load_balancer(resource.id.as_str())
+                        .await
+                }
+                ResourceType::ElbNlb => {
+                    cw_client
+                        .filter_nlb_load_balancer(resource.id.as_str())
+                        .await
+                }
+                ResourceType::EcsCluster => {
+                    cw_client.filter_ecs_cluster(resource.id.as_str()).await
+                }
+                ResourceType::EmrCluster => {
+                    cw_client.filter_emr_cluster(resource.id.as_str()).await
+                }
                 _ => false,
             }
         } else {
@@ -98,7 +288,7 @@ pub trait ResourceFilter {
     /// Additional filters to apply that are not generic for all resource types
     fn additional_filters(&self, resource: &Resource, config: &ResourceConfig) -> bool;
 
-    /// Filters a provided resource using the available filters
+    /// Filters a provided resource by applying all the filters
     async fn filter_resource(
         &self,
         resource: &Resource,
@@ -106,31 +296,64 @@ pub trait ResourceFilter {
         cw_client: Arc<Box<CwClient>>,
     ) -> EnforcementState {
         if self.filter_by_whitelist(resource, config) {
+            // Skip a resource if its in the whitelist
             EnforcementState::SkipConfig
-        } else if self.filter_by_runtime(resource, config) {
+        } else if self.filter_by_tags(resource, config) {
+            // Enforce provided required tags
+            trace!(
+                resource = resource.id.as_str(),
+                "Resource tags does not match"
+            );
+            EnforcementState::from_target_state(&config.target_state)
+        } else if self.filter_by_allowed_types(resource, config) {
+            // Enforce allowed types
+            trace!(
+                resource = resource.id.as_str(),
+                "Resource is not in list of allowed types"
+            );
             EnforcementState::from_target_state(&config.target_state)
         } else if self.filter_by_state(resource) {
+            // Skip resource if its state is stopped
             EnforcementState::SkipStopped
-        } else if self.filter_by_tags(resource, config) {
+        } else if self.filter_by_runtime(resource, config) {
+            // Enforce max runtime for a resource if max_run_time is provided
+            trace!(
+                resource = resource.id.as_str(),
+                "Resource exceeded max runtime"
+            );
             EnforcementState::from_target_state(&config.target_state)
         } else if self.filter_by_idle_rules(resource, config, cw_client).await {
+            // Enforce Idle rules
+            trace!(resource = resource.id.as_str(), "Resource is idle");
             EnforcementState::from_target_state(&config.target_state)
         } else if self.additional_filters(resource, config) {
+            // Apply any additional filters that are implemented by
+            // Resource clients.
+            trace!(
+                resource = resource.id.as_str(),
+                "Resource does not meet additional filters"
+            );
             EnforcementState::from_target_state(&config.target_state)
         } else {
             EnforcementState::Skip
         }
     }
-}
 
-#[async_trait]
-pub trait ResourceCleaner {
-    async fn cleanup(&self, resource: &Resource);
-}
+    async fn cleanup(&self, resource: &Resource) -> Result<()> {
+        match resource.enforcement_state {
+            EnforcementState::Stop => self.stop(resource).await?,
+            EnforcementState::Delete => self.delete(resource).await?,
+            _ => {}
+        }
 
-pub trait NukerClient:
-    ResourceScanner + ResourceCleaner + ResourceFilter + Send + Sync + DynClone
-{
+        Ok(())
+    }
+
+    /// Stop the resource
+    async fn stop(&self, resource: &Resource) -> Result<()>;
+
+    /// Delete the resource
+    async fn delete(&self, resource: &Resource) -> Result<()>;
 }
 
 dyn_clone::clone_trait_object!(NukerClient);

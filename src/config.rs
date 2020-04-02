@@ -1,5 +1,5 @@
 //! Configuration Parser
-use crate::service::Service;
+use crate::client::Client;
 use clap::{App, Arg};
 use regex::Regex;
 use serde::Deserialize;
@@ -14,8 +14,8 @@ pub struct Args {
     pub config: String,
     pub profile: Option<String>,
     pub regions: Vec<String>,
-    pub targets: Option<Vec<Service>>,
-    pub exclude: Option<Vec<Service>>,
+    pub targets: Option<Vec<Client>>,
+    pub exclude: Option<Vec<Client>>,
     pub dry_run: bool,
     pub force: bool,
     pub verbose: u64,
@@ -27,26 +27,48 @@ pub struct Args {
 /// This struct is built from reading the configuration file
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
-    pub ec2: Option<ResourceConfig>,
-    pub ebs: Option<EbsConfig>,
-    pub elb: Option<ElbConfig>,
-    pub rds: Option<RdsConfig>,
-    pub aurora: Option<AuroraConfig>,
-    pub s3: Option<S3Config>,
-    pub emr: Option<EmrConfig>,
-    pub redshift: Option<RedshiftConfig>,
-    pub glue: Option<GlueConfig>,
-    pub sagemaker: Option<SagemakerConfig>,
-    pub es: Option<EsConfig>,
-    pub asg: Option<AutoScalingConfig>,
-    pub ecs: Option<EcsConfig>,
-    pub vpc: Option<VpcConfig>,
+    #[serde(default = "default_resource_config")]
+    pub ec2_instance: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ec_sg: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ebs: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub elb: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub rds: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub aurora: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub s3: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub emr: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub redshift: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub glue: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub sagemaker: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub es: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub asg: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ecs: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub vpc: ResourceConfig,
 }
 
 #[derive(Debug, Deserialize, Clone, Eq, PartialEq)]
 pub enum TargetState {
     Stopped,
     Deleted,
+}
+
+impl Default for TargetState {
+    fn default() -> Self {
+        TargetState::Deleted
+    }
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -101,15 +123,38 @@ pub struct Eip {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ResourceConfig {
+    #[serde(default)]
     pub target_state: TargetState,
+    #[serde(default)]
     pub required_tags: Option<Vec<RequiredTags>>,
+    #[serde(default)]
     pub allowed_types: Option<Vec<String>>,
+    #[serde(default)]
     pub whitelist: Option<Vec<String>>,
+    #[serde(default)]
     pub idle_rules: Option<Vec<IdleRules>>,
+    #[serde(default)]
     pub termination_protection: Option<TerminationProtection>,
+    #[serde(default)]
     pub manage_stopped: Option<ManageStopped>,
+    #[serde(default)]
     #[serde(with = "humantime_serde")]
     pub max_run_time: Option<Duration>,
+}
+
+impl Default for ResourceConfig {
+    fn default() -> Self {
+        ResourceConfig {
+            target_state: TargetState::Deleted,
+            required_tags: None,
+            allowed_types: None,
+            whitelist: None,
+            idle_rules: None,
+            termination_protection: Some(TerminationProtection { ignore: true }),
+            manage_stopped: None,
+            max_run_time: None,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -342,7 +387,7 @@ pub fn parse_args() -> Args {
         .get_matches();
 
     if let Some(ref _matches) = args.subcommand_matches("resource-types") {
-        for r in crate::service::Service::iter() {
+        for r in Client::iter() {
             print!("{} ", r.name());
         }
         ::std::process::exit(0);
@@ -376,22 +421,22 @@ pub fn parse_args() -> Args {
         vec![]
     };
 
-    let targets: Option<Vec<Service>> = if args.is_present("target") {
+    let targets: Option<Vec<Client>> = if args.is_present("target") {
         Some(
             args.values_of("target")
                 .unwrap()
-                .map(|t| Service::from_str(t).unwrap())
+                .map(|t| Client::from_str(t).unwrap())
                 .collect(),
         )
     } else {
         None
     };
 
-    let exclude: Option<Vec<Service>> = if args.is_present("exclude") {
+    let exclude: Option<Vec<Client>> = if args.is_present("exclude") {
         Some(
             args.values_of("exclude")
                 .unwrap()
-                .map(|e| Service::from_str(e).unwrap())
+                .map(|e| Client::from_str(e).unwrap())
                 .collect(),
         )
     } else {
@@ -427,75 +472,62 @@ pub fn parse_config(buffer: &str) -> Config {
     let mut config: Config = toml::from_str(buffer).expect("could not parse toml configuration");
 
     // Compile all regex expressions up front
-    if let Some(ec2) = &mut config.ec2 {
-        if ec2.required_tags.is_some() {
-            for rt in ec2.required_tags.as_mut().unwrap() {
-                if rt.pattern.is_some() {
-                    rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
-                }
-            }
-        }
-
-        if let Some(manage_stopped) = &mut ec2.manage_stopped {
-            manage_stopped.dt_extract_regex = compile_regex(r"^.*\((?P<datetime>.*)\)$");
-        }
-    }
-
-    if let Some(rds) = &mut config.rds {
-        if rds.required_tags.is_some() {
-            for rt in rds.required_tags.as_mut().unwrap() {
-                if rt.pattern.is_some() {
-                    rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
-                }
+    if config.ec2_instance.required_tags.is_some() {
+        for rt in config.ec2_instance.required_tags.as_mut().unwrap() {
+            if rt.pattern.is_some() {
+                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
         }
     }
 
-    if let Some(aurora) = &mut config.aurora {
-        if aurora.required_tags.is_some() {
-            for rt in aurora.required_tags.as_mut().unwrap() {
-                if rt.pattern.is_some() {
-                    rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
-                }
+    if let Some(manage_stopped) = &mut config.ec2_instance.manage_stopped {
+        manage_stopped.dt_extract_regex = compile_regex(r"^.*\((?P<datetime>.*)\)$");
+    }
+
+    if config.rds.required_tags.is_some() {
+        for rt in config.rds.required_tags.as_mut().unwrap() {
+            if rt.pattern.is_some() {
+                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
         }
     }
 
-    if let Some(redshift) = &mut config.redshift {
-        if redshift.required_tags.is_some() {
-            for rt in redshift.required_tags.as_mut().unwrap() {
-                if rt.pattern.is_some() {
-                    rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
-                }
+    if config.aurora.required_tags.is_some() {
+        for rt in config.aurora.required_tags.as_mut().unwrap() {
+            if rt.pattern.is_some() {
+                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
         }
     }
 
-    if let Some(emr) = &mut config.emr {
-        if emr.required_tags.is_some() {
-            for rt in emr.required_tags.as_mut().unwrap() {
-                if rt.pattern.is_some() {
-                    rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
-                }
+    if config.redshift.required_tags.is_some() {
+        for rt in config.redshift.required_tags.as_mut().unwrap() {
+            if rt.pattern.is_some() {
+                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
         }
     }
 
-    if let Some(glue) = &mut config.glue {
-        if glue.required_tags.is_some() {
-            for rt in glue.required_tags.as_mut().unwrap() {
-                if rt.pattern.is_some() {
-                    rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
-                }
+    if config.emr.required_tags.is_some() {
+        for rt in config.emr.required_tags.as_mut().unwrap() {
+            if rt.pattern.is_some() {
+                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
         }
     }
 
-    if let Some(s3) = &mut config.s3 {
-        if s3.required_naming_prefix.is_some() {
-            s3.required_naming_regex = compile_regex(&s3.required_naming_prefix.as_ref().unwrap());
+    if config.glue.required_tags.is_some() {
+        for rt in config.glue.required_tags.as_mut().unwrap() {
+            if rt.pattern.is_some() {
+                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
+            }
         }
     }
+
+    // if config.s3.required_naming_prefix.is_some() {
+    //     config.s3.required_naming_regex =
+    //         compile_regex(&config.s3.required_naming_prefix.as_ref().unwrap());
+    // }
 
     config
 }
@@ -508,4 +540,8 @@ fn compile_regex(pattern: &str) -> Option<Regex> {
             None
         }
     }
+}
+
+fn default_resource_config() -> ResourceConfig {
+    ResourceConfig::default()
 }

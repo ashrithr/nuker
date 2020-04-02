@@ -1,618 +1,641 @@
-[ec2]
-# Specifies whether EC2 enforcement is enabled or not
-enabled = true
-# State to enforce, if any of the following conditions are not met. Possible
-# states are: 'Stopped' and 'Deleted'
+[ec2_instance]
 target_state = "Deleted"
-# Defines which instance types are allowed, empty means allow any types
-allowed_instance_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
+allowed_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
     "t3.micro", "t3.small", "t3.medium", "t3.large", "t3.xlarge"]
-# The following resources will be ignored from rule enforcement
-# ignore = ["instance-id1", "instance-id2"]
-ignore = ["i-08e2164ae5e00da0f"]
 
     # Defines required tags on each instance.
-    [[ec2.required_tags]]
+    [[ec2_instance.required_tags]]
     name = "Name"
     pattern = '^(ec2|sg)-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
 
-    [[ec2.required_tags]]
+    [[ec2_instance.required_tags]]
     name = "Owner:Name"
 
-    [[ec2.required_tags]]
+    [[ec2_instance.required_tags]]
     name = "Owner:Email"
     pattern = '^(.*)@(.*).com$'
 
-    [[ec2.required_tags]]
+    [[ec2_instance.required_tags]]
     name = "Purpose"
 
-    [[ec2.required_tags]]
+    [[ec2_instance.required_tags]]
     name = "Environment"
 
-    # Identify any EC2 instances that appear to be idle based on the following
-    # rules.
-    #
-    # Defines CPU utilization rules, the default is if the average
-    # CPUUtilization metric for 1 day, each data point aggregated over 1 hour
-    # window, is less than 0.5% then the instance will be enforced to its
-    # defined target state
-    # Note: 'granularity' max value is 86400 seconds and 'min_duration'
-    # max value is 2 weeks without CloudWatch detailed monitoring enabled
-    [[ec2.idle_rules]]
-    namespace = "AWS/EC2"
-    metric = "CPUUtilization"
-    minimum = 5
-    duration = "1 day"
-    granularity = "1 hour"
-
-    [[ec2.idle_rules]]
-    namespace = "AWS/EC2"
-    metric = "NetworkIn"
-    minimum = 5000000 # 5MB
-    duration = "1 day"
-    granularity = "1 hour"
-
-    [[ec2.idle_rules]]
-    namespace = "AWS/EC2"
-    metric = "NetworkOut"
-    minimum = 5000000 # 5MB
-    duration = "1 day"
-    granularity = "1 hour"
-
-    # Identify resources that are using Security Groups based on the following
-    # rules.
-    [ec2.security_groups]
-    enabled = true
-    from_port = 0
-    to_port = 65535
-    source_cidr = [ "0.0.0.0/0" ]
-
-    # Defines whether to acknowledge the terminate protection, if 'ignore' is
-    # set to 'true' then the utility would ignore the termination protection
-    # flag and would terminate the instances anyway.
-    [ec2.termination_protection]
-    ignore = true
-
-    # Defines whether to cleanup stopped instances after specified duration
-    [ec2.manage_stopped]
-    enabled = true
-    older_than = "7 days"
-
-    # Identifies and cleans up unused Elastic Network Interfaces
-    [ec2.eni]
-    cleanup = true
-
-    # Identifies and cleans up unused Elastic IP addresses
-    [ec2.eip]
-    cleanup = true
-
-[ebs]
-# Specifies whether to clean up Volumes that are detached and not being used
-enabled = true
-# State to enforce. Possible states are 'Deleted'
-target_state = "Deleted"
-# The following volumes will be ignored from rules enforcement
-# ignore = ["vol-identifier-1", ...]
-ignore = []
-# Clean up snapshots that are older than the specified duration
-older_than = "7 days"
-
-    [[ebs.idle_rules]]
-    namespace = "AWS/EBS"
-    metric = "VolumeReadOps"
-    minimum = 1
-    duration = "1 day"
-    granularity = "1 hour"
-
-    [[ebs.idle_rules]]
-    namespace = "AWS/EBS"
-    metric = "VolumeWriteOps"
-    minimum = 1
-    duration = "1 day"
-    granularity = "1 hour"
-
-[asg]
-# Specifies whether to clean up AutoScaling groups
-enabled = true
-# State to enforce. Possible state are 'Deleted'
-target_state = "Deleted"
-# The following AutoScaling groups will be ignored from rules enforcement
-ignore = []
-# Clean up empty ASG's. An ASG is considered empty when it doesn't have any EC2
-# instances attached and is not associated with an ELB.
-cleanup_empty = true
-
-    # Defines required tags on each instance.
-    [[asg.required_tags]]
-    name = "Name"
-    pattern = '^asg-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
-
-    [[asg.required_tags]]
-    name = "Owner:Name"
-
-    [[asg.required_tags]]
-    name = "Owner:Email"
-    pattern = '^(.*)@(.*).com$'
-
-    [[asg.required_tags]]
-    name = "Purpose"
-
-    [[asg.required_tags]]
-    name = "Environment"
-
-[elb]
-# Specifies whether ELB enforcement is enabled or not
-enabled = true
-# State to enforce. Possible states are 'Deleted'
-target_state = "Deleted"
-# The following load balancers will be ignored from rules enforcement
-ignore = []
-
-    # Defines required tags on each Load Balancer.
-    [[elb.required_tags]]
-    name = "Name"
-    pattern = '^(elb)-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
-
-    [[elb.required_tags]]
-    name = "Owner:Name"
-
-    [[elb.required_tags]]
-    name = "Owner:Email"
-    pattern = '^(.*)@(.*).com$'
-
-    [[elb.required_tags]]
-    name = "Purpose"
-
-    [[elb.required_tags]]
-    name = "Environment"
-
-    # Application Load Balancer Idle Rules
-    # Only supports dimension metrics which takes 'LoadBalancer'
-    [[elb.alb_idle_rules]]
-    namespace = "AWS/ApplicationELB"
-    metric = "RequestCount"
-    minimum = 1
-    duration = "1 day"
-    granularity = "1 hour"
-
-    # Network Load Balancer Idle Rules
-    # Only supports dimension metrics which takes 'LoadBalancer'
-    [[elb.nlb_idle_rules]]
-    namespace = "AWS/NetworkELB"
-    metric = "ProcessedBytes"
-    minimum = 1024
-    duration = "1 day"
-    granularity = "1 hour"
-
-[vpc]
-# Specifies whether VPC enforcement is enabled or not
-enabled = true
-# State to enforce. Possible state is 'Deleted'.
-target_state = "Deleted"
-# The following resources will be ignored from rule enforcement
-ignore = ["vpc-00d617aef710f2cde", "vpc-07c7ca01551c50cbb", "vpc-05310d35f662aa11a"]
-# Clean up empty VPC's. A VPC is considered empty when it doesn't have any
-# resources associated with it.
-cleanup_empty = true
-
-    # Defines required tags on each VPC.
-    [[vpc.required_tags]]
-    name = "Name"
-    pattern = '^vpc-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
-
-    [[vpc.required_tags]]
-    name = "Owner:Name"
-
-    [[vpc.required_tags]]
-    name = "Owner:Email"
-    pattern = '^(.*)@(.*).com$'
-
-    [[vpc.required_tags]]
-    name = "Purpose"
-
-    [[vpc.required_tags]]
-    name = "Environment"
-
-    # Identifies and cleans up unused Internet Gateways and Egress only Internet
-    # Gateways to avoid service limits. An IGW is considered unused if it is not
-    # attached to a VPC.
-    [vpc.igw]
-    cleanup = true
-
-    # Identifies and cleans up unused Virtual Private Gateways to avoid service
-    # limits. An VGW is considered unused if it is not attached to a VPC.
-    [vpc.vgw]
-    cleanup = true
-
-[rds]
-# Specifies whether RDS enforcement is enabled or not
-enabled = true
-# State to enforce, if any of the following conditions are not met. Possible
-# states are: 'Stopped' and 'Deleted'
-target_state = "Deleted"
-# Defines which instance types are allowed, empty means allow any types
-allowed_instance_types = []
-# The following resources will be ignored from rule enforcement
-# ignore = ["db_instance_identifier-1", "db_instance_identifier-2"]
-ignore = []
-
-    # Defines required tags on each instance.
-    [[rds.required_tags]]
-    name = "Name"
-    pattern = '^rds-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
-
-    [[rds.required_tags]]
-    name = "Owner:Name"
-
-    [[rds.required_tags]]
-    name = "Owner:Email"
-    pattern = '^(.*)@(.*).com$'
-
-    [[rds.required_tags]]
-    name = "Purpose"
-
-    [[rds.required_tags]]
-    name = "Environment"
-
-    [[rds.idle_rules]]
-    namespace = "AWS/RDS"
-    metric = "DatabaseConnections"
-    minimum = 1
-    duration = "1 day"
-    granularity = "1 hour"
-
-    [[rds.idle_rules]]
-    namespace = "AWS/RDS"
-    metric = "ReadIOPS"
-    minimum = 20
-    duration = "1 day"
-    granularity = "1 hour"
-
-    [[rds.idle_rules]]
-    namespace = "AWS/RDS"
-    metric = "WriteIOPS"
-    minimum = 20
-    duration = "1 day"
-    granularity = "1 hour"
-
-    # Defines whether to cleanup stopped instances after specified duration
-    [rds.manage_stopped]
-    enabled = true
-    older_than = "7 days"
-
-    # Defines whether to acknowledge the terminate protection, if 'acknowledge'
-    # is set to 'true' then the utility would not try to terminate the instances
-    # which has termination protection enabled.
-    [rds.termination_protection]
-    ignore = true
-
-[aurora]
-# Specifies whether RDS-Aurora enforcement is enabled or not
-enabled = true
-# State to enforce, if any of the following conditions are not met. Possible
-# states are: 'Stopped' and 'Deleted'
-target_state = "Deleted"
-# Defines which instance types are allowed, empty means allow any types
-allowed_instance_types = []
-# The following resources will be ignored from rule enforcement
-# ignore = ["db_cluster_identifier-1", "db_cluster_identifier-2"]
-ignore = []
-
-    # Defines required tags on each instance.
-    [[aurora.required_tags]]
-    name = "Name"
-    pattern = '^rds-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
-
-    [[aurora.required_tags]]
-    name = "Owner:Name"
-
-    [[aurora.required_tags]]
-    name = "Owner:Email"
-    pattern = '^(.*)@(.*).com$'
-
-    [[aurora.required_tags]]
-    name = "Purpose"
-
-    [[aurora.required_tags]]
-    name = "Environment"
-
-    [[aurora.idle_rules]]
-    namespace = "AWS/RDS"
-    metric = "DatabaseConnections"
-    minimum = 1
-    duration = "1 day"
-    granularity = "1 hour"
-
-    [[aurora.idle_rules]]
-    namespace = "AWS/RDS"
-    metric = "ReadIOPS"
-    minimum = 20
-    duration = "1 day"
-    granularity = "1 hour"
-
-    [[aurora.idle_rules]]
-    namespace = "AWS/RDS"
-    metric = "WriteIOPS"
-    minimum = 20
-    duration = "1 day"
-    granularity = "1 hour"
-
-    # Defines whether to acknowledge the terminate protection, if 'acknowledge'
-    # is set to 'true' then the utility would not try to terminate the instances
-    # which has termination protection enabled.
-    [aurora.termination_protection]
-    ignore = true
-
-[redshift]
-# Specifies whether Redshift enforcement is enabled or not
-enabled = true
-# State to enforce, if any of the following conditions are not met. Possible
-# states are: 'Stopped' and 'Deleted'. Redshift does not have a stop option
-# so instead the DB will be terminated with a snapshot taken which will be valid
-# for 7 days.
-target_state = "Deleted"
-# Defines which instance types are allowed, empty means allow any types
-allowed_instance_types = []
-# The following resources will be ignored from rule enforcement
-# ignore = ["db_cluster_identifier-1", "db_cluster_identifier-2"]
-ignore = []
-
-    # Defines required tags on each instance.
-    [[redshift.required_tags]]
-    name = "Name"
-    pattern = '^rs-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
-
-    [[redshift.required_tags]]
-    name = "Owner:Name"
-
-    [[redshift.required_tags]]
-    name = "Owner:Email"
-    pattern = '^(.*)@(.*).com$'
-
-    [[redshift.required_tags]]
-    name = "Purpose"
-
-    [[redshift.required_tags]]
-    name = "Environment"
-
-    [[redshift.idle_rules]]
-    namespace = "AWS/Redshift"
-    metric = "DatabaseConnections"
-    minimum = 1
-    duration = "1 day"
-    granularity = "1 hour"
-
-    [[redshift.idle_rules]]
-    namespace = "AWS/Redshift"
-    metric = "ReadIOPS"
-    minimum = 20
-    duration = "1 day"
-    granularity = "1 hour"
-
-    [[redshift.idle_rules]]
-    namespace = "AWS/Redshift"
-    metric = "WriteIOPS"
-    minimum = 20
-    duration = "1 day"
-    granularity = "1 hour"
-
-[s3]
-enabled = true
-target_state = "Deleted"
-check_dns_compliant_naming = true
-required_naming_prefix = '^cw-(us-[a-z]*-[0-9]{1})-([0-9]{12})-(.*)$'
-# Ensure buckets does not allow public access via READ, READ_ACP, WRITE,
-# WRITE_ACP, and via bucket policies
-# check_public_accessibility = true
-ignore = []
-
-[emr]
-# Specifies whether EMR enforcement is enabled or not
-enabled = true
-# State to enforce, if any of the following conditions are not met. Possible
-# states are: 'Stopped' and 'Deleted'.
-# Note: EMR does not support Stopping clusters, instead the cluster will be
-# deleted.
-target_state = "Deleted"
-# Defines which instance types are allowed, empty means allow any types
-allowed_instance_types = ["m3.xlarge", "m4.large", "m4.xlarge", "m5.xlarge"]
-# The following resources will be ignored from rule enforcement
-# ignore = ["instance-id1", "instance-id2"]
-ignore = []
-# Clean up EMR clusters thar are running for more than specified duration.
-older_than = "8 hours"
-
-    # Defines required tags on each instance.
-    [[emr.required_tags]]
-    name = "Name"
-    pattern = '^emr-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
-
-    [[emr.required_tags]]
-    name = "Owner:Name"
-
-    [[emr.required_tags]]
-    name = "Owner:Email"
-    pattern = '^(.*)@(.*).com$'
-
-    [[emr.required_tags]]
-    name = "Purpose"
-
-    [[emr.required_tags]]
-    name = "Environment"
-
-    # Identify any EMR instances that appear to be idle based on the following
-    # rules.
-    [[emr.idle_rules]]
-    namespace = "AWS/ElasticMapReduce"
-    metric = "IsIdle"
-    minimum = 1
-    duration = "1 day"
-    granularity = "1 hour"
-
-    # Identify resources that are using Security Groups based on the following
-    # rules.
-    [emr.security_groups]
-    enabled = true
-    from_port = 0
-    to_port = 65535
-    source_cidr = [ "0.0.0.0/0" ]
-
-    # Defines whether to acknowledge the terminate protection, if 'ignore' is
-    # set to 'true' then the utility would ignore the termination protection
-    # flag and would terminate the instances anyway.
-    [emr.termination_protection]
-    ignore = true
-
-[glue]
-# Specifies whether Glue enforcement is enabled or not.
-enabled = true
-# State to enforce, if any of the following conditions are not met. Possible
-# states are: 'Stopped' and 'Deleted'.
-# Note: Glue does not support Stopping endpoints, instead the endpoint will be
-# deleted.
-target_state = "Deleted"
-# The following resources will be ignore from rule enforcement. Specify the
-# Dev Endpoints names.
-ignore = []
-# Clean up glue dev points if they are running for more than specified duration.
-older_than = "8 hours"
-
-    # Defines required tags on each instance.
-    [[glue.required_tags]]
-    name = "Name"
-    pattern = '^glue-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
-
-    [[glue.required_tags]]
-    name = "Owner:Name"
-
-    [[glue.required_tags]]
-    name = "Owner:Email"
-    pattern = '^(.*)@(.*).com$'
-
-    [[glue.required_tags]]
-    name = "Purpose"
-
-    [[glue.required_tags]]
-    name = "Environment"
-
-[sagemaker]
-# Specifies whether Sagemaker enforcement is enabled or not.
-enabled = true
-# State to enforce, if any of the following conditions are not met. Possible
-# states are: 'Stopped' and 'Deleted'.
-# Note: Sagemaker does not support Stopping endpoints, instead the endpoint will be
-# deleted.
-target_state = "Deleted"
-# Defines which instance types are allowed, empty means allow any types
-allowed_instance_types = ["ml.t2.medium", "ml.t2.large", "ml.t2.xlarge", "ml.t2.2xlarge",
-    "ml.t3.medium", "ml.t3.large", "ml.t3.xlarge", "ml.t3.2xlarge" ]
-# The following resources will be ignore from rule enforcement. Specify the
-# Dev Endpoints names.
-ignore = []
-# Clean up sagemaker notebooks if they are running for more than specified duration.
-older_than = "8 hours"
-
-    # Defines required tags on each instance.
-    [[sagemaker.required_tags]]
-    name = "Name"
-    pattern = '^sagemaker-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
-
-    [[sagemaker.required_tags]]
-    name = "Owner:Name"
-
-    [[sagemaker.required_tags]]
-    name = "Owner:Email"
-    pattern = '^(.*)@(.*).com$'
-
-    [[sagemaker.required_tags]]
-    name = "Purpose"
-
-    [[sagemaker.required_tags]]
-    name = "Environment"
-
-[es]
-# Specifies whether ElasticSearch enforcement is enabled or not.
-enabled = true
-# State to enforce, if any of the following conditions are not met. Possible
-# states are: 'Stopped' and 'Deleted'.
-# Note: Elastic Search Service does not support stopping.
-target_state = "Deleted"
-# Defines which instance types are allowed, empty means allow any types
-allowed_instance_types = []
-# The following resources will be ignore from rule enforcement. Specify the
-# ES Cluster IDs.
-ignore = []
-
-    # Defines required tags on each cluster.
-    [[es.required_tags]]
-    name = "Name"
-    pattern = '^es-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
-
-    [[es.required_tags]]
-    name = "Owner:Name"
-
-    [[es.required_tags]]
-    name = "Owner:Email"
-    pattern = '^(.*)@(.*).com$'
-
-    [[es.required_tags]]
-    name = "Purpose"
-
-    [[es.required_tags]]
-    name = "Environment"
-
-    # Identify any ES cluster that appear to be idle based on the following
-    # rules.
-    [[es.idle_rules]]
-    namespace = "AWS/ES"
-    metric = "CPUUtilization"
-    minimum = 5
-    duration = "1 day"
-    granularity = "1 hour"
-
-    [[es.idle_rules]]
-    namespace = "AWS/ES"
-    metric = "ElasticsearchRequests"
-    minimum = 1
-    duration = "1 day"
-    granularity = "1 hour"
-
-[ecs]
-enabled = true
-target_state = "Deleted"
-allowed_instance_types = []
-ignore = []
-
-    # Defines required tags on each cluster.
-    [[ecs.required_tags]]
-    name = "Name"
-    pattern = '^ecs-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
-
-    [[ecs.required_tags]]
-    name = "Owner:Name"
-
-    [[ecs.required_tags]]
-    name = "Owner:Email"
-    pattern = '^(.*)@(.*).com$'
-
-    [[ecs.required_tags]]
-    name = "Purpose"
-
-    [[ecs.required_tags]]
-    name = "Environment"
-
-    # Identify any ECS cluster that appear to be idle based on the following
-    # rules.
-    [[ecs.idle_rules]]
-    namespace = "AWS/ECS"
-    metric = "CPUReservation"
-    minimum = 5
-    duration = "1 day"
-    granularity = "1 hour"
-
-    [[ecs.idle_rules]]
-    namespace = "AWS/ECS"
-    metric = "MemoryReservation"
-    minimum = 1
-    duration = "1 day"
-    granularity = "1 hour"
+# [ec2]
+# # Specifies whether EC2 enforcement is enabled or not
+# enabled = true
+# # State to enforce, if any of the following conditions are not met. Possible
+# # states are: 'Stopped' and 'Deleted'
+# target_state = "Deleted"
+# # Defines which instance types are allowed, empty means allow any types
+# allowed_instance_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
+#     "t3.micro", "t3.small", "t3.medium", "t3.large", "t3.xlarge"]
+# # The following resources will be ignored from rule enforcement
+# # ignore = ["instance-id1", "instance-id2"]
+# ignore = ["i-08e2164ae5e00da0f"]
+
+#     # Defines required tags on each instance.
+#     [[ec2.required_tags]]
+#     name = "Name"
+#     pattern = '^(ec2|sg)-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+#     [[ec2.required_tags]]
+#     name = "Owner:Name"
+
+#     [[ec2.required_tags]]
+#     name = "Owner:Email"
+#     pattern = '^(.*)@(.*).com$'
+
+#     [[ec2.required_tags]]
+#     name = "Purpose"
+
+#     [[ec2.required_tags]]
+#     name = "Environment"
+
+#     # Identify any EC2 instances that appear to be idle based on the following
+#     # rules.
+#     #
+#     # Defines CPU utilization rules, the default is if the average
+#     # CPUUtilization metric for 1 day, each data point aggregated over 1 hour
+#     # window, is less than 0.5% then the instance will be enforced to its
+#     # defined target state
+#     # Note: 'granularity' max value is 86400 seconds and 'min_duration'
+#     # max value is 2 weeks without CloudWatch detailed monitoring enabled
+#     [[ec2.idle_rules]]
+#     namespace = "AWS/EC2"
+#     metric = "CPUUtilization"
+#     minimum = 5
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     [[ec2.idle_rules]]
+#     namespace = "AWS/EC2"
+#     metric = "NetworkIn"
+#     minimum = 5000000 # 5MB
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     [[ec2.idle_rules]]
+#     namespace = "AWS/EC2"
+#     metric = "NetworkOut"
+#     minimum = 5000000 # 5MB
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     # Identify resources that are using Security Groups based on the following
+#     # rules.
+#     [ec2.security_groups]
+#     enabled = true
+#     from_port = 0
+#     to_port = 65535
+#     source_cidr = [ "0.0.0.0/0" ]
+
+#     # Defines whether to acknowledge the terminate protection, if 'ignore' is
+#     # set to 'true' then the utility would ignore the termination protection
+#     # flag and would terminate the instances anyway.
+#     [ec2.termination_protection]
+#     ignore = true
+
+#     # Defines whether to cleanup stopped instances after specified duration
+#     [ec2.manage_stopped]
+#     enabled = true
+#     older_than = "7 days"
+
+#     # Identifies and cleans up unused Elastic Network Interfaces
+#     [ec2.eni]
+#     cleanup = true
+
+#     # Identifies and cleans up unused Elastic IP addresses
+#     [ec2.eip]
+#     cleanup = true
+
+# [ebs]
+# # Specifies whether to clean up Volumes that are detached and not being used
+# enabled = true
+# # State to enforce. Possible states are 'Deleted'
+# target_state = "Deleted"
+# # The following volumes will be ignored from rules enforcement
+# # ignore = ["vol-identifier-1", ...]
+# ignore = []
+# # Clean up snapshots that are older than the specified duration
+# older_than = "7 days"
+
+#     [[ebs.idle_rules]]
+#     namespace = "AWS/EBS"
+#     metric = "VolumeReadOps"
+#     minimum = 1
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     [[ebs.idle_rules]]
+#     namespace = "AWS/EBS"
+#     metric = "VolumeWriteOps"
+#     minimum = 1
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+# [asg]
+# # Specifies whether to clean up AutoScaling groups
+# enabled = true
+# # State to enforce. Possible state are 'Deleted'
+# target_state = "Deleted"
+# # The following AutoScaling groups will be ignored from rules enforcement
+# ignore = []
+# # Clean up empty ASG's. An ASG is considered empty when it doesn't have any EC2
+# # instances attached and is not associated with an ELB.
+# cleanup_empty = true
+
+#     # Defines required tags on each instance.
+#     [[asg.required_tags]]
+#     name = "Name"
+#     pattern = '^asg-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+#     [[asg.required_tags]]
+#     name = "Owner:Name"
+
+#     [[asg.required_tags]]
+#     name = "Owner:Email"
+#     pattern = '^(.*)@(.*).com$'
+
+#     [[asg.required_tags]]
+#     name = "Purpose"
+
+#     [[asg.required_tags]]
+#     name = "Environment"
+
+# [elb]
+# # Specifies whether ELB enforcement is enabled or not
+# enabled = true
+# # State to enforce. Possible states are 'Deleted'
+# target_state = "Deleted"
+# # The following load balancers will be ignored from rules enforcement
+# ignore = []
+
+#     # Defines required tags on each Load Balancer.
+#     [[elb.required_tags]]
+#     name = "Name"
+#     pattern = '^(elb)-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+#     [[elb.required_tags]]
+#     name = "Owner:Name"
+
+#     [[elb.required_tags]]
+#     name = "Owner:Email"
+#     pattern = '^(.*)@(.*).com$'
+
+#     [[elb.required_tags]]
+#     name = "Purpose"
+
+#     [[elb.required_tags]]
+#     name = "Environment"
+
+#     # Application Load Balancer Idle Rules
+#     # Only supports dimension metrics which takes 'LoadBalancer'
+#     [[elb.alb_idle_rules]]
+#     namespace = "AWS/ApplicationELB"
+#     metric = "RequestCount"
+#     minimum = 1
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     # Network Load Balancer Idle Rules
+#     # Only supports dimension metrics which takes 'LoadBalancer'
+#     [[elb.nlb_idle_rules]]
+#     namespace = "AWS/NetworkELB"
+#     metric = "ProcessedBytes"
+#     minimum = 1024
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+# [vpc]
+# # Specifies whether VPC enforcement is enabled or not
+# enabled = true
+# # State to enforce. Possible state is 'Deleted'.
+# target_state = "Deleted"
+# # The following resources will be ignored from rule enforcement
+# ignore = ["vpc-00d617aef710f2cde", "vpc-07c7ca01551c50cbb", "vpc-05310d35f662aa11a"]
+# # Clean up empty VPC's. A VPC is considered empty when it doesn't have any
+# # resources associated with it.
+# cleanup_empty = true
+
+#     # Defines required tags on each VPC.
+#     [[vpc.required_tags]]
+#     name = "Name"
+#     pattern = '^vpc-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+#     [[vpc.required_tags]]
+#     name = "Owner:Name"
+
+#     [[vpc.required_tags]]
+#     name = "Owner:Email"
+#     pattern = '^(.*)@(.*).com$'
+
+#     [[vpc.required_tags]]
+#     name = "Purpose"
+
+#     [[vpc.required_tags]]
+#     name = "Environment"
+
+#     # Identifies and cleans up unused Internet Gateways and Egress only Internet
+#     # Gateways to avoid service limits. An IGW is considered unused if it is not
+#     # attached to a VPC.
+#     [vpc.igw]
+#     cleanup = true
+
+#     # Identifies and cleans up unused Virtual Private Gateways to avoid service
+#     # limits. An VGW is considered unused if it is not attached to a VPC.
+#     [vpc.vgw]
+#     cleanup = true
+
+# [rds]
+# # Specifies whether RDS enforcement is enabled or not
+# enabled = true
+# # State to enforce, if any of the following conditions are not met. Possible
+# # states are: 'Stopped' and 'Deleted'
+# target_state = "Deleted"
+# # Defines which instance types are allowed, empty means allow any types
+# allowed_instance_types = []
+# # The following resources will be ignored from rule enforcement
+# # ignore = ["db_instance_identifier-1", "db_instance_identifier-2"]
+# ignore = []
+
+#     # Defines required tags on each instance.
+#     [[rds.required_tags]]
+#     name = "Name"
+#     pattern = '^rds-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+#     [[rds.required_tags]]
+#     name = "Owner:Name"
+
+#     [[rds.required_tags]]
+#     name = "Owner:Email"
+#     pattern = '^(.*)@(.*).com$'
+
+#     [[rds.required_tags]]
+#     name = "Purpose"
+
+#     [[rds.required_tags]]
+#     name = "Environment"
+
+#     [[rds.idle_rules]]
+#     namespace = "AWS/RDS"
+#     metric = "DatabaseConnections"
+#     minimum = 1
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     [[rds.idle_rules]]
+#     namespace = "AWS/RDS"
+#     metric = "ReadIOPS"
+#     minimum = 20
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     [[rds.idle_rules]]
+#     namespace = "AWS/RDS"
+#     metric = "WriteIOPS"
+#     minimum = 20
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     # Defines whether to cleanup stopped instances after specified duration
+#     [rds.manage_stopped]
+#     enabled = true
+#     older_than = "7 days"
+
+#     # Defines whether to acknowledge the terminate protection, if 'acknowledge'
+#     # is set to 'true' then the utility would not try to terminate the instances
+#     # which has termination protection enabled.
+#     [rds.termination_protection]
+#     ignore = true
+
+# [aurora]
+# # Specifies whether RDS-Aurora enforcement is enabled or not
+# enabled = true
+# # State to enforce, if any of the following conditions are not met. Possible
+# # states are: 'Stopped' and 'Deleted'
+# target_state = "Deleted"
+# # Defines which instance types are allowed, empty means allow any types
+# allowed_instance_types = []
+# # The following resources will be ignored from rule enforcement
+# # ignore = ["db_cluster_identifier-1", "db_cluster_identifier-2"]
+# ignore = []
+
+#     # Defines required tags on each instance.
+#     [[aurora.required_tags]]
+#     name = "Name"
+#     pattern = '^rds-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+#     [[aurora.required_tags]]
+#     name = "Owner:Name"
+
+#     [[aurora.required_tags]]
+#     name = "Owner:Email"
+#     pattern = '^(.*)@(.*).com$'
+
+#     [[aurora.required_tags]]
+#     name = "Purpose"
+
+#     [[aurora.required_tags]]
+#     name = "Environment"
+
+#     [[aurora.idle_rules]]
+#     namespace = "AWS/RDS"
+#     metric = "DatabaseConnections"
+#     minimum = 1
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     [[aurora.idle_rules]]
+#     namespace = "AWS/RDS"
+#     metric = "ReadIOPS"
+#     minimum = 20
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     [[aurora.idle_rules]]
+#     namespace = "AWS/RDS"
+#     metric = "WriteIOPS"
+#     minimum = 20
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     # Defines whether to acknowledge the terminate protection, if 'acknowledge'
+#     # is set to 'true' then the utility would not try to terminate the instances
+#     # which has termination protection enabled.
+#     [aurora.termination_protection]
+#     ignore = true
+
+# [redshift]
+# # Specifies whether Redshift enforcement is enabled or not
+# enabled = true
+# # State to enforce, if any of the following conditions are not met. Possible
+# # states are: 'Stopped' and 'Deleted'. Redshift does not have a stop option
+# # so instead the DB will be terminated with a snapshot taken which will be valid
+# # for 7 days.
+# target_state = "Deleted"
+# # Defines which instance types are allowed, empty means allow any types
+# allowed_instance_types = []
+# # The following resources will be ignored from rule enforcement
+# # ignore = ["db_cluster_identifier-1", "db_cluster_identifier-2"]
+# ignore = []
+
+#     # Defines required tags on each instance.
+#     [[redshift.required_tags]]
+#     name = "Name"
+#     pattern = '^rs-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+#     [[redshift.required_tags]]
+#     name = "Owner:Name"
+
+#     [[redshift.required_tags]]
+#     name = "Owner:Email"
+#     pattern = '^(.*)@(.*).com$'
+
+#     [[redshift.required_tags]]
+#     name = "Purpose"
+
+#     [[redshift.required_tags]]
+#     name = "Environment"
+
+#     [[redshift.idle_rules]]
+#     namespace = "AWS/Redshift"
+#     metric = "DatabaseConnections"
+#     minimum = 1
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     [[redshift.idle_rules]]
+#     namespace = "AWS/Redshift"
+#     metric = "ReadIOPS"
+#     minimum = 20
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     [[redshift.idle_rules]]
+#     namespace = "AWS/Redshift"
+#     metric = "WriteIOPS"
+#     minimum = 20
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+# [s3]
+# enabled = true
+# target_state = "Deleted"
+# check_dns_compliant_naming = true
+# required_naming_prefix = '^cw-(us-[a-z]*-[0-9]{1})-([0-9]{12})-(.*)$'
+# # Ensure buckets does not allow public access via READ, READ_ACP, WRITE,
+# # WRITE_ACP, and via bucket policies
+# # check_public_accessibility = true
+# ignore = []
+
+# [emr]
+# # Specifies whether EMR enforcement is enabled or not
+# enabled = true
+# # State to enforce, if any of the following conditions are not met. Possible
+# # states are: 'Stopped' and 'Deleted'.
+# # Note: EMR does not support Stopping clusters, instead the cluster will be
+# # deleted.
+# target_state = "Deleted"
+# # Defines which instance types are allowed, empty means allow any types
+# allowed_instance_types = ["m3.xlarge", "m4.large", "m4.xlarge", "m5.xlarge"]
+# # The following resources will be ignored from rule enforcement
+# # ignore = ["instance-id1", "instance-id2"]
+# ignore = []
+# # Clean up EMR clusters thar are running for more than specified duration.
+# older_than = "8 hours"
+
+#     # Defines required tags on each instance.
+#     [[emr.required_tags]]
+#     name = "Name"
+#     pattern = '^emr-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+#     [[emr.required_tags]]
+#     name = "Owner:Name"
+
+#     [[emr.required_tags]]
+#     name = "Owner:Email"
+#     pattern = '^(.*)@(.*).com$'
+
+#     [[emr.required_tags]]
+#     name = "Purpose"
+
+#     [[emr.required_tags]]
+#     name = "Environment"
+
+#     # Identify any EMR instances that appear to be idle based on the following
+#     # rules.
+#     [[emr.idle_rules]]
+#     namespace = "AWS/ElasticMapReduce"
+#     metric = "IsIdle"
+#     minimum = 1
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     # Identify resources that are using Security Groups based on the following
+#     # rules.
+#     [emr.security_groups]
+#     enabled = true
+#     from_port = 0
+#     to_port = 65535
+#     source_cidr = [ "0.0.0.0/0" ]
+
+#     # Defines whether to acknowledge the terminate protection, if 'ignore' is
+#     # set to 'true' then the utility would ignore the termination protection
+#     # flag and would terminate the instances anyway.
+#     [emr.termination_protection]
+#     ignore = true
+
+# [glue]
+# # Specifies whether Glue enforcement is enabled or not.
+# enabled = true
+# # State to enforce, if any of the following conditions are not met. Possible
+# # states are: 'Stopped' and 'Deleted'.
+# # Note: Glue does not support Stopping endpoints, instead the endpoint will be
+# # deleted.
+# target_state = "Deleted"
+# # The following resources will be ignore from rule enforcement. Specify the
+# # Dev Endpoints names.
+# ignore = []
+# # Clean up glue dev points if they are running for more than specified duration.
+# older_than = "8 hours"
+
+#     # Defines required tags on each instance.
+#     [[glue.required_tags]]
+#     name = "Name"
+#     pattern = '^glue-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+#     [[glue.required_tags]]
+#     name = "Owner:Name"
+
+#     [[glue.required_tags]]
+#     name = "Owner:Email"
+#     pattern = '^(.*)@(.*).com$'
+
+#     [[glue.required_tags]]
+#     name = "Purpose"
+
+#     [[glue.required_tags]]
+#     name = "Environment"
+
+# [sagemaker]
+# # Specifies whether Sagemaker enforcement is enabled or not.
+# enabled = true
+# # State to enforce, if any of the following conditions are not met. Possible
+# # states are: 'Stopped' and 'Deleted'.
+# # Note: Sagemaker does not support Stopping endpoints, instead the endpoint will be
+# # deleted.
+# target_state = "Deleted"
+# # Defines which instance types are allowed, empty means allow any types
+# allowed_instance_types = ["ml.t2.medium", "ml.t2.large", "ml.t2.xlarge", "ml.t2.2xlarge",
+#     "ml.t3.medium", "ml.t3.large", "ml.t3.xlarge", "ml.t3.2xlarge" ]
+# # The following resources will be ignore from rule enforcement. Specify the
+# # Dev Endpoints names.
+# ignore = []
+# # Clean up sagemaker notebooks if they are running for more than specified duration.
+# older_than = "8 hours"
+
+#     # Defines required tags on each instance.
+#     [[sagemaker.required_tags]]
+#     name = "Name"
+#     pattern = '^sagemaker-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+#     [[sagemaker.required_tags]]
+#     name = "Owner:Name"
+
+#     [[sagemaker.required_tags]]
+#     name = "Owner:Email"
+#     pattern = '^(.*)@(.*).com$'
+
+#     [[sagemaker.required_tags]]
+#     name = "Purpose"
+
+#     [[sagemaker.required_tags]]
+#     name = "Environment"
+
+# [es]
+# # Specifies whether ElasticSearch enforcement is enabled or not.
+# enabled = true
+# # State to enforce, if any of the following conditions are not met. Possible
+# # states are: 'Stopped' and 'Deleted'.
+# # Note: Elastic Search Service does not support stopping.
+# target_state = "Deleted"
+# # Defines which instance types are allowed, empty means allow any types
+# allowed_instance_types = []
+# # The following resources will be ignore from rule enforcement. Specify the
+# # ES Cluster IDs.
+# ignore = []
+
+#     # Defines required tags on each cluster.
+#     [[es.required_tags]]
+#     name = "Name"
+#     pattern = '^es-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+#     [[es.required_tags]]
+#     name = "Owner:Name"
+
+#     [[es.required_tags]]
+#     name = "Owner:Email"
+#     pattern = '^(.*)@(.*).com$'
+
+#     [[es.required_tags]]
+#     name = "Purpose"
+
+#     [[es.required_tags]]
+#     name = "Environment"
+
+#     # Identify any ES cluster that appear to be idle based on the following
+#     # rules.
+#     [[es.idle_rules]]
+#     namespace = "AWS/ES"
+#     metric = "CPUUtilization"
+#     minimum = 5
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     [[es.idle_rules]]
+#     namespace = "AWS/ES"
+#     metric = "ElasticsearchRequests"
+#     minimum = 1
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+# [ecs]
+# enabled = true
+# target_state = "Deleted"
+# allowed_instance_types = []
+# ignore = []
+
+#     # Defines required tags on each cluster.
+#     [[ecs.required_tags]]
+#     name = "Name"
+#     pattern = '^ecs-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+#     [[ecs.required_tags]]
+#     name = "Owner:Name"
+
+#     [[ecs.required_tags]]
+#     name = "Owner:Email"
+#     pattern = '^(.*)@(.*).com$'
+
+#     [[ecs.required_tags]]
+#     name = "Purpose"
+
+#     [[ecs.required_tags]]
+#     name = "Environment"
+
+#     # Identify any ECS cluster that appear to be idle based on the following
+#     # rules.
+#     [[ecs.idle_rules]]
+#     namespace = "AWS/ECS"
+#     metric = "CPUReservation"
+#     minimum = 5
+#     duration = "1 day"
+#     granularity = "1 hour"
+
+#     [[ecs.idle_rules]]
+#     namespace = "AWS/ECS"
+#     metric = "MemoryReservation"
+#     minimum = 1
+#     duration = "1 day"
+#     granularity = "1 hour"

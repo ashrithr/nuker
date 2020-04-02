@@ -9,7 +9,6 @@ use petgraph::{
     EdgeType, Graph,
 };
 use std::collections::HashMap;
-use tracing::trace;
 
 #[derive(Debug, Copy, Clone)]
 pub enum Relation {
@@ -38,50 +37,15 @@ impl Dag {
         }
     }
 
-    /// Builds a DAG from provided resources
-    pub fn build_graph(&mut self, resources: &[Resource]) -> Result<()> {
-        let root_node = self.graph.add_node(Resource::default());
-
-        for resource in resources {
-            let r_index = if self.id_map.contains_key(&resource.id) {
-                *self.id_map.get(&resource.id).unwrap()
-            } else {
-                let rid = self.graph.add_node(resource.clone());
-                self.id_map.insert(resource.id.clone(), rid);
-                rid
-            };
-            self.graph.add_edge(root_node, r_index, Relation::Root);
-
-            if let Some(dependencies) = resource.dependencies.as_ref() {
-                for dep in dependencies {
-                    let dep_index = if self.id_map.contains_key(&dep.id) {
-                        *self.id_map.get(&dep.id).unwrap()
-                    } else {
-                        let rid = self.graph.add_node(dep.clone());
-                        self.id_map.insert(dep.id.clone(), rid);
-                        self.graph.add_edge(root_node, rid, Relation::Root);
-                        rid
-                    };
-
-                    self.graph.add_edge(dep_index, r_index, Relation::Depends);
-                }
-            }
-        }
-
-        if !is_dag(&self.graph) {
-            return Err(Error::Dag(
-                "Failed constructing dependency graph for the resources".to_string(),
-            ));
-        }
-
+    pub fn get_dot(&self) -> Option<String> {
         if self.graph.capacity().0 > 1 {
-            trace!(
+            Some(format!(
                 "{:?}",
                 Dot::with_config(&self.graph, &[Config::EdgeIndexLabel])
-            );
+            ))
+        } else {
+            None
         }
-
-        Ok(())
     }
 
     /// Add a given Resource to the DAG
@@ -148,7 +112,7 @@ impl Dag {
 }
 
 /// Checks if provided Graph is a DAG or not
-fn is_dag<'a, N: 'a, E: 'a, Ty, Ix>(g: &'a Graph<N, E, Ty, Ix>) -> bool
+pub fn is_dag<'a, N: 'a, E: 'a, Ty, Ix>(g: &'a Graph<N, E, Ty, Ix>) -> bool
 where
     Ty: EdgeType,
     Ix: petgraph::graph::IndexType,

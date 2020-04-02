@@ -1,4 +1,4 @@
-use crate::{client::*, config::TargetState, service::*, StdError, StdResult};
+use crate::{client::*, config::TargetState, StdError, StdResult};
 use colored::*;
 use rusoto_core::Region;
 use std::fmt;
@@ -12,8 +12,8 @@ pub enum ResourceType {
     Ec2Sg,
     EbsVolume,
     EbsSnapshot,
-    RDS,
-    Aurora,
+    RdsInstance,
+    RdsCluster,
     S3Bucket,
     Redshift,
     EmrCluster,
@@ -39,13 +39,13 @@ pub enum ResourceType {
 impl ResourceType {
     pub fn name(&self) -> &str {
         match *self {
-            ResourceType::Ec2Instance
-            | ResourceType::Ec2Interface
-            | ResourceType::Ec2Address
-            | ResourceType::Ec2Sg => EC2_TYPE,
+            ResourceType::Ec2Instance => EC2_INSTANCE_TYPE,
+            ResourceType::Ec2Interface => EC2_ENI_TYPE,
+            ResourceType::Ec2Address => EC2_ADDRESS_TYPE,
+            ResourceType::Ec2Sg => EC2_INSTANCE_TYPE,
             ResourceType::EbsVolume | ResourceType::EbsSnapshot => EBS_TYPE,
-            ResourceType::RDS => RDS_TYPE,
-            ResourceType::Aurora => AURORA_TYPE,
+            ResourceType::RdsInstance => RDS_TYPE,
+            ResourceType::RdsCluster => AURORA_TYPE,
             ResourceType::S3Bucket => S3_TYPE,
             ResourceType::Redshift => REDSHIFT_TYPE,
             ResourceType::EmrCluster => EMR_TYPE,
@@ -123,14 +123,14 @@ impl ResourceType {
 
     pub fn is_rds(&self) -> bool {
         match *self {
-            ResourceType::RDS => true,
+            ResourceType::RdsInstance => true,
             _ => false,
         }
     }
 
     pub fn is_aurora(&self) -> bool {
         match *self {
-            ResourceType::Aurora => true,
+            ResourceType::RdsCluster => true,
             _ => false,
         }
     }
@@ -348,6 +348,10 @@ impl fmt::Display for Resource {
             self.type_.name(),
             self.id.bold()
         )?;
+
+        if self.arn.is_some() {
+            write!(f, " ({})", self.arn.as_ref().unwrap())?;
+        }
 
         if self.tags.is_some() && !self.tags.as_ref().unwrap().is_empty() {
             write!(f, " - {{")?;

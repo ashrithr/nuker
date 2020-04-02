@@ -34,16 +34,16 @@ pub fn compare_tags(tags: Option<Vec<NTag>>, required_tags: &Vec<RequiredTags>) 
                         "Required tag pattern does not match: {:?}",
                         tags_map.get(&rt.name)
                     );
-                    return false;
+                    return true;
                 }
             }
         } else {
             debug!("Required tag ({}) is missing", rt.name);
-            return false;
+            return true;
         }
     }
 
-    true
+    false
 }
 
 /// Compares a given date to a specified duration to check if the date is older
@@ -98,4 +98,8 @@ pub fn is_ts_older_than(date: &str, older_than: &Duration) -> bool {
     } else {
         false
     }
+}
+
+pub fn print_type_of<T>(_: &T) -> String {
+    format!("{}", std::any::type_name::<T>())
 }

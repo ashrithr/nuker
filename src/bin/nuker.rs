@@ -12,7 +12,7 @@ async fn main() -> Result<(), failure::Error> {
         message = "Nuker is starting",
         version = args.version.as_str()
     );
-    trace!("{:?}", config);
+    trace!("{:#?}", config);
 
     let mut nuker = nuker::Nuker::new(config, args);
 

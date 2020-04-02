@@ -17,7 +17,7 @@ macro_rules! handle_future_with_return {
     ($request:expr) => {
         match $request.await.map_err(|err| $crate::Error::from(err)) {
             Ok(result) => {
-                tracing::trace!("Successfully executed request");
+                tracing::trace!(result = crate::print_type_of(&result).as_str(), "Successfully executed request");
                 Ok(result)
             }
             Err(err) => {

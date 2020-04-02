@@ -1,3 +1,5 @@
+// #![feature(const_fn)]
+
 mod aws;
 mod config;
 mod error;
@@ -8,7 +10,6 @@ mod client;
 mod event;
 mod nuke;
 mod resource;
-mod service;
 mod util;
 
 pub use aws::CwClient;
@@ -20,7 +21,7 @@ pub use macros::*;
 pub use nuke::Nuker;
 use std::error::Error as StdError;
 use std::result::Result as StdResult;
-use tokio::sync::mpsc::Receiver as NReceiver;
 use tokio::sync::mpsc::Sender as NSender;
+pub use util::print_type_of;
 
 pub type Result<T> = StdResult<T, Error>;

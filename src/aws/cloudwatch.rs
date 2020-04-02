@@ -66,8 +66,8 @@ impl CwClient {
             ResourceType::EbsVolume | ResourceType::EbsSnapshot => &self.ebs_idle_rules,
             ResourceType::ElbAlb => &self.elb_alb_idle_rules,
             ResourceType::ElbNlb => &self.elb_nlb_idle_rules,
-            ResourceType::RDS => &self.rds_idle_rules,
-            ResourceType::Aurora => &self.aurora_idle_rules,
+            ResourceType::RdsInstance => &self.rds_idle_rules,
+            ResourceType::RdsCluster => &self.aurora_idle_rules,
             ResourceType::Redshift => &self.redshift_idle_rules,
             ResourceType::EmrCluster => &self.emr_idle_rules,
             ResourceType::EsDomain => &self.es_idle_rules,
@@ -130,45 +130,49 @@ impl CwClient {
     }
 
     pub async fn filter_db_instance(&self, instance_name: &str) -> bool {
-        self.filter_resource(instance_name, "DBInstanceIdentifier", ResourceType::RDS)
-            .await
+        self.filter_resource(
+            instance_name,
+            "DBInstanceIdentifier",
+            ResourceType::RdsInstance,
+        )
+        .await
     }
 
     pub async fn filter_db_cluster(&self, cluster_identifier: &str) -> bool {
         self.filter_resource(
             cluster_identifier,
             "DBClusterIdentifier",
-            ResourceType::Aurora,
+            ResourceType::RdsCluster,
         )
         .await
     }
 
-    pub async fn filter_rs_cluster(&self, cluster_id: &String) -> bool {
+    pub async fn filter_rs_cluster(&self, cluster_id: &str) -> bool {
         self.filter_resource(cluster_id, "ClusterIdentifier", ResourceType::Redshift)
             .await
     }
 
-    pub async fn filter_es_domain(&self, domain_name: &String) -> bool {
+    pub async fn filter_es_domain(&self, domain_name: &str) -> bool {
         self.filter_resource(domain_name, "DomainName", ResourceType::EsDomain)
             .await
     }
 
-    pub async fn filter_alb_load_balancer(&self, lb_name: &String) -> bool {
+    pub async fn filter_alb_load_balancer(&self, lb_name: &str) -> bool {
         self.filter_resource(lb_name, "LoadBalancer", ResourceType::ElbAlb)
             .await
     }
 
-    pub async fn filter_nlb_load_balancer(&self, lb_name: &String) -> bool {
+    pub async fn filter_nlb_load_balancer(&self, lb_name: &str) -> bool {
         self.filter_resource(lb_name, "LoadBalancer", ResourceType::ElbNlb)
             .await
     }
 
-    pub async fn filter_ecs_cluster(&self, cluster_name: &String) -> bool {
+    pub async fn filter_ecs_cluster(&self, cluster_name: &str) -> bool {
         self.filter_resource(cluster_name, "ClusterName", ResourceType::EcsCluster)
             .await
     }
 
-    pub async fn filter_emr_cluster(&self, cluster_id: &String) -> bool {
+    pub async fn filter_emr_cluster(&self, cluster_id: &str) -> bool {
         // FIXME: make this code generic
         let mut result = false;
 
