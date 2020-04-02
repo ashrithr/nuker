@@ -216,8 +216,8 @@ impl NukerClient for Ec2Instance {
         None
     }
 
-    fn additional_filters(&self, _resource: &Resource, _config: &ResourceConfig) -> bool {
-        false
+    fn additional_filters(&self, _resource: &Resource, _config: &ResourceConfig) -> Option<bool> {
+        None
     }
 
     async fn stop(&self, resource: &Resource) -> Result<()> {

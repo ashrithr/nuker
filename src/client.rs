@@ -299,7 +299,7 @@ pub trait NukerClient: Send + Sync + DynClone {
     }
 
     /// Additional filters to apply that are not generic for all resource types
-    fn additional_filters(&self, resource: &Resource, config: &ResourceConfig) -> bool;
+    fn additional_filters(&self, resource: &Resource, config: &ResourceConfig) -> Option<bool>;
 
     /// Filters a provided resource by applying all the filters
     async fn filter_resource(
@@ -308,6 +308,8 @@ pub trait NukerClient: Send + Sync + DynClone {
         config: &ResourceConfig,
         cw_client: Arc<Box<CwClient>>,
     ) -> EnforcementState {
+        let additional_filters = self.additional_filters(resource, config);
+
         if self.filter_by_whitelist(resource, config) {
             // Skip a resource if its in the whitelist
             EnforcementState::SkipConfig
@@ -339,7 +341,7 @@ pub trait NukerClient: Send + Sync + DynClone {
             // Enforce Idle rules
             trace!(resource = resource.id.as_str(), "Resource is idle");
             EnforcementState::from_target_state(&config.target_state)
-        } else if self.additional_filters(resource, config) {
+        } else if additional_filters.is_some() && additional_filters.unwrap() {
             // Apply any additional filters that are implemented by
             // Resource clients.
             trace!(

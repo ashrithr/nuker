@@ -216,7 +216,7 @@ impl NukerClient for RdsInstanceClient {
         self.delete_instance(resource).await
     }
 
-    fn additional_filters(&self, _resource: &Resource, _config: &ResourceConfig) -> bool {
-        false
+    fn additional_filters(&self, _resource: &Resource, _config: &ResourceConfig) -> Option<bool> {
+        None
     }
 }

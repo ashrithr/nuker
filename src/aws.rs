@@ -1,5 +1,6 @@
 mod cloudwatch;
 mod ec2_instance;
+mod ec2_sg;
 mod rds_cluster;
 mod rds_instance;
 mod sts;
