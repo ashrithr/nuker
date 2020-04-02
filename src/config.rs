@@ -36,9 +36,9 @@ pub struct Config {
     #[serde(default = "default_resource_config")]
     pub elb: ResourceConfig,
     #[serde(default = "default_resource_config")]
-    pub rds: ResourceConfig,
+    pub rds_instance: ResourceConfig,
     #[serde(default = "default_resource_config")]
-    pub aurora: ResourceConfig,
+    pub rds_cluster: ResourceConfig,
     #[serde(default = "default_resource_config")]
     pub s3: ResourceConfig,
     #[serde(default = "default_resource_config")]
@@ -484,16 +484,16 @@ pub fn parse_config(buffer: &str) -> Config {
         manage_stopped.dt_extract_regex = compile_regex(r"^.*\((?P<datetime>.*)\)$");
     }
 
-    if config.rds.required_tags.is_some() {
-        for rt in config.rds.required_tags.as_mut().unwrap() {
+    if config.rds_instance.required_tags.is_some() {
+        for rt in config.rds_instance.required_tags.as_mut().unwrap() {
             if rt.pattern.is_some() {
                 rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
         }
     }
 
-    if config.aurora.required_tags.is_some() {
-        for rt in config.aurora.required_tags.as_mut().unwrap() {
+    if config.rds_cluster.required_tags.is_some() {
+        for rt in config.rds_cluster.required_tags.as_mut().unwrap() {
             if rt.pattern.is_some() {
                 rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }

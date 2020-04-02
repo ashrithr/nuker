@@ -44,8 +44,8 @@ impl ResourceType {
             ResourceType::Ec2Address => EC2_ADDRESS_TYPE,
             ResourceType::Ec2Sg => EC2_INSTANCE_TYPE,
             ResourceType::EbsVolume | ResourceType::EbsSnapshot => EBS_TYPE,
-            ResourceType::RdsInstance => RDS_TYPE,
-            ResourceType::RdsCluster => AURORA_TYPE,
+            ResourceType::RdsInstance => RDS_INSTANCE_TYPE,
+            ResourceType::RdsCluster => RDS_CLUSTER_TYPE,
             ResourceType::S3Bucket => S3_TYPE,
             ResourceType::Redshift => REDSHIFT_TYPE,
             ResourceType::EmrCluster => EMR_TYPE,
@@ -223,14 +223,16 @@ impl ResourceType {
 
 #[derive(Debug, Copy, Clone)]
 pub enum ResourceState {
-    Running,
-    Stopped,
-    Stopping,
-    ShuttingDown,
     Deleted,
     Failed,
-    Unknown,
     Pending,
+    Rebooting,
+    Running,
+    ShuttingDown,
+    Starting,
+    Stopped,
+    Stopping,
+    Unknown,
 }
 
 impl FromStr for ResourceState {
@@ -239,13 +241,15 @@ impl FromStr for ResourceState {
     fn from_str(s: &str) -> StdResult<ResourceState, ParseResourceStateError> {
         let v: &str = &s.to_lowercase();
         match v {
-            "running" => Ok(ResourceState::Running),
+            "pending" => Ok(ResourceState::Pending),
+            "rebooting" => Ok(ResourceState::Rebooting),
+            "running" | "available" => Ok(ResourceState::Running),
+            "shutting-down" => Ok(ResourceState::ShuttingDown),
+            "starting" => Ok(ResourceState::Starting),
             "stopped" => Ok(ResourceState::Stopped),
             "stopping" => Ok(ResourceState::Stopping),
-            "shutting-down" => Ok(ResourceState::ShuttingDown),
-            "terminated" => Ok(ResourceState::Deleted),
-            "pending" => Ok(ResourceState::Pending),
-            s => Err(ParseResourceStateError::new(s)),
+            "terminated" | "deleting" => Ok(ResourceState::Deleted),
+            _ => Ok(ResourceState::Unknown),
         }
     }
 }

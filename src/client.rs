@@ -21,8 +21,8 @@ pub const EC2_SG_TYPE: &str = "ec2_sg";
 pub const EC2_ENI_TYPE: &str = "ec2_eni";
 pub const EC2_ADDRESS_TYPE: &str = "ec2_address";
 pub const EBS_TYPE: &str = "ebs";
-pub const RDS_TYPE: &str = "rds";
-pub const AURORA_TYPE: &str = "rds_aurora";
+pub const RDS_INSTANCE_TYPE: &str = "rds";
+pub const RDS_CLUSTER_TYPE: &str = "rds_aurora";
 pub const S3_TYPE: &str = "s3";
 pub const EMR_TYPE: &str = "emr";
 pub const GLUE_TYPE: &str = "glue";
@@ -36,7 +36,6 @@ pub const VPC_TYPE: &str = "vpc";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Client {
-    Aurora,
     Ebs,
     Ec2Instance,
     Ec2Sg,
@@ -46,7 +45,8 @@ pub enum Client {
     Emr,
     Es,
     Glue,
-    Rds,
+    RdsInstance,
+    RdsCluster,
     Redshift,
     S3,
     Sagemaker,
@@ -83,7 +83,7 @@ impl FromStr for Client {
     fn from_str(s: &str) -> StdResult<Client, ParseClientError> {
         let v: &str = &s.to_lowercase();
         match v {
-            AURORA_TYPE => Ok(Client::Aurora),
+            RDS_CLUSTER_TYPE => Ok(Client::RdsCluster),
             EBS_TYPE => Ok(Client::Ebs),
             EC2_INSTANCE_TYPE => Ok(Client::Ec2Instance),
             EC2_SG_TYPE => Ok(Client::Ec2Sg),
@@ -93,7 +93,7 @@ impl FromStr for Client {
             EMR_TYPE => Ok(Client::Emr),
             ES_TYPE => Ok(Client::Es),
             GLUE_TYPE => Ok(Client::Glue),
-            RDS_TYPE => Ok(Client::Rds),
+            RDS_INSTANCE_TYPE => Ok(Client::RdsInstance),
             REDSHIFT_TYPE => Ok(Client::Redshift),
             S3_TYPE => Ok(Client::S3),
             SAGEMAKER_TYPE => Ok(Client::Sagemaker),
@@ -108,7 +108,7 @@ impl FromStr for Client {
 impl Client {
     pub fn name(&self) -> &str {
         match *self {
-            Client::Aurora => AURORA_TYPE,
+            Client::RdsCluster => RDS_CLUSTER_TYPE,
             Client::Ebs => EBS_TYPE,
             Client::Ec2Instance => EC2_INSTANCE_TYPE,
             Client::Ec2Sg => EC2_SG_TYPE,
@@ -118,7 +118,7 @@ impl Client {
             Client::Emr => EMR_TYPE,
             Client::Es => ES_TYPE,
             Client::Glue => GLUE_TYPE,
-            Client::Rds => RDS_TYPE,
+            Client::RdsInstance => RDS_INSTANCE_TYPE,
             Client::Redshift => REDSHIFT_TYPE,
             Client::S3 => S3_TYPE,
             Client::Sagemaker => SAGEMAKER_TYPE,
@@ -130,7 +130,7 @@ impl Client {
 
     pub fn iter() -> impl Iterator<Item = Client> {
         [
-            Client::Aurora,
+            Client::RdsCluster,
             Client::Ebs,
             Client::Ec2Instance,
             Client::Ec2Sg,
@@ -140,7 +140,7 @@ impl Client {
             Client::Emr,
             Client::Es,
             Client::Glue,
-            Client::Rds,
+            Client::RdsInstance,
             Client::Redshift,
             Client::S3,
             Client::Sagemaker,

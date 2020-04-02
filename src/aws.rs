@@ -1,26 +1,13 @@
-// mod asg;
-// mod aurora;
 mod cloudwatch;
-// mod ebs;
-// mod ec2;
-// mod ecs;
-// mod elb;
-// mod emr;
-// mod es;
-// mod glue;
-// mod rds;
-// mod redshift;
-// mod s3;
-// mod sagemaker;
-mod sts;
-// mod vpc;
 mod ec2_instance;
+mod rds_instance;
+mod sts;
 
 pub use cloudwatch::CwClient;
 
 use crate::Event;
 use crate::{
-    aws::{ec2_instance::Ec2Instance, sts::StsService},
+    aws::{ec2_instance::Ec2Instance, rds_instance::RdsInstanceClient, sts::StsService},
     client::Client,
     client::NukerClient,
     config::Config,
@@ -58,7 +45,7 @@ impl AwsNuker {
         profile: Option<String>,
         region: Region,
         mut config: Config,
-        excluded_services: Vec<Client>,
+        excluded_clients: Vec<Client>,
         dry_run: bool,
     ) -> Result<AwsNuker> {
         let client = RClient::new_with(credentials_provider(&profile)?, HttpClient::new()?);
@@ -72,16 +59,33 @@ impl AwsNuker {
             client,
         };
 
-        for service in Client::iter() {
-            if !excluded_services.contains(&service) {
-                clients.insert(
-                    Client::Ec2Instance,
-                    Box::new(Ec2Instance::new(
-                        &client_details,
-                        &config.ec2_instance,
-                        dry_run,
-                    )),
-                );
+        for client in Client::iter() {
+            match client {
+                Client::Ec2Instance => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::Ec2Instance,
+                            Box::new(Ec2Instance::new(
+                                &client_details,
+                                &config.ec2_instance,
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::RdsInstance => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::RdsInstance,
+                            Box::new(RdsInstanceClient::new(
+                                &client_details,
+                                &config.rds_instance,
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -108,7 +112,8 @@ impl AwsNuker {
             let cw_client = self.cw_client.clone();
 
             match client_type {
-                Client::Ec2Instance | Client::Ec2Sg | Client::Ec2Eni | Client::Ec2Address => {
+                Client::Ec2Instance => {
+                    // TODO: convert config to a hashmap so that client specific config can be retrieved without this loop
                     let config = self.config.ec2_instance.clone();
 
                     handles.push(tokio::spawn(async move {
@@ -118,7 +123,17 @@ impl AwsNuker {
                             .await
                     }));
                 }
-                _ => {}
+                Client::RdsInstance => {
+                    let config = self.config.rds_instance.clone();
+
+                    handles.push(tokio::spawn(async move {
+                        client
+                            .publish(tx, client_type, config, cw_client)
+                            .instrument(trace_span!("rds"))
+                            .await
+                    }));
+                }
+                _ => {} // TODO: remove this
             }
         }
 
@@ -212,8 +227,8 @@ fn create_cw_client(
         ebs_idle_rules: std::mem::replace(&mut config.ebs.idle_rules, None),
         elb_alb_idle_rules: std::mem::replace(&mut config.elb.idle_rules, None),
         elb_nlb_idle_rules: std::mem::replace(&mut config.elb.idle_rules, None),
-        rds_idle_rules: std::mem::replace(&mut config.rds.idle_rules, None),
-        aurora_idle_rules: std::mem::replace(&mut config.aurora.idle_rules, None),
+        rds_idle_rules: std::mem::replace(&mut config.rds_instance.idle_rules, None),
+        aurora_idle_rules: std::mem::replace(&mut config.rds_cluster.idle_rules, None),
         redshift_idle_rules: std::mem::replace(&mut config.redshift.idle_rules, None),
         emr_idle_rules: std::mem::replace(&mut config.emr.idle_rules, None),
         es_idle_rules: std::mem::replace(&mut config.es.idle_rules, None),
