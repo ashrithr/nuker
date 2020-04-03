@@ -1,7 +1,7 @@
 use crate::aws::ClientDetails;
 use crate::client::{ClientType, NukerClient};
 use crate::config::ResourceConfig;
-use crate::resource::{EnforcementState, NTag, Resource, ResourceState};
+use crate::resource::{EnforcementState, NTag, Resource};
 use crate::Result;
 use crate::{handle_future, handle_future_with_return};
 use async_trait::async_trait;
@@ -9,7 +9,6 @@ use rusoto_core::Region;
 use rusoto_ec2::{
     DeleteSecurityGroupRequest, DescribeSecurityGroupsRequest, Ec2, Ec2Client, SecurityGroup, Tag,
 };
-use std::str::FromStr;
 use tracing::{debug, trace};
 
 #[derive(Clone)]

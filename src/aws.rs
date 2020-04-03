@@ -10,8 +10,8 @@ pub use cloudwatch::CwClient;
 use crate::Event;
 use crate::{
     aws::{
-        ec2_instance::Ec2Instance, rds_cluster::RdsClusterClient, rds_instance::RdsInstanceClient,
-        sts::StsService,
+        ec2_instance::Ec2Instance, ec2_sg::Ec2SgClient, rds_cluster::RdsClusterClient,
+        rds_instance::RdsInstanceClient, sts::StsService,
     },
     client::Client,
     client::NukerClient,
@@ -71,6 +71,18 @@ impl AwsNuker {
                         clients.insert(
                             Client::Ec2Instance,
                             Box::new(Ec2Instance::new(
+                                &client_details,
+                                &config.get(&client).unwrap(),
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::Ec2Sg => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::Ec2Sg,
+                            Box::new(Ec2SgClient::new(
                                 &client_details,
                                 &config.get(&client).unwrap(),
                                 dry_run,

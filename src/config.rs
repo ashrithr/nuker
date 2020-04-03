@@ -535,6 +535,7 @@ pub fn parse_config(buffer: &str) -> Config {
     // }
 
     config_map.insert(Client::Ec2Instance, config.ec2_instance);
+    config_map.insert(Client::Ec2Sg, config.ec2_sg);
     config_map.insert(Client::RdsInstance, config.rds_instance);
     config_map.insert(Client::RdsCluster, config.rds_cluster);
 
