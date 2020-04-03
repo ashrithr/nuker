@@ -9,6 +9,7 @@ use rusoto_core::Region;
 use rusoto_ec2::{
     DeleteSecurityGroupRequest, DescribeSecurityGroupsRequest, Ec2, Ec2Client, SecurityGroup, Tag,
 };
+use std::collections::{HashMap, HashSet};
 use tracing::{debug, trace};
 
 #[derive(Clone)]
@@ -92,6 +93,7 @@ impl Ec2SgClient {
         Ok(sgs)
     }
 
+    // TODO: handle self referencing rule - remove it
     async fn delete_sg(&self, resource: &Resource) -> Result<()> {
         debug!(resource = resource.id.as_str(), "Deleting.");
 
@@ -121,6 +123,35 @@ impl Ec2SgClient {
     }
 
     async fn get_dependencies(&self, resource: &Resource) -> Result<Vec<Resource>> {
+        let mut dependencies: Vec<Resource> = Vec::new();
+        let mut deps_map: HashMap<String, HashSet<String>> = HashMap::new();
+        let rid = resource.id.clone();
+
+        // Find all the dependent security groups
+        if let Some(mut sgs) = self.get_sgs().await.ok() {
+            for sg in &mut sgs {
+                let group_name = sg.group_name.take().unwrap();
+                let group_id = sg.group_id.take().unwrap();
+
+                if !deps_map.contains_key(&group_id) {
+                    deps_map.insert(group_id.clone(), HashSet::new());
+                }
+
+                for rule in sg.ip_permissions.take().unwrap() {
+                    if let Some(grants) = rule.user_id_group_pairs {
+                        for grant in grants {
+                            if let Some(gid) = grant.group_id {
+                                if !deps_map.contains_key(&gid) {
+                                    deps_map.insert(gid.clone(), HashSet::default());
+                                }
+                                deps_map.get_mut(&gid).unwrap().insert(group_id.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         unimplemented!()
     }
 }
