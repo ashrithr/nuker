@@ -298,7 +298,11 @@ impl NukerClient for RdsClusterClient {
         self.delete_cluster(resource).await
     }
 
-    fn additional_filters(&self, _resource: &Resource, _config: &ResourceConfig) -> Option<bool> {
+    async fn additional_filters(
+        &self,
+        _resource: &Resource,
+        _config: &ResourceConfig,
+    ) -> Option<bool> {
         None
     }
 }
