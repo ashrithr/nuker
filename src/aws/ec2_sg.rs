@@ -140,16 +140,8 @@ impl Ec2SgClient {
 
                                     let req = self.client.revoke_security_group_ingress(
                                         RevokeSecurityGroupIngressRequest {
-                                            from_port: ip_permission.from_port,
                                             group_id: sg.group_id.take(),
-                                            ip_protocol: ip_permission.ip_protocol.take(),
-                                            source_security_group_name: user_id_group_pair
-                                                .group_id
-                                                .take(),
-                                            source_security_group_owner_id: user_id_group_pair
-                                                .user_id
-                                                .take(),
-                                            to_port: ip_permission.to_port,
+                                            ip_permissions: Some(vec![ip_permission.clone()]),
                                             ..Default::default()
                                         },
                                     );
@@ -202,30 +194,41 @@ impl Ec2SgClient {
     // }
 
     async fn open_sg(&self, resource: &Resource) -> bool {
-        let filters = Some(vec![
-            Filter {
-                name: Some("ip-permission.cidr".to_string()),
-                values: Some(vec!["0.0.0.0/0".to_string(), "::/0".to_string()]),
-            },
-            Filter {
-                name: Some("ip-permission.from-port".to_string()),
-                values: Some(vec!["0".to_string()]),
-            },
-            Filter {
-                name: Some("ip-permission.to-port".to_string()),
-                values: Some(vec!["65535".to_string()]),
-            },
-            Filter {
-                name: Some("ip-permission.protocol".to_string()),
-                values: Some(vec!["-1".to_string()]),
-            },
-        ]);
+        // let filters = Some(vec![
+        //     Filter {
+        //         name: Some("ip-permission.cidr".to_string()),
+        //         values: Some(vec!["0.0.0.0/0".to_string(), "::/0".to_string()]),
+        //     },
+        //     Filter {
+        //         name: Some("ip-permission.from-port".to_string()),
+        //         values: Some(vec!["0".to_string()]),
+        //     },
+        //     Filter {
+        //         name: Some("ip-permission.to-port".to_string()),
+        //         values: Some(vec!["65535".to_string()]),
+        //     },
+        //     Filter {
+        //         name: Some("ip-permission.protocol".to_string()),
+        //         values: Some(vec!["-1".to_string()]),
+        //     },
+        // ]);
 
-        if let Ok(sgs) = self.get_sgs(filters).await {
-            println!("{:?}", sgs);
-            return sgs
-                .iter()
-                .any(|sg| sg.group_id.as_ref() == Some(&resource.id));
+        // if let Ok(sgs) = self.get_sgs(filters).await {
+        //     return sgs
+        //         .iter()
+        //         .any(|sg| sg.group_id.as_ref() == Some(&resource.id));
+        // }
+
+        if let Ok(mut sgs) = self
+            .get_sgs(Some(vec![Filter {
+                name: Some("group-id".to_string()),
+                values: Some(vec![resource.id.clone()]),
+            }]))
+            .await
+        {
+            if let Some(mut sg) = sgs.pop() {
+                if let Some(ip_permissions) = sg.ip_permissions {}
+            }
         }
 
         false
@@ -253,8 +256,8 @@ impl NukerClient for Ec2SgClient {
         Some(self.open_sg(resource).await)
     }
 
-    async fn stop(&self, resource: &Resource) -> Result<()> {
-        self.delete_sg(resource).await
+    async fn stop(&self, _resource: &Resource) -> Result<()> {
+        Ok(())
     }
 
     async fn delete(&self, resource: &Resource) -> Result<()> {

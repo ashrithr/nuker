@@ -252,7 +252,7 @@ pub trait NukerClient: Send + Sync + DynClone {
         false
     }
 
-    /// Filters a resource that are not running
+    /// Filters a resource that is not running
     fn filter_by_state(&self, resource: &Resource) -> bool {
         if let Some(ref state) = resource.state {
             match state {

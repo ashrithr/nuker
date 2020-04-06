@@ -27,7 +27,7 @@ impl FromStr for ResourceState {
         match v {
             "pending" => Ok(ResourceState::Pending),
             "rebooting" => Ok(ResourceState::Rebooting),
-            "running" | "available" => Ok(ResourceState::Running),
+            "running" | "available" | "in-use" | "associated" => Ok(ResourceState::Running),
             "shutting-down" => Ok(ResourceState::ShuttingDown),
             "starting" => Ok(ResourceState::Starting),
             "stopped" => Ok(ResourceState::Stopped),

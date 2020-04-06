@@ -61,12 +61,16 @@ impl Ec2Instance {
                 type_: ClientType::Ec2Instance,
                 region: self.region.clone(),
                 tags: self.package_tags(instance.tags.take()),
-                state: Some(
-                    ResourceState::from_str(
-                        instance.state.as_ref().unwrap().name.as_deref().unwrap(),
-                    )
-                    .unwrap(),
-                ),
+                state: ResourceState::from_str(
+                    instance
+                        .state
+                        .as_ref()
+                        .unwrap()
+                        .name
+                        .as_deref()
+                        .unwrap_or_default(),
+                )
+                .ok(),
                 start_time: instance.launch_time.take(),
                 enforcement_state: EnforcementState::SkipUnknownState,
                 resource_type: instance.instance_type.take().map(|t| vec![t]),

@@ -1,4 +1,5 @@
 mod cloudwatch;
+mod ec2_eni;
 mod ec2_instance;
 mod ec2_sg;
 mod rds_cluster;
@@ -10,8 +11,8 @@ pub use cloudwatch::CwClient;
 use crate::Event;
 use crate::{
     aws::{
-        ec2_instance::Ec2Instance, ec2_sg::Ec2SgClient, rds_cluster::RdsClusterClient,
-        rds_instance::RdsInstanceClient, sts::StsService,
+        ec2_eni::Ec2EniClient, ec2_instance::Ec2Instance, ec2_sg::Ec2SgClient,
+        rds_cluster::RdsClusterClient, rds_instance::RdsInstanceClient, sts::StsService,
     },
     client::Client,
     client::NukerClient,
@@ -66,10 +67,9 @@ impl AwsNuker {
         for client in Client::iter() {
             match client {
                 Client::Ec2Instance => {
-                    // TODO: Need a macro for this
                     if !excluded_clients.contains(&client) {
                         clients.insert(
-                            Client::Ec2Instance,
+                            client,
                             Box::new(Ec2Instance::new(
                                 &client_details,
                                 &config.get(&client).unwrap(),
@@ -83,6 +83,18 @@ impl AwsNuker {
                         clients.insert(
                             Client::Ec2Sg,
                             Box::new(Ec2SgClient::new(
+                                &client_details,
+                                &config.get(&client).unwrap(),
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::Ec2Eni => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::Ec2Eni,
+                            Box::new(Ec2EniClient::new(
                                 &client_details,
                                 &config.get(&client).unwrap(),
                                 dry_run,
@@ -206,7 +218,7 @@ impl AwsNuker {
     }
 }
 
-pub fn credentials_provider(profile: &Option<String>) -> Result<ChainProvider> {
+fn credentials_provider(profile: &Option<String>) -> Result<ChainProvider> {
     let profile_provider = match profile {
         Some(profile) => {
             let mut p = ProfileProvider::new()?;
