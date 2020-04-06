@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use rusoto_core::Region;
 use rusoto_ec2::{
     DeleteNetworkInterfaceRequest, DescribeNetworkInterfaceAttributeRequest,
-    DescribeNetworkInterfacesRequest, DetachNetworkInterfaceRequest, Ec2, Ec2Client, Filter,
+    DescribeNetworkInterfacesRequest, DetachNetworkInterfaceRequest, Ec2, Ec2Client,
     NetworkInterface, Tag,
 };
 use std::str::FromStr;
@@ -159,8 +159,8 @@ impl Ec2EniClient {
 impl NukerClient for Ec2EniClient {
     async fn scan(&self) -> Result<Vec<Resource>> {
         trace!("Initialized EC2 ENI resource scanner");
-        let sgs = self.get_enis().await?;
-        Ok(self.package_resources(sgs).await?)
+        let enis = self.get_enis().await?;
+        Ok(self.package_resources(enis).await?)
     }
 
     async fn dependencies(&self, _resource: &Resource) -> Option<Vec<Resource>> {
@@ -169,10 +169,17 @@ impl NukerClient for Ec2EniClient {
 
     async fn additional_filters(
         &self,
-        _resource: &Resource,
+        resource: &Resource,
         _config: &ResourceConfig,
     ) -> Option<bool> {
-        None
+        if let Some(state) = resource.state {
+            match state {
+                ResourceState::Available => return Some(true),
+                _ => return Some(false),
+            }
+        }
+
+        Some(false)
     }
 
     async fn stop(&self, _resource: &Resource) -> Result<()> {

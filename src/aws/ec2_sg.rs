@@ -10,7 +10,6 @@ use rusoto_ec2::{
     DeleteSecurityGroupRequest, DescribeSecurityGroupsRequest, Ec2, Ec2Client, Filter,
     RevokeSecurityGroupIngressRequest, SecurityGroup, Tag,
 };
-use std::collections::{HashMap, HashSet};
 use tracing::{debug, trace};
 
 #[derive(Clone)]
@@ -194,31 +193,6 @@ impl Ec2SgClient {
     // }
 
     async fn open_sg(&self, resource: &Resource) -> bool {
-        // let filters = Some(vec![
-        //     Filter {
-        //         name: Some("ip-permission.cidr".to_string()),
-        //         values: Some(vec!["0.0.0.0/0".to_string(), "::/0".to_string()]),
-        //     },
-        //     Filter {
-        //         name: Some("ip-permission.from-port".to_string()),
-        //         values: Some(vec!["0".to_string()]),
-        //     },
-        //     Filter {
-        //         name: Some("ip-permission.to-port".to_string()),
-        //         values: Some(vec!["65535".to_string()]),
-        //     },
-        //     Filter {
-        //         name: Some("ip-permission.protocol".to_string()),
-        //         values: Some(vec!["-1".to_string()]),
-        //     },
-        // ]);
-
-        // if let Ok(sgs) = self.get_sgs(filters).await {
-        //     return sgs
-        //         .iter()
-        //         .any(|sg| sg.group_id.as_ref() == Some(&resource.id));
-        // }
-
         if let Ok(mut sgs) = self
             .get_sgs(Some(vec![Filter {
                 name: Some("group-id".to_string()),
@@ -226,8 +200,28 @@ impl Ec2SgClient {
             }]))
             .await
         {
-            if let Some(mut sg) = sgs.pop() {
-                if let Some(ip_permissions) = sg.ip_permissions {}
+            if let Some(sg) = sgs.pop() {
+                if let Some(ip_permissions) = sg.ip_permissions {
+                    for ip_permission in ip_permissions {
+                        if let Some(ip_ranges) = ip_permission.ip_ranges {
+                            for ip_range in ip_ranges {
+                                if ip_range.cidr_ip == Some("0.0.0.0/0".to_string())
+                                    || ip_range.cidr_ip == Some("::/0".to_string())
+                                {
+                                    if ip_permission.ip_protocol == Some("-1".to_string()) {
+                                        return true;
+                                    } else if ip_permission.from_port == Some(0 as i64)
+                                        && ip_permission.to_port == Some(65535 as i64)
+                                    {
+                                        return true;
+                                    } else {
+                                        return false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -243,7 +237,7 @@ impl NukerClient for Ec2SgClient {
         Ok(self.package_resources(sgs).await?)
     }
 
-    async fn dependencies(&self, resource: &Resource) -> Option<Vec<Resource>> {
+    async fn dependencies(&self, _resource: &Resource) -> Option<Vec<Resource>> {
         // self.get_dependencies(resource).await.ok()
         None
     }

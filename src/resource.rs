@@ -3,10 +3,11 @@ use colored::*;
 use rusoto_core::Region;
 use std::fmt;
 use std::str::FromStr;
-use tracing::trace;
+use tracing::warn;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ResourceState {
+    Available,
     Deleted,
     Failed,
     Pending,
@@ -25,16 +26,17 @@ impl FromStr for ResourceState {
     fn from_str(s: &str) -> StdResult<ResourceState, ()> {
         let v: &str = &s.to_lowercase();
         match v {
+            "available" => Ok(ResourceState::Available),
             "pending" => Ok(ResourceState::Pending),
             "rebooting" => Ok(ResourceState::Rebooting),
-            "running" | "available" | "in-use" | "associated" => Ok(ResourceState::Running),
+            "running" | "in-use" | "associated" | "completed" => Ok(ResourceState::Running),
             "shutting-down" => Ok(ResourceState::ShuttingDown),
             "starting" => Ok(ResourceState::Starting),
             "stopped" => Ok(ResourceState::Stopped),
             "stopping" => Ok(ResourceState::Stopping),
             "terminated" | "deleting" => Ok(ResourceState::Deleted),
             s => {
-                trace!("Failed parsing the resource-state: '{}'", s);
+                warn!("Failed parsing the resource-state: '{}'", s);
                 Ok(ResourceState::Unknown)
             }
         }

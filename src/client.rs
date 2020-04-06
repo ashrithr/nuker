@@ -14,13 +14,14 @@ use std::{
     str::FromStr,
     sync::Arc,
 };
-use tracing::{error, trace};
+use tracing::{debug, error, trace};
 
 pub const EC2_INSTANCE_TYPE: &str = "ec2_instance";
 pub const EC2_SG_TYPE: &str = "ec2_sg";
 pub const EC2_ENI_TYPE: &str = "ec2_eni";
 pub const EC2_ADDRESS_TYPE: &str = "ec2_address";
 pub const EBS_VOL_TYPE: &str = "ebs_volume";
+pub const EBS_SNAP_TYPE: &str = "ebs_snapshot";
 pub const RDS_INSTANCE_TYPE: &str = "rds";
 pub const RDS_CLUSTER_TYPE: &str = "rds_aurora";
 pub const S3_TYPE: &str = "s3";
@@ -41,6 +42,7 @@ pub type ClientType = Client;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Client {
     EbsVolume,
+    EbsSnapshot,
     Ec2Instance,
     Ec2Sg,
     Ec2Address,
@@ -100,6 +102,7 @@ impl FromStr for Client {
         match v {
             RDS_CLUSTER_TYPE => Ok(Client::RdsCluster),
             EBS_VOL_TYPE => Ok(Client::EbsVolume),
+            EBS_SNAP_TYPE => Ok(Client::EbsSnapshot),
             EC2_INSTANCE_TYPE => Ok(Client::Ec2Instance),
             EC2_SG_TYPE => Ok(Client::Ec2Sg),
             EC2_ENI_TYPE => Ok(Client::Ec2Eni),
@@ -126,6 +129,7 @@ impl Client {
         match *self {
             Client::RdsCluster => RDS_CLUSTER_TYPE,
             Client::EbsVolume => EBS_VOL_TYPE,
+            Client::EbsSnapshot => EBS_SNAP_TYPE,
             Client::Ec2Instance => EC2_INSTANCE_TYPE,
             Client::Ec2Sg => EC2_SG_TYPE,
             Client::Ec2Eni => EC2_ENI_TYPE,
@@ -150,6 +154,7 @@ impl Client {
         [
             Client::RdsCluster,
             Client::EbsVolume,
+            Client::EbsSnapshot,
             Client::Ec2Instance,
             Client::Ec2Sg,
             Client::Ec2Eni,
@@ -256,7 +261,9 @@ pub trait NukerClient: Send + Sync + DynClone {
     fn filter_by_state(&self, resource: &Resource) -> bool {
         if let Some(ref state) = resource.state {
             match state {
-                ResourceState::Running => false,
+                // only enforce rules on resources that are in running or available state
+                ResourceState::Running | ResourceState::Available => false,
+                // ignore all other resource states
                 _ => true,
             }
         } else {
@@ -314,19 +321,20 @@ pub trait NukerClient: Send + Sync + DynClone {
     ) -> EnforcementState {
         if self.filter_by_whitelist(resource, config) {
             // Skip a resource if its in the whitelist
+            debug!(resource = resource.id.as_str(), "Resource whitelisted");
             EnforcementState::SkipConfig
         } else if self.filter_by_tags(resource, config) {
             // Enforce provided required tags
-            trace!(
+            debug!(
                 resource = resource.id.as_str(),
-                "Resource tags does not match"
+                "Resource tags does not match."
             );
             EnforcementState::from_target_state(&config.target_state)
         } else if self.filter_by_allowed_types(resource, config) {
             // Enforce allowed types
-            trace!(
+            debug!(
                 resource = resource.id.as_str(),
-                "Resource is not in list of allowed types"
+                "Resource is not in list of allowed types."
             );
             EnforcementState::from_target_state(&config.target_state)
         } else if self.filter_by_state(resource) {
@@ -334,14 +342,14 @@ pub trait NukerClient: Send + Sync + DynClone {
             EnforcementState::SkipStopped
         } else if self.filter_by_runtime(resource, config) {
             // Enforce max runtime for a resource if max_run_time is provided
-            trace!(
+            debug!(
                 resource = resource.id.as_str(),
-                "Resource exceeded max runtime"
+                "Resource exceeded max runtime."
             );
             EnforcementState::from_target_state(&config.target_state)
         } else if self.filter_by_idle_rules(resource, config, cw_client).await {
             // Enforce Idle rules
-            trace!(resource = resource.id.as_str(), "Resource is idle");
+            debug!(resource = resource.id.as_str(), "Resource is idle.");
             EnforcementState::from_target_state(&config.target_state)
         } else {
             if let Some(additional_filters) = self.additional_filters(resource, config).await.take()
@@ -350,9 +358,9 @@ pub trait NukerClient: Send + Sync + DynClone {
                     {
                         // Apply any additional filters that are implemented by
                         // Resource clients.
-                        trace!(
+                        debug!(
                             resource = resource.id.as_str(),
-                            "Resource does not meet additional filters"
+                            "Resource does not meet additional filters."
                         );
                         return EnforcementState::from_target_state(&config.target_state);
                     }

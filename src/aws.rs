@@ -1,4 +1,7 @@
 mod cloudwatch;
+mod ebs_snapshot;
+mod ebs_volume;
+mod ec2_address;
 mod ec2_eni;
 mod ec2_instance;
 mod ec2_sg;
@@ -11,8 +14,10 @@ pub use cloudwatch::CwClient;
 use crate::Event;
 use crate::{
     aws::{
-        ec2_eni::Ec2EniClient, ec2_instance::Ec2Instance, ec2_sg::Ec2SgClient,
-        rds_cluster::RdsClusterClient, rds_instance::RdsInstanceClient, sts::StsService,
+        ebs_snapshot::EbsSnapshotClient, ebs_volume::EbsVolumeClient,
+        ec2_address::Ec2AddressClient, ec2_eni::Ec2EniClient, ec2_instance::Ec2Instance,
+        ec2_sg::Ec2SgClient, rds_cluster::RdsClusterClient, rds_instance::RdsInstanceClient,
+        sts::StsService,
     },
     client::Client,
     client::NukerClient,
@@ -95,6 +100,42 @@ impl AwsNuker {
                         clients.insert(
                             Client::Ec2Eni,
                             Box::new(Ec2EniClient::new(
+                                &client_details,
+                                &config.get(&client).unwrap(),
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::Ec2Address => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::Ec2Address,
+                            Box::new(Ec2AddressClient::new(
+                                &client_details,
+                                &config.get(&client).unwrap(),
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::EbsVolume => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::EbsVolume,
+                            Box::new(EbsVolumeClient::new(
+                                &client_details,
+                                &config.get(&client).unwrap(),
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::EbsSnapshot => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::EbsSnapshot,
+                            Box::new(EbsSnapshotClient::new(
                                 &client_details,
                                 &config.get(&client).unwrap(),
                                 dry_run,

@@ -580,6 +580,8 @@ impl Ec2Service {
     }
 
     async fn delete_sg(&self, resource: &Resource) -> Result<()> {
+        debug!(resource = resource.id.as_str(), "Deleting.");
+
         if !self.dry_run {
             let req = self
                 .client
