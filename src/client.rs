@@ -41,26 +41,26 @@ pub type ClientType = Client;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Client {
-    EbsVolume,
+    Asg,
+    DefaultClient,
     EbsSnapshot,
-    Ec2Instance,
-    Ec2Sg,
+    EbsVolume,
     Ec2Address,
     Ec2Eni,
+    Ec2Instance,
+    Ec2Sg,
+    EcsCluster,
     ElbAlb,
     ElbNlb,
     EmrCluster,
     EsDomain,
     Glue,
-    RdsInstance,
     RdsCluster,
+    RdsInstance,
     Redshift,
     S3,
     Sagemaker,
-    Asg,
-    EcsCluster,
     Vpc,
-    DefaultClient,
 }
 
 impl Client {
@@ -323,6 +323,9 @@ pub trait NukerClient: Send + Sync + DynClone {
             // Skip a resource if its in the whitelist
             debug!(resource = resource.id.as_str(), "Resource whitelisted");
             EnforcementState::SkipConfig
+        } else if self.filter_by_state(resource) {
+            // Skip resource if its state is stopped
+            EnforcementState::SkipStopped
         } else if self.filter_by_tags(resource, config) {
             // Enforce provided required tags
             debug!(
@@ -337,9 +340,6 @@ pub trait NukerClient: Send + Sync + DynClone {
                 "Resource is not in list of allowed types."
             );
             EnforcementState::from_target_state(&config.target_state)
-        } else if self.filter_by_state(resource) {
-            // Skip resource if its state is stopped
-            EnforcementState::SkipStopped
         } else if self.filter_by_runtime(resource, config) {
             // Enforce max runtime for a resource if max_run_time is provided
             debug!(

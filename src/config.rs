@@ -549,6 +549,7 @@ pub fn parse_config(buffer: &str) -> Config {
     config_map.insert(Client::EbsSnapshot, config.ebs_snapshot);
     config_map.insert(Client::RdsInstance, config.rds_instance);
     config_map.insert(Client::RdsCluster, config.rds_cluster);
+    config_map.insert(Client::EcsCluster, config.ecs);
 
     config_map
 }

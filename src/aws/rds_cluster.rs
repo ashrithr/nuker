@@ -111,22 +111,22 @@ impl RdsClusterClient {
     async fn get_dependencies(&self, resource: &Resource) -> Result<Vec<Resource>> {
         let mut dependencies = Vec::new();
 
-        for db_instance in &mut self.get_cluster_members(resource.id.as_ref()).await? {
+        for db_instance in self.get_cluster_members(resource.id.as_ref()).await? {
+            let arn = db_instance.db_instance_arn.as_deref().unwrap();
+            let tags = self.package_tags(self.list_tags(arn).await);
+
             dependencies.push(Resource {
-                id: db_instance.db_instance_identifier.take().unwrap(),
-                arn: db_instance.db_instance_arn.take(),
+                id: db_instance.db_instance_identifier.unwrap(),
+                arn: db_instance.db_instance_arn,
                 type_: ClientType::RdsInstance,
                 region: self.region.clone(),
                 resource_type: db_instance.db_instance_class.to_owned().map(|t| vec![t]),
-                tags: self.package_tags(
-                    self.list_tags(db_instance.db_instance_arn.as_ref().unwrap())
-                        .await,
-                ),
+                tags,
                 state: Some(
                     ResourceState::from_str(db_instance.db_instance_status.as_ref().unwrap())
                         .unwrap(),
                 ),
-                start_time: db_instance.instance_create_time.take(),
+                start_time: db_instance.instance_create_time,
                 enforcement_state: EnforcementState::SkipUnknownState,
                 dependencies: None,
                 termination_protection: None,
@@ -207,7 +207,7 @@ impl RdsClusterClient {
         Ok(instance_types)
     }
 
-    async fn list_tags(&self, arn: &String) -> Option<Vec<Tag>> {
+    async fn list_tags(&self, arn: &str) -> Option<Vec<Tag>> {
         let req = self
             .client
             .list_tags_for_resource(ListTagsForResourceMessage {

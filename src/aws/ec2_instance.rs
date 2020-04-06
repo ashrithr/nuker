@@ -34,11 +34,11 @@ impl Ec2Instance {
         }
     }
 
-    async fn package_resources(&self, mut instances: Vec<Instance>) -> Result<Vec<Resource>> {
+    async fn package_resources(&self, instances: Vec<Instance>) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
 
-        for instance in &mut instances {
-            let instance_id = instance.instance_id.take().unwrap();
+        for instance in instances {
+            let instance_id = instance.instance_id.unwrap();
             let arn = format!(
                 "arn:aws:ec2:{}:{}:instance/{}",
                 self.region.name(),
@@ -60,7 +60,7 @@ impl Ec2Instance {
                 arn: Some(arn),
                 type_: ClientType::Ec2Instance,
                 region: self.region.clone(),
-                tags: self.package_tags(instance.tags.take()),
+                tags: self.package_tags(instance.tags),
                 state: ResourceState::from_str(
                     instance
                         .state
@@ -71,9 +71,9 @@ impl Ec2Instance {
                         .unwrap_or_default(),
                 )
                 .ok(),
-                start_time: instance.launch_time.take(),
+                start_time: instance.launch_time,
                 enforcement_state: EnforcementState::SkipUnknownState,
-                resource_type: instance.instance_type.take().map(|t| vec![t]),
+                resource_type: instance.instance_type.map(|t| vec![t]),
                 dependencies: None,
                 termination_protection,
             });
