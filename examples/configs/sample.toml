@@ -6,7 +6,7 @@ allowed_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
     # Defines required tags on each instance.
     [[ec2_instance.required_tags]]
     name = "Name"
-    pattern = '^(ec2|sg)-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+    pattern = '^ec2-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
 
     [[ec2_instance.required_tags]]
     name = "Owner:Name"

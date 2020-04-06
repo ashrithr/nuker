@@ -1,3 +1,4 @@
+mod asg;
 mod cloudwatch;
 mod ebs_snapshot;
 mod ebs_volume;
@@ -14,7 +15,7 @@ pub use cloudwatch::CwClient;
 use crate::Event;
 use crate::{
     aws::{
-        ebs_snapshot::EbsSnapshotClient, ebs_volume::EbsVolumeClient,
+        asg::AsgClient, ebs_snapshot::EbsSnapshotClient, ebs_volume::EbsVolumeClient,
         ec2_address::Ec2AddressClient, ec2_eni::Ec2EniClient, ec2_instance::Ec2Instance,
         ec2_sg::Ec2SgClient, rds_cluster::RdsClusterClient, rds_instance::RdsInstanceClient,
         sts::StsService,
@@ -160,6 +161,18 @@ impl AwsNuker {
                         clients.insert(
                             Client::RdsCluster,
                             Box::new(RdsClusterClient::new(
+                                &client_details,
+                                &config.get(&client).unwrap(),
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::Asg => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::Asg,
+                            Box::new(AsgClient::new(
                                 &client_details,
                                 &config.get(&client).unwrap(),
                                 dry_run,

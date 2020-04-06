@@ -540,6 +540,7 @@ pub fn parse_config(buffer: &str) -> Config {
     //         compile_regex(&config.s3.required_naming_prefix.as_ref().unwrap());
     // }
 
+    config_map.insert(Client::Asg, config.asg);
     config_map.insert(Client::Ec2Instance, config.ec2_instance);
     config_map.insert(Client::Ec2Sg, config.ec2_sg);
     config_map.insert(Client::Ec2Eni, config.ec2_eni);

@@ -32,10 +32,10 @@ impl Ec2SgClient {
         }
     }
 
-    async fn package_resources(&self, mut sgs: Vec<SecurityGroup>) -> Result<Vec<Resource>> {
+    async fn package_resources(&self, sgs: Vec<SecurityGroup>) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
 
-        for sg in &mut sgs {
+        for sg in sgs {
             let arn = format!(
                 "arn:aws:ec2:{}:{}:security-group/{}",
                 self.region.name(),
@@ -44,11 +44,11 @@ impl Ec2SgClient {
             );
 
             resources.push(Resource {
-                id: sg.group_id.take().unwrap(),
+                id: sg.group_id.unwrap(),
                 arn: Some(arn),
                 type_: ClientType::Ec2Sg,
                 region: self.region.clone(),
-                tags: self.package_tags(sg.tags.take()),
+                tags: self.package_tags(sg.tags),
                 state: None,
                 start_time: None,
                 enforcement_state: EnforcementState::SkipUnknownState,
