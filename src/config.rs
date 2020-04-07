@@ -53,7 +53,7 @@ pub struct ParsedConfig {
     #[serde(default = "default_resource_config")]
     pub s3: ResourceConfig,
     #[serde(default = "default_resource_config")]
-    pub emr: ResourceConfig,
+    pub emr_cluster: ResourceConfig,
     #[serde(default = "default_resource_config")]
     pub redshift: ResourceConfig,
     #[serde(default = "default_resource_config")]
@@ -521,8 +521,8 @@ pub fn parse_config(buffer: &str) -> Config {
         }
     }
 
-    if config.emr.required_tags.is_some() {
-        for rt in config.emr.required_tags.as_mut().unwrap() {
+    if config.emr_cluster.required_tags.is_some() {
+        for rt in config.emr_cluster.required_tags.as_mut().unwrap() {
             if rt.pattern.is_some() {
                 rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
@@ -554,6 +554,7 @@ pub fn parse_config(buffer: &str) -> Config {
     config_map.insert(Client::EcsCluster, config.ecs);
     config_map.insert(Client::ElbAlb, config.elb_alb);
     config_map.insert(Client::ElbNlb, config.elb_nlb);
+    config_map.insert(Client::EmrCluster, config.emr_cluster);
 
     config_map
 }

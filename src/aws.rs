@@ -9,6 +9,7 @@ mod ec2_sg;
 mod ecs_cluster;
 mod elb_alb;
 mod elb_nlb;
+mod emr_cluster;
 mod rds_cluster;
 mod rds_instance;
 mod sts;
@@ -21,8 +22,8 @@ use crate::{
         asg::AsgClient, ebs_snapshot::EbsSnapshotClient, ebs_volume::EbsVolumeClient,
         ec2_address::Ec2AddressClient, ec2_eni::Ec2EniClient, ec2_instance::Ec2InstanceClient,
         ec2_sg::Ec2SgClient, ecs_cluster::EcsClusterClient, elb_alb::ElbAlbClient,
-        elb_nlb::ElbNlbClient, rds_cluster::RdsClusterClient, rds_instance::RdsInstanceClient,
-        sts::StsService,
+        elb_nlb::ElbNlbClient, emr_cluster::EmrClusterClient, rds_cluster::RdsClusterClient,
+        rds_instance::RdsInstanceClient, sts::StsService,
     },
     client::Client,
     client::NukerClient,
@@ -213,6 +214,18 @@ impl AwsNuker {
                         clients.insert(
                             Client::ElbNlb,
                             Box::new(ElbNlbClient::new(
+                                &client_details,
+                                &config.get(&client).unwrap(),
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::EmrCluster => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::EmrCluster,
+                            Box::new(EmrClusterClient::new(
                                 &client_details,
                                 &config.get(&client).unwrap(),
                                 dry_run,

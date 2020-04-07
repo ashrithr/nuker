@@ -29,14 +29,16 @@ impl FromStr for ResourceState {
             "available" => Ok(ResourceState::Available),
             "pending" => Ok(ResourceState::Pending),
             "rebooting" => Ok(ResourceState::Rebooting),
-            "running" | "in-use" | "associated" | "completed" | "active" => {
+            "running" | "in-use" | "associated" | "completed" | "active" | "waiting" => {
                 Ok(ResourceState::Running)
             }
             "shutting-down" => Ok(ResourceState::ShuttingDown),
             "starting" | "provisioning" => Ok(ResourceState::Starting),
             "stopped" => Ok(ResourceState::Stopped),
             "stopping" | "deprovisioning" => Ok(ResourceState::Stopping),
-            "terminated" | "deleting" | "inactive" => Ok(ResourceState::Deleted),
+            "terminated" | "deleting" | "inactive" | "terminated_with_errors" => {
+                Ok(ResourceState::Deleted)
+            }
             s => {
                 warn!("Failed parsing the resource-state: '{}'", s);
                 Ok(ResourceState::Unknown)
