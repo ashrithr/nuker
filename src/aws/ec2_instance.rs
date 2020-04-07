@@ -15,7 +15,7 @@ use std::str::FromStr;
 use tracing::{debug, trace};
 
 #[derive(Clone)]
-pub struct Ec2Instance {
+pub struct Ec2InstanceClient {
     client: Ec2Client,
     region: Region,
     account_num: String,
@@ -23,9 +23,9 @@ pub struct Ec2Instance {
     dry_run: bool,
 }
 
-impl Ec2Instance {
+impl Ec2InstanceClient {
     pub fn new(cd: &ClientDetails, config: &ResourceConfig, dry_run: bool) -> Self {
-        Ec2Instance {
+        Ec2InstanceClient {
             client: Ec2Client::new_with_client(cd.client.clone(), cd.region.clone()),
             region: cd.region.clone(),
             account_num: cd.account_number.clone(),
@@ -209,7 +209,7 @@ impl Ec2Instance {
 }
 
 #[async_trait]
-impl NukerClient for Ec2Instance {
+impl NukerClient for Ec2InstanceClient {
     async fn scan(&self) -> Result<Vec<Resource>> {
         trace!("Initialized EC2 Instance resource scanner");
         let instances = self.get_instances().await?;

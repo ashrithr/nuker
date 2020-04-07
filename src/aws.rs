@@ -7,6 +7,8 @@ mod ec2_eni;
 mod ec2_instance;
 mod ec2_sg;
 mod ecs_cluster;
+mod elb_alb;
+mod elb_nlb;
 mod rds_cluster;
 mod rds_instance;
 mod sts;
@@ -17,9 +19,10 @@ use crate::Event;
 use crate::{
     aws::{
         asg::AsgClient, ebs_snapshot::EbsSnapshotClient, ebs_volume::EbsVolumeClient,
-        ec2_address::Ec2AddressClient, ec2_eni::Ec2EniClient, ec2_instance::Ec2Instance,
-        ec2_sg::Ec2SgClient, ecs_cluster::EcsClusterClient, rds_cluster::RdsClusterClient,
-        rds_instance::RdsInstanceClient, sts::StsService,
+        ec2_address::Ec2AddressClient, ec2_eni::Ec2EniClient, ec2_instance::Ec2InstanceClient,
+        ec2_sg::Ec2SgClient, ecs_cluster::EcsClusterClient, elb_alb::ElbAlbClient,
+        elb_nlb::ElbNlbClient, rds_cluster::RdsClusterClient, rds_instance::RdsInstanceClient,
+        sts::StsService,
     },
     client::Client,
     client::NukerClient,
@@ -77,7 +80,7 @@ impl AwsNuker {
                     if !excluded_clients.contains(&client) {
                         clients.insert(
                             client,
-                            Box::new(Ec2Instance::new(
+                            Box::new(Ec2InstanceClient::new(
                                 &client_details,
                                 &config.get(&client).unwrap(),
                                 dry_run,
@@ -186,6 +189,30 @@ impl AwsNuker {
                         clients.insert(
                             Client::EcsCluster,
                             Box::new(EcsClusterClient::new(
+                                &client_details,
+                                &config.get(&client).unwrap(),
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::ElbAlb => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::ElbAlb,
+                            Box::new(ElbAlbClient::new(
+                                &client_details,
+                                &config.get(&client).unwrap(),
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::ElbNlb => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::ElbNlb,
+                            Box::new(ElbNlbClient::new(
                                 &client_details,
                                 &config.get(&client).unwrap(),
                                 dry_run,

@@ -287,13 +287,23 @@ pub trait NukerClient: Send + Sync + DynClone {
                 Client::Redshift => cw_client.filter_rs_cluster(resource.id.as_str()).await,
                 Client::EsDomain => cw_client.filter_es_domain(resource.id.as_str()).await,
                 Client::ElbAlb => {
+                    let dimension_val = format!(
+                        "app/{}/{}",
+                        resource.id.as_str(),
+                        resource.arn.as_deref().unwrap().split('/').last().unwrap()
+                    );
                     cw_client
-                        .filter_alb_load_balancer(resource.id.as_str())
+                        .filter_alb_load_balancer(dimension_val.as_str())
                         .await
                 }
                 Client::ElbNlb => {
+                    let dimension_val = format!(
+                        "app/{}/{}",
+                        resource.id.as_str(),
+                        resource.arn.as_deref().unwrap().split('/').last().unwrap()
+                    );
                     cw_client
-                        .filter_nlb_load_balancer(resource.id.as_str())
+                        .filter_nlb_load_balancer(dimension_val.as_str())
                         .await
                 }
                 Client::EcsCluster => cw_client.filter_ecs_cluster(resource.id.as_str()).await,
