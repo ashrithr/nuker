@@ -61,7 +61,7 @@ pub struct ParsedConfig {
     #[serde(default = "default_resource_config")]
     pub sagemaker: ResourceConfig,
     #[serde(default = "default_resource_config")]
-    pub es: ResourceConfig,
+    pub es_domain: ResourceConfig,
     #[serde(default = "default_resource_config")]
     pub asg: ResourceConfig,
     #[serde(default = "default_resource_config")]
@@ -555,6 +555,7 @@ pub fn parse_config(buffer: &str) -> Config {
     config_map.insert(Client::ElbAlb, config.elb_alb);
     config_map.insert(Client::ElbNlb, config.elb_nlb);
     config_map.insert(Client::EmrCluster, config.emr_cluster);
+    config_map.insert(Client::EsDomain, config.es_domain);
 
     config_map
 }
