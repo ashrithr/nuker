@@ -66,7 +66,7 @@ impl CwClient {
             ClientType::ElbNlb => &self.elb_nlb_idle_rules,
             ClientType::RdsInstance => &self.rds_idle_rules,
             ClientType::RdsCluster => &self.aurora_idle_rules,
-            ClientType::Redshift => &self.redshift_idle_rules,
+            ClientType::RsCluster => &self.redshift_idle_rules,
             ClientType::EmrCluster => &self.emr_idle_rules,
             ClientType::EsDomain => &self.es_idle_rules,
             ClientType::EcsCluster => &self.ecs_idle_rules,
@@ -146,7 +146,7 @@ impl CwClient {
     }
 
     pub async fn filter_rs_cluster(&self, cluster_id: &str) -> bool {
-        self.filter_resource(cluster_id, "ClusterIdentifier", ClientType::Redshift)
+        self.filter_resource(cluster_id, "ClusterIdentifier", ClientType::RsCluster)
             .await
     }
 

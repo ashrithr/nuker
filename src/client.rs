@@ -26,9 +26,9 @@ pub const RDS_INSTANCE_TYPE: &str = "rds";
 pub const RDS_CLUSTER_TYPE: &str = "rds_aurora";
 pub const S3_TYPE: &str = "s3";
 pub const EMR_TYPE: &str = "emr_cluster";
-pub const GLUE_TYPE: &str = "glue";
-pub const SAGEMAKER_TYPE: &str = "sagemaker";
-pub const REDSHIFT_TYPE: &str = "redshift";
+pub const GLUE_ENDPOINT_TYPE: &str = "glue_endpoint";
+pub const SAGEMAKER_NOTEBOOK_TYPE: &str = "sagemaker_notebook";
+pub const REDSHIFT_CLUSTER_TYPE: &str = "rs_cluster";
 pub const ES_TYPE: &str = "es_domain";
 pub const ELB_ALB_TYPE: &str = "elb_alb";
 pub const ELB_NLB_TYPE: &str = "elb_nlb";
@@ -54,12 +54,12 @@ pub enum Client {
     ElbNlb,
     EmrCluster,
     EsDomain,
-    Glue,
+    GlueEndpoint,
     RdsCluster,
     RdsInstance,
-    Redshift,
+    RsCluster,
     S3,
-    Sagemaker,
+    SagemakerNotebook,
     Vpc,
 }
 
@@ -111,11 +111,11 @@ impl FromStr for Client {
             ELB_NLB_TYPE => Ok(Client::ElbNlb),
             EMR_TYPE => Ok(Client::EmrCluster),
             ES_TYPE => Ok(Client::EsDomain),
-            GLUE_TYPE => Ok(Client::Glue),
+            GLUE_ENDPOINT_TYPE => Ok(Client::GlueEndpoint),
             RDS_INSTANCE_TYPE => Ok(Client::RdsInstance),
-            REDSHIFT_TYPE => Ok(Client::Redshift),
+            REDSHIFT_CLUSTER_TYPE => Ok(Client::RsCluster),
             S3_TYPE => Ok(Client::S3),
-            SAGEMAKER_TYPE => Ok(Client::Sagemaker),
+            SAGEMAKER_NOTEBOOK_TYPE => Ok(Client::SagemakerNotebook),
             ASG_TYPE => Ok(Client::Asg),
             ECS_TYPE => Ok(Client::EcsCluster),
             VPC_TYPE => Ok(Client::Vpc),
@@ -138,11 +138,11 @@ impl Client {
             Client::ElbNlb => ELB_NLB_TYPE,
             Client::EmrCluster => EMR_TYPE,
             Client::EsDomain => ES_TYPE,
-            Client::Glue => GLUE_TYPE,
+            Client::GlueEndpoint => GLUE_ENDPOINT_TYPE,
             Client::RdsInstance => RDS_INSTANCE_TYPE,
-            Client::Redshift => REDSHIFT_TYPE,
+            Client::RsCluster => REDSHIFT_CLUSTER_TYPE,
             Client::S3 => S3_TYPE,
-            Client::Sagemaker => SAGEMAKER_TYPE,
+            Client::SagemakerNotebook => SAGEMAKER_NOTEBOOK_TYPE,
             Client::Asg => ASG_TYPE,
             Client::EcsCluster => ECS_TYPE,
             Client::Vpc => VPC_TYPE,
@@ -163,11 +163,11 @@ impl Client {
             Client::ElbNlb,
             Client::EmrCluster,
             Client::EsDomain,
-            Client::Glue,
+            Client::GlueEndpoint,
             Client::RdsInstance,
-            Client::Redshift,
+            Client::RsCluster,
             Client::S3,
-            Client::Sagemaker,
+            Client::SagemakerNotebook,
             Client::Asg,
             Client::EcsCluster,
             Client::Vpc,
@@ -284,7 +284,7 @@ pub trait NukerClient: Send + Sync + DynClone {
                 Client::EbsVolume => cw_client.filter_volume(resource.id.as_str()).await,
                 Client::RdsInstance => cw_client.filter_db_instance(resource.id.as_str()).await,
                 Client::RdsCluster => cw_client.filter_db_cluster(resource.id.as_str()).await,
-                Client::Redshift => cw_client.filter_rs_cluster(resource.id.as_str()).await,
+                Client::RsCluster => cw_client.filter_rs_cluster(resource.id.as_str()).await,
                 Client::EsDomain => cw_client.filter_es_domain(resource.id.as_str()).await,
                 Client::ElbAlb => {
                     let dimension_val = format!(

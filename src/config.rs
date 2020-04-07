@@ -55,11 +55,11 @@ pub struct ParsedConfig {
     #[serde(default = "default_resource_config")]
     pub emr_cluster: ResourceConfig,
     #[serde(default = "default_resource_config")]
-    pub redshift: ResourceConfig,
+    pub rs_cluster: ResourceConfig,
     #[serde(default = "default_resource_config")]
-    pub glue: ResourceConfig,
+    pub glue_endpoint: ResourceConfig,
     #[serde(default = "default_resource_config")]
-    pub sagemaker: ResourceConfig,
+    pub sagemaker_notebook: ResourceConfig,
     #[serde(default = "default_resource_config")]
     pub es_domain: ResourceConfig,
     #[serde(default = "default_resource_config")]
@@ -513,8 +513,8 @@ pub fn parse_config(buffer: &str) -> Config {
         }
     }
 
-    if config.redshift.required_tags.is_some() {
-        for rt in config.redshift.required_tags.as_mut().unwrap() {
+    if config.rs_cluster.required_tags.is_some() {
+        for rt in config.rs_cluster.required_tags.as_mut().unwrap() {
             if rt.pattern.is_some() {
                 rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
@@ -529,8 +529,8 @@ pub fn parse_config(buffer: &str) -> Config {
         }
     }
 
-    if config.glue.required_tags.is_some() {
-        for rt in config.glue.required_tags.as_mut().unwrap() {
+    if config.glue_endpoint.required_tags.is_some() {
+        for rt in config.glue_endpoint.required_tags.as_mut().unwrap() {
             if rt.pattern.is_some() {
                 rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
@@ -556,6 +556,9 @@ pub fn parse_config(buffer: &str) -> Config {
     config_map.insert(Client::ElbNlb, config.elb_nlb);
     config_map.insert(Client::EmrCluster, config.emr_cluster);
     config_map.insert(Client::EsDomain, config.es_domain);
+    config_map.insert(Client::GlueEndpoint, config.glue_endpoint);
+    config_map.insert(Client::RsCluster, config.rs_cluster);
+    config_map.insert(Client::SagemakerNotebook, config.sagemaker_notebook);
 
     config_map
 }

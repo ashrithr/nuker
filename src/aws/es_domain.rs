@@ -185,7 +185,7 @@ impl NukerClient for EsDomainClient {
         None
     }
 
-    async fn stop(&self, resource: &Resource) -> Result<()> {
+    async fn stop(&self, _resource: &Resource) -> Result<()> {
         Ok(())
     }
 

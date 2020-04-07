@@ -11,8 +11,11 @@ mod elb_alb;
 mod elb_nlb;
 mod emr_cluster;
 mod es_domain;
+mod glue_endpoint;
 mod rds_cluster;
 mod rds_instance;
+mod rs_cluster;
+mod sagemaker_notebook;
 mod sts;
 
 pub use cloudwatch::CwClient;
@@ -24,7 +27,9 @@ use crate::{
         ec2_address::Ec2AddressClient, ec2_eni::Ec2EniClient, ec2_instance::Ec2InstanceClient,
         ec2_sg::Ec2SgClient, ecs_cluster::EcsClusterClient, elb_alb::ElbAlbClient,
         elb_nlb::ElbNlbClient, emr_cluster::EmrClusterClient, es_domain::EsDomainClient,
-        rds_cluster::RdsClusterClient, rds_instance::RdsInstanceClient, sts::StsService,
+        glue_endpoint::GlueEndpointClient, rds_cluster::RdsClusterClient,
+        rds_instance::RdsInstanceClient, rs_cluster::RsClusterClient,
+        sagemaker_notebook::SagemakerNotebookClient, sts::StsService,
     },
     client::Client,
     client::NukerClient,
@@ -239,6 +244,42 @@ impl AwsNuker {
                         clients.insert(
                             Client::EsDomain,
                             Box::new(EsDomainClient::new(
+                                &client_details,
+                                &config.get(&client).unwrap(),
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::GlueEndpoint => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::GlueEndpoint,
+                            Box::new(GlueEndpointClient::new(
+                                &client_details,
+                                &config.get(&client).unwrap(),
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::RsCluster => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::RsCluster,
+                            Box::new(RsClusterClient::new(
+                                &client_details,
+                                &config.get(&client).unwrap(),
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::SagemakerNotebook => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::SagemakerNotebook,
+                            Box::new(SagemakerNotebookClient::new(
                                 &client_details,
                                 &config.get(&client).unwrap(),
                                 dry_run,

@@ -29,9 +29,8 @@ impl FromStr for ResourceState {
             "available" => Ok(ResourceState::Available),
             "pending" => Ok(ResourceState::Pending),
             "rebooting" => Ok(ResourceState::Rebooting),
-            "running" | "in-use" | "associated" | "completed" | "active" | "waiting" => {
-                Ok(ResourceState::Running)
-            }
+            "running" | "in-use" | "associated" | "completed" | "active" | "waiting" | "ready"
+            | "inservice" => Ok(ResourceState::Running),
             "shutting-down" => Ok(ResourceState::ShuttingDown),
             "starting" | "provisioning" => Ok(ResourceState::Starting),
             "stopped" => Ok(ResourceState::Stopped),
