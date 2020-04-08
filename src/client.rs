@@ -24,7 +24,7 @@ pub const EBS_VOL_TYPE: &str = "ebs_volume";
 pub const EBS_SNAP_TYPE: &str = "ebs_snapshot";
 pub const RDS_INSTANCE_TYPE: &str = "rds";
 pub const RDS_CLUSTER_TYPE: &str = "rds_aurora";
-pub const S3_TYPE: &str = "s3";
+pub const S3_BUCKET_TYPE: &str = "s3_bucket";
 pub const EMR_TYPE: &str = "emr_cluster";
 pub const GLUE_ENDPOINT_TYPE: &str = "glue_endpoint";
 pub const SAGEMAKER_NOTEBOOK_TYPE: &str = "sagemaker_notebook";
@@ -58,7 +58,7 @@ pub enum Client {
     RdsCluster,
     RdsInstance,
     RsCluster,
-    S3,
+    S3Bucket,
     SagemakerNotebook,
     Vpc,
 }
@@ -114,7 +114,7 @@ impl FromStr for Client {
             GLUE_ENDPOINT_TYPE => Ok(Client::GlueEndpoint),
             RDS_INSTANCE_TYPE => Ok(Client::RdsInstance),
             REDSHIFT_CLUSTER_TYPE => Ok(Client::RsCluster),
-            S3_TYPE => Ok(Client::S3),
+            S3_BUCKET_TYPE => Ok(Client::S3Bucket),
             SAGEMAKER_NOTEBOOK_TYPE => Ok(Client::SagemakerNotebook),
             ASG_TYPE => Ok(Client::Asg),
             ECS_TYPE => Ok(Client::EcsCluster),
@@ -141,7 +141,7 @@ impl Client {
             Client::GlueEndpoint => GLUE_ENDPOINT_TYPE,
             Client::RdsInstance => RDS_INSTANCE_TYPE,
             Client::RsCluster => REDSHIFT_CLUSTER_TYPE,
-            Client::S3 => S3_TYPE,
+            Client::S3Bucket => S3_BUCKET_TYPE,
             Client::SagemakerNotebook => SAGEMAKER_NOTEBOOK_TYPE,
             Client::Asg => ASG_TYPE,
             Client::EcsCluster => ECS_TYPE,
@@ -166,7 +166,7 @@ impl Client {
             Client::GlueEndpoint,
             Client::RdsInstance,
             Client::RsCluster,
-            Client::S3,
+            Client::S3Bucket,
             Client::SagemakerNotebook,
             Client::Asg,
             Client::EcsCluster,
@@ -271,6 +271,15 @@ pub trait NukerClient: Send + Sync + DynClone {
         }
     }
 
+    /// Filters a resource based on its naming prefix (specifically for S3 buckets)
+    fn filter_by_naming_prefix(&self, resource: &Resource, config: &ResourceConfig) -> bool {
+        if let Some(ref np) = config.naming_prefix {
+            !np.regex.as_ref().unwrap().is_match(&resource.id)
+        } else {
+            false
+        }
+    }
+
     /// Filters a resource based on its idle rules (Cloudwatch metrics)
     async fn filter_by_idle_rules(
         &self,
@@ -360,6 +369,12 @@ pub trait NukerClient: Send + Sync + DynClone {
         } else if self.filter_by_idle_rules(resource, config, cw_client).await {
             // Enforce Idle rules
             debug!(resource = resource.id.as_str(), "Resource is idle.");
+            EnforcementState::from_target_state(&config.target_state)
+        } else if self.filter_by_naming_prefix(resource, config) {
+            debug!(
+                resource = resource.id.as_str(),
+                "Resource naming prefix not met."
+            );
             EnforcementState::from_target_state(&config.target_state)
         } else {
             if let Some(additional_filters) = self.additional_filters(resource, config).await.take()

@@ -15,6 +15,7 @@ mod glue_endpoint;
 mod rds_cluster;
 mod rds_instance;
 mod rs_cluster;
+mod s3_bucket;
 mod sagemaker_notebook;
 mod sts;
 
@@ -28,7 +29,7 @@ use crate::{
         ec2_sg::Ec2SgClient, ecs_cluster::EcsClusterClient, elb_alb::ElbAlbClient,
         elb_nlb::ElbNlbClient, emr_cluster::EmrClusterClient, es_domain::EsDomainClient,
         glue_endpoint::GlueEndpointClient, rds_cluster::RdsClusterClient,
-        rds_instance::RdsInstanceClient, rs_cluster::RsClusterClient,
+        rds_instance::RdsInstanceClient, rs_cluster::RsClusterClient, s3_bucket::S3BucketClient,
         sagemaker_notebook::SagemakerNotebookClient, sts::StsService,
     },
     client::Client,
@@ -280,6 +281,18 @@ impl AwsNuker {
                         clients.insert(
                             Client::SagemakerNotebook,
                             Box::new(SagemakerNotebookClient::new(
+                                &client_details,
+                                &config.get(&client).unwrap(),
+                                dry_run,
+                            )),
+                        );
+                    }
+                }
+                Client::S3Bucket => {
+                    if !excluded_clients.contains(&client) {
+                        clients.insert(
+                            Client::S3Bucket,
+                            Box::new(S3BucketClient::new(
                                 &client_details,
                                 &config.get(&client).unwrap(),
                                 dry_run,
