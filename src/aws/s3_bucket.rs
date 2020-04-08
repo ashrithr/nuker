@@ -84,18 +84,17 @@ impl S3BucketClient {
         }
 
         // Check the ACLs to see if grantee is AllUsers or AllAuthenticatedUsers
-        // TODO: https://github.com/rusoto/rusoto/issues/1703
         if let Some(grants) = self.get_acls_for_bucket(bucket_id).await {
             debug!("Bucket ({}) grants - {:?}", bucket_id, grants);
             for grant in grants {
-                if grant.grantee.is_some() && grant.permission.is_some() {
-                    let grantee = grant.grantee.as_ref().unwrap().clone();
-
-                    if grantee.type_ == "Group".to_string()
-                        && S3_PUBLIC_GROUPS.contains(&grantee.uri.unwrap().as_str())
-                    {
-                        debug!("Bucket ({}) grants are public", bucket_id);
-                        grants_is_public = true;
+                if let Some(grantee) = grant.grantee {
+                    // TODO: https://github.com/rusoto/rusoto/issues/1703 - type_ is not getting populated
+                    // if grantee.type_.as_str() == "Group" &&
+                    if let Some(group_type) = grantee.uri {
+                        if S3_PUBLIC_GROUPS.contains(&group_type.as_str()) {
+                            debug!("Bucket ({}) grants are public", bucket_id);
+                            grants_is_public = true;
+                        }
                     }
                 }
             }

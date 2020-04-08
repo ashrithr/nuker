@@ -1,5 +1,4 @@
 [ec2_instance]
-target_state = "Deleted"
 allowed_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
     "t3.micro", "t3.small", "t3.medium", "t3.large", "t3.xlarge"]
 
@@ -21,93 +20,43 @@ allowed_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
     [[ec2_instance.required_tags]]
     name = "Environment"
 
-# [ec2]
-# # Specifies whether EC2 enforcement is enabled or not
-# enabled = true
-# # State to enforce, if any of the following conditions are not met. Possible
-# # states are: 'Stopped' and 'Deleted'
-# target_state = "Deleted"
-# # Defines which instance types are allowed, empty means allow any types
-# allowed_instance_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
-#     "t3.micro", "t3.small", "t3.medium", "t3.large", "t3.xlarge"]
-# # The following resources will be ignored from rule enforcement
-# # ignore = ["instance-id1", "instance-id2"]
-# ignore = ["i-08e2164ae5e00da0f"]
+    # Identify any EC2 instances that appear to be idle based on the following
+    # Cloudwatch rules.
+    [[ec2.idle_rules]]
+    namespace = "AWS/EC2"
+    metric = "CPUUtilization"
+    minimum = 5
+    duration = "1 day"
+    granularity = "1 hour"
 
-#     # Defines required tags on each instance.
-#     [[ec2.required_tags]]
-#     name = "Name"
-#     pattern = '^(ec2|sg)-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+    [[ec2.idle_rules]]
+    namespace = "AWS/EC2"
+    metric = "NetworkIn"
+    minimum = 5000000 # 5MB
+    duration = "1 day"
+    granularity = "1 hour"
 
-#     [[ec2.required_tags]]
-#     name = "Owner:Name"
+    [[ec2.idle_rules]]
+    namespace = "AWS/EC2"
+    metric = "NetworkOut"
+    minimum = 5000000 # 5MB
+    duration = "1 day"
+    granularity = "1 hour"
 
-#     [[ec2.required_tags]]
-#     name = "Owner:Email"
-#     pattern = '^(.*)@(.*).com$'
+    # Defines whether to acknowledge the terminate protection, if 'ignore' is
+    # set to 'true' then the termination protection is disabled before
+    # attempting to delete the instances.
+    [ec2.termination_protection]
+    ignore = true
 
-#     [[ec2.required_tags]]
-#     name = "Purpose"
+    # Defines whether to cleanup stopped instances after specified duration
+    [ec2.manage_stopped]
+    older_than = "7 days"
 
-#     [[ec2.required_tags]]
-#     name = "Environment"
+[s3_bucket]
 
-#     # Identify any EC2 instances that appear to be idle based on the following
-#     # rules.
-#     #
-#     # Defines CPU utilization rules, the default is if the average
-#     # CPUUtilization metric for 1 day, each data point aggregated over 1 hour
-#     # window, is less than 0.5% then the instance will be enforced to its
-#     # defined target state
-#     # Note: 'granularity' max value is 86400 seconds and 'min_duration'
-#     # max value is 2 weeks without CloudWatch detailed monitoring enabled
-#     [[ec2.idle_rules]]
-#     namespace = "AWS/EC2"
-#     metric = "CPUUtilization"
-#     minimum = 5
-#     duration = "1 day"
-#     granularity = "1 hour"
-
-#     [[ec2.idle_rules]]
-#     namespace = "AWS/EC2"
-#     metric = "NetworkIn"
-#     minimum = 5000000 # 5MB
-#     duration = "1 day"
-#     granularity = "1 hour"
-
-#     [[ec2.idle_rules]]
-#     namespace = "AWS/EC2"
-#     metric = "NetworkOut"
-#     minimum = 5000000 # 5MB
-#     duration = "1 day"
-#     granularity = "1 hour"
-
-#     # Identify resources that are using Security Groups based on the following
-#     # rules.
-#     [ec2.security_groups]
-#     enabled = true
-#     from_port = 0
-#     to_port = 65535
-#     source_cidr = [ "0.0.0.0/0" ]
-
-#     # Defines whether to acknowledge the terminate protection, if 'ignore' is
-#     # set to 'true' then the utility would ignore the termination protection
-#     # flag and would terminate the instances anyway.
-#     [ec2.termination_protection]
-#     ignore = true
-
-#     # Defines whether to cleanup stopped instances after specified duration
-#     [ec2.manage_stopped]
-#     enabled = true
-#     older_than = "7 days"
-
-#     # Identifies and cleans up unused Elastic Network Interfaces
-#     [ec2.eni]
-#     cleanup = true
-
-#     # Identifies and cleans up unused Elastic IP addresses
-#     [ec2.eip]
-#     cleanup = true
+    [s3_bucket.naming_prefix]
+    pattern = '^cw-(us-[a-z]*-[0-9]{1})-([0-9]{12})-(.*)$'
 
 # [ebs]
 # # Specifies whether to clean up Volumes that are detached and not being used
