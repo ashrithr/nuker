@@ -89,24 +89,3 @@ impl From<rusoto_core::request::TlsError> for NError {
         NError::HttpsConnector { e: error }
     }
 }
-
-// impl fmt::Display for NError {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> StdResult<(), fmt::Error> {
-//         write!(
-//             f,
-//             "{}",
-//             match self {
-//                 NError::Rusoto { type_, msg } => match type_.as_str() {
-//                     "Unknown" => format!("Encountered Unknown Error: {}", msg),
-//                     service =>
-//                         format!("Encountered Service specific error: {} -> {}", service, msg),
-//                 },
-//                 NError::HttpDispatch(e) => format!("Encountered HTTP Dispatch Error: {}", e),
-//                 NError::Throttling(msg) => msg.to_string(),
-//                 NError::Validation(msg) => msg.to_string(),
-//                 NError::Dag(msg) => msg.to_string(),
-//                 NError::InvalidRegion(msg) => msg.to_string(),
-//             }
-//         )
-//     }
-// }

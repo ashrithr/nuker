@@ -1,3 +1,4 @@
+use crate::client::Client;
 use crate::{
     aws::AwsNuker,
     config::{Args, Config},
@@ -60,30 +61,37 @@ impl Nuker {
             }
         }
 
-        // Merge services enabled from Cli and Config
-        self.enable_service_types();
+        let excluded_services = self.excluded_services();
 
         if self.args.regions.is_empty() {
             debug!("Scanning for resources across all regions - {:?}", REGIONS);
 
             for region in REGIONS.iter() {
-                clients.push(AwsNuker::new(
-                    self.args.profile.clone(),
-                    region.to_owned(),
-                    self.config.clone(),
-                    self.args.dry_run,
-                )?);
+                clients.push(
+                    AwsNuker::new(
+                        self.args.profile.clone(),
+                        region.to_owned(),
+                        self.config.clone(),
+                        excluded_services.clone(),
+                        self.args.dry_run,
+                    )
+                    .await?,
+                );
             }
         } else {
             debug!("Scanning for resources in regions: {:?}", self.args.regions);
 
             for region in &self.args.regions {
-                clients.push(AwsNuker::new(
-                    self.args.profile.clone(),
-                    Region::from_str(region)?,
-                    self.config.clone(),
-                    self.args.dry_run,
-                )?);
+                clients.push(
+                    AwsNuker::new(
+                        self.args.profile.clone(),
+                        Region::from_str(region)?,
+                        self.config.clone(),
+                        excluded_services.clone(),
+                        self.args.dry_run,
+                    )
+                    .await?,
+                );
             }
         }
 
@@ -95,14 +103,16 @@ impl Nuker {
                     .instrument(tracing::trace_span!("nuker", region = region.as_str()))
                     .await;
 
-                client.print_resources();
+                if let Err(err) = client.print_resources().await {
+                    error!(err = ?err, "Failed printing resources");
+                }
 
                 if let Err(err) = client
                     .cleanup_resources()
                     .instrument(tracing::trace_span!("nuker", region = region.as_str()))
                     .await
                 {
-                    error!("Failed cleaning up resources: {:?}", err);
+                    error!(err = ?err, "Failed cleaning up resources");
                 }
             }));
         }
@@ -124,38 +134,15 @@ impl Nuker {
         input.trim().to_string()
     }
 
-    fn enable_service_types(&mut self) {
-        use crate::service::Service;
-
-        let excludes: Vec<Service> = if self.args.targets.is_some() {
-            Service::iter()
+    fn excluded_services(&mut self) -> Vec<Client> {
+        if self.args.targets.is_some() {
+            Client::iter()
                 .filter(|s| !self.args.targets.as_ref().unwrap().contains(&s))
                 .collect()
         } else if self.args.exclude.is_some() {
             self.args.exclude.as_ref().unwrap().clone()
         } else {
             vec![]
-        };
-
-        trace!(services = ?excludes, "Excluding services");
-
-        for exclude in excludes {
-            match exclude {
-                Service::Aurora => self.config.aurora.enabled = false,
-                Service::Ebs => self.config.ebs.enabled = false,
-                Service::Ec2 => self.config.ec2.enabled = false,
-                Service::Elb => self.config.elb.enabled = false,
-                Service::Emr => self.config.emr.enabled = false,
-                Service::Es => self.config.es.enabled = false,
-                Service::Glue => self.config.glue.enabled = false,
-                Service::Rds => self.config.rds.enabled = false,
-                Service::Redshift => self.config.redshift.enabled = false,
-                Service::S3 => self.config.s3.enabled = false,
-                Service::Sagemaker => self.config.sagemaker.enabled = false,
-                Service::Asg => self.config.asg.enabled = false,
-                Service::Ecs => self.config.ecs.enabled = false,
-                Service::Vpc => self.config.vpc.enabled = false,
-            }
         }
     }
 }

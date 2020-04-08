@@ -1,7 +1,7 @@
-use crate::aws::util;
-use crate::config::{AutoScalingConfig, RequiredTags};
-use crate::resource::{EnforcementState, NTag, Resource, ResourceType};
-use crate::service::NukerService;
+use crate::aws::ClientDetails;
+use crate::client::{ClientType, NukerClient};
+use crate::config::ResourceConfig;
+use crate::resource::{EnforcementState, NTag, Resource, ResourceState};
 use crate::Result;
 use crate::{handle_future, handle_future_with_return};
 use async_trait::async_trait;
@@ -9,99 +9,53 @@ use rusoto_autoscaling::{
     AutoScalingGroup, AutoScalingGroupNamesType, Autoscaling, AutoscalingClient,
     DeleteAutoScalingGroupType, TagDescription,
 };
-use rusoto_core::{HttpClient, Region};
-use rusoto_credential::ProfileProvider;
+use rusoto_core::Region;
+use std::str::FromStr;
 use tracing::{debug, trace};
 
 #[derive(Clone)]
-pub struct AsgService {
+pub struct AsgClient {
     pub client: AutoscalingClient,
-    pub config: AutoScalingConfig,
-    pub region: Region,
-    pub dry_run: bool,
+    region: Region,
+    account_num: String,
+    config: ResourceConfig,
+    dry_run: bool,
 }
 
-impl AsgService {
-    pub fn new(
-        profile_name: Option<String>,
-        region: Region,
-        config: AutoScalingConfig,
-        dry_run: bool,
-    ) -> Result<Self> {
-        if let Some(profile) = &profile_name {
-            let mut pp = ProfileProvider::new()?;
-            pp.set_profile(profile);
-
-            Ok(AsgService {
-                client: AutoscalingClient::new_with(HttpClient::new()?, pp, region.clone()),
-                config,
-                region,
-                dry_run,
-            })
-        } else {
-            Ok(AsgService {
-                client: AutoscalingClient::new(region.clone()),
-                config,
-                region,
-                dry_run,
-            })
+impl AsgClient {
+    pub fn new(cd: &ClientDetails, config: &ResourceConfig, dry_run: bool) -> Self {
+        AsgClient {
+            client: AutoscalingClient::new_with_client(cd.client.clone(), cd.region.clone()),
+            region: cd.region.clone(),
+            account_num: cd.account_number.clone(),
+            config: config.clone(),
+            dry_run,
         }
     }
 
-    async fn package_asgs_as_resources(
-        &self,
-        asgs: Vec<AutoScalingGroup>,
-    ) -> Result<Vec<Resource>> {
+    async fn package_resources(&self, asgs: Vec<AutoScalingGroup>) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
 
         for asg in asgs {
-            let asg_name = asg.auto_scaling_group_name.clone();
-            let tags = asg.tags.clone();
-
-            let enforcement_state: EnforcementState = {
-                if self.config.ignore.contains(&asg_name) {
-                    debug!(
-                        resource = asg_name.as_str(),
-                        "Skipping resource from ignore list"
-                    );
-                    EnforcementState::SkipConfig
-                } else {
-                    if self.resource_tags_does_not_match(&tags).await {
-                        debug!(resource = asg_name.as_str(), "ASG tags does not match");
-                        EnforcementState::from_target_state(&self.config.target_state)
-                    } else if self.is_resource_idle(&asg) {
-                        debug!(resource = asg_name.as_str(), "ASG is idle");
-                        EnforcementState::from_target_state(&self.config.target_state)
-                    } else {
-                        EnforcementState::Skip
-                    }
-                }
-            };
-
             resources.push(Resource {
-                id: asg_name,
+                id: asg.auto_scaling_group_name,
                 arn: asg.auto_scaling_group_arn,
-                resource_type: ResourceType::Asg,
+                type_: ClientType::Asg,
                 region: self.region.clone(),
-                tags: self.package_tags_as_ntags(tags),
-                state: asg.status,
-                enforcement_state,
+                tags: self.package_tags(asg.tags),
+                state: Some(ResourceState::from_str(asg.status.as_ref().unwrap()).unwrap()),
+                start_time: Some(asg.created_time),
+                enforcement_state: EnforcementState::SkipUnknownState,
+                resource_type: None,
                 dependencies: None,
+                termination_protection: None,
             });
         }
 
         Ok(resources)
     }
 
-    async fn resource_tags_does_not_match(&self, tags: &Option<Vec<TagDescription>>) -> bool {
-        if self.config.required_tags.is_some() {
-            !self.check_tags(tags, &self.config.required_tags.as_ref().unwrap())
-        } else {
-            false
-        }
-    }
-
-    async fn get_asgs(&self) -> Vec<AutoScalingGroup> {
+    async fn get_asgs(&self, filter: Option<Vec<String>>) -> Vec<AutoScalingGroup> {
         let mut asgs: Vec<AutoScalingGroup> = Vec::new();
         let mut next_token: Option<String> = None;
 
@@ -109,6 +63,7 @@ impl AsgService {
             let req = self
                 .client
                 .describe_auto_scaling_groups(AutoScalingGroupNamesType {
+                    auto_scaling_group_names: filter.clone(),
                     next_token,
                     ..Default::default()
                 });
@@ -159,16 +114,7 @@ impl AsgService {
         false
     }
 
-    fn check_tags(
-        &self,
-        tags: &Option<Vec<TagDescription>>,
-        required_tags: &Vec<RequiredTags>,
-    ) -> bool {
-        let ntags = self.package_tags_as_ntags(tags.to_owned());
-        util::compare_tags(ntags, required_tags)
-    }
-
-    fn package_tags_as_ntags(&self, tags: Option<Vec<TagDescription>>) -> Option<Vec<NTag>> {
+    fn package_tags(&self, tags: Option<Vec<TagDescription>>) -> Option<Vec<NTag>> {
         tags.map(|ts| {
             ts.iter()
                 .map(|tag| NTag {
@@ -181,23 +127,33 @@ impl AsgService {
 }
 
 #[async_trait]
-impl NukerService for AsgService {
+impl NukerClient for AsgClient {
     async fn scan(&self) -> Result<Vec<Resource>> {
         trace!("Initialized ASG resource scanner");
-        let asgs = self.get_asgs().await;
+        let asgs = self.get_asgs(None).await;
 
-        Ok(self.package_asgs_as_resources(asgs).await?)
+        Ok(self.package_resources(asgs).await?)
     }
 
-    async fn stop(&self, resource: &Resource) -> Result<()> {
-        self.delete_asg(resource).await
+    async fn dependencies(&self, _resource: &Resource) -> Option<Vec<Resource>> {
+        None
+    }
+
+    async fn additional_filters(
+        &self,
+        resource: &Resource,
+        _config: &ResourceConfig,
+    ) -> Option<bool> {
+        let mut asg = self.get_asgs(Some(vec![resource.id.clone()])).await;
+
+        Some(self.is_resource_idle(asg.pop().as_ref().unwrap()))
+    }
+
+    async fn stop(&self, _resource: &Resource) -> Result<()> {
+        Ok(())
     }
 
     async fn delete(&self, resource: &Resource) -> Result<()> {
         self.delete_asg(resource).await
-    }
-
-    fn as_any(&self) -> &dyn ::std::any::Any {
-        self
     }
 }

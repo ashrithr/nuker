@@ -1,137 +1,62 @@
-use crate::aws::cloudwatch::CwClient;
-use crate::aws::util;
-use crate::config::{EcsConfig, RequiredTags};
-use crate::resource::{EnforcementState, NTag, Resource, ResourceType};
-use crate::service::NukerService;
+use crate::aws::ClientDetails;
+use crate::client::{ClientType, NukerClient};
+use crate::config::ResourceConfig;
+use crate::resource::{EnforcementState, NTag, Resource, ResourceState};
 use crate::Result;
 use crate::{handle_future, handle_future_with_return};
 use async_trait::async_trait;
-use rusoto_core::{HttpClient, Region};
-use rusoto_credential::ProfileProvider;
+use rusoto_core::Region;
 use rusoto_ecs::{
     Cluster, DeleteClusterRequest, DeregisterContainerInstanceRequest, DescribeClustersRequest,
     Ecs, EcsClient, ListAttributesRequest, ListClustersRequest, ListContainerInstancesRequest,
     ListTagsForResourceRequest, Tag,
 };
-use std::sync::Arc;
+use std::str::FromStr;
 use tracing::{debug, trace};
 
 #[derive(Clone)]
-pub struct EcsService {
-    pub client: EcsClient,
-    pub cw_client: Arc<Box<CwClient>>,
-    pub config: EcsConfig,
-    pub region: Region,
-    pub dry_run: bool,
+pub struct EcsClusterClient {
+    client: EcsClient,
+    region: Region,
+    account_num: String,
+    config: ResourceConfig,
+    dry_run: bool,
 }
 
-impl EcsService {
-    pub fn new(
-        profile_name: Option<String>,
-        region: Region,
-        config: EcsConfig,
-        cw_client: Arc<Box<CwClient>>,
-        dry_run: bool,
-    ) -> Result<Self> {
-        if let Some(profile) = &profile_name {
-            let mut pp = ProfileProvider::new()?;
-            pp.set_profile(profile);
-
-            Ok(EcsService {
-                client: EcsClient::new_with(HttpClient::new()?, pp, region.clone()),
-                cw_client,
-                config,
-                region,
-                dry_run,
-            })
-        } else {
-            Ok(EcsService {
-                client: EcsClient::new(region.clone()),
-                cw_client,
-                config,
-                region,
-                dry_run,
-            })
+impl EcsClusterClient {
+    pub fn new(cd: &ClientDetails, config: &ResourceConfig, dry_run: bool) -> Self {
+        EcsClusterClient {
+            client: EcsClient::new_with_client(cd.client.clone(), cd.region.clone()),
+            region: cd.region.clone(),
+            account_num: cd.account_number.clone(),
+            config: config.clone(),
+            dry_run,
         }
     }
 
-    async fn package_clusters_as_resources(&self, clusters: Vec<Cluster>) -> Result<Vec<Resource>> {
+    async fn package_resources(&self, clusters: Vec<Cluster>) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
 
         for cluster in clusters {
-            let cluster_name = cluster.cluster_name.as_ref().unwrap().clone();
-            let tags = cluster.tags.clone();
-
-            let enforcement_state: EnforcementState = {
-                if self.config.ignore.contains(&cluster_name) {
-                    debug!(
-                        resource = cluster_name.as_str(),
-                        "Skipping resource from ignore list"
-                    );
-                    EnforcementState::SkipConfig
-                } else {
-                    if self.resource_tags_does_not_match(&tags).await {
-                        debug!(
-                            resource = cluster_name.as_str(),
-                            "ECS Cluster tags does not match"
-                        );
-                        EnforcementState::from_target_state(&self.config.target_state)
-                    } else if self.resource_types_does_not_match(&cluster_name).await? {
-                        debug!(
-                            resource = cluster_name.as_str(),
-                            "ECS Cluster Instance types does not match"
-                        );
-                        EnforcementState::from_target_state(&self.config.target_state)
-                    } else if self.is_resource_idle(&cluster_name).await {
-                        debug!(resource = cluster_name.as_str(), "ECS Cluster is idle");
-                        EnforcementState::from_target_state(&self.config.target_state)
-                    } else {
-                        EnforcementState::Skip
-                    }
-                }
-            };
+            let cluster_id = cluster.cluster_name.as_deref().unwrap();
+            let resource_type = self.get_instance_types(cluster_id).await.ok();
 
             resources.push(Resource {
-                id: cluster_name,
+                id: cluster.cluster_name.unwrap(),
                 arn: cluster.cluster_arn,
-                resource_type: ResourceType::EcsCluster,
+                type_: ClientType::EcsCluster,
                 region: self.region.clone(),
-                tags: self.package_tags_as_ntags(tags),
-                state: cluster.status,
-                enforcement_state,
+                tags: self.package_tags(cluster.tags),
+                state: ResourceState::from_str(cluster.status.as_ref().unwrap()).ok(),
+                start_time: None,
+                enforcement_state: EnforcementState::SkipUnknownState,
+                resource_type,
                 dependencies: None,
+                termination_protection: None,
             });
         }
 
         Ok(resources)
-    }
-
-    async fn resource_tags_does_not_match(&self, tags: &Option<Vec<Tag>>) -> bool {
-        if self.config.required_tags.is_some() {
-            !self.check_tags(tags, &self.config.required_tags.as_ref().unwrap())
-        } else {
-            false
-        }
-    }
-
-    async fn resource_types_does_not_match(&self, cluster_name: &String) -> Result<bool> {
-        if !self.config.allowed_instance_types.is_empty() {
-            let instance_types: Vec<String> = self.get_instance_types(cluster_name).await?;
-
-            Ok(instance_types
-                .iter()
-                .any(|it| !self.config.allowed_instance_types.contains(&it)))
-        } else {
-            Ok(false)
-        }
-    }
-
-    async fn is_resource_idle(&self, cluster_name: &String) -> bool {
-        if self.config.idle_rules.is_some() {
-            !self.cw_client.filter_ecs_cluster(&cluster_name).await
-        } else {
-            false
-        }
     }
 
     async fn get_clusters(&self) -> Result<Vec<Cluster>> {
@@ -195,7 +120,7 @@ impl EcsService {
         }
     }
 
-    async fn get_instance_types(&self, cluster_name: &String) -> Result<Vec<String>> {
+    async fn get_instance_types(&self, cluster_name: &str) -> Result<Vec<String>> {
         let mut instance_types: Vec<String> = Vec::new();
 
         let req = self.client.list_attributes(ListAttributesRequest {
@@ -218,7 +143,7 @@ impl EcsService {
         Ok(instance_types)
     }
 
-    async fn deregister_instnaces(&self, resource: &Resource) -> Result<()> {
+    async fn deregister_instances(&self, resource: &Resource) -> Result<()> {
         if !self.dry_run {
             let req = self
                 .client
@@ -249,7 +174,7 @@ impl EcsService {
         debug!(resource = resource.id.as_str(), "Deleting");
 
         if !self.dry_run {
-            self.deregister_instnaces(resource).await?;
+            self.deregister_instances(resource).await?;
 
             let req = self.client.delete_cluster(DeleteClusterRequest {
                 cluster: resource.id.clone(),
@@ -260,12 +185,7 @@ impl EcsService {
         Ok(())
     }
 
-    fn check_tags(&self, tags: &Option<Vec<Tag>>, required_tags: &Vec<RequiredTags>) -> bool {
-        let ntags = self.package_tags_as_ntags(tags.to_owned());
-        util::compare_tags(ntags, required_tags)
-    }
-
-    fn package_tags_as_ntags(&self, tags: Option<Vec<Tag>>) -> Option<Vec<NTag>> {
+    fn package_tags(&self, tags: Option<Vec<Tag>>) -> Option<Vec<NTag>> {
         tags.map(|ts| {
             ts.iter()
                 .map(|tag| NTag {
@@ -278,23 +198,31 @@ impl EcsService {
 }
 
 #[async_trait]
-impl NukerService for EcsService {
+impl NukerClient for EcsClusterClient {
     async fn scan(&self) -> Result<Vec<Resource>> {
         trace!("Initialized ECS resource scanner");
         let clusters = self.get_clusters().await?;
 
-        Ok(self.package_clusters_as_resources(clusters).await?)
+        Ok(self.package_resources(clusters).await?)
     }
 
-    async fn stop(&self, resource: &Resource) -> Result<()> {
-        self.delete_cluster(resource).await
+    async fn dependencies(&self, _resource: &Resource) -> Option<Vec<Resource>> {
+        None
+    }
+
+    async fn additional_filters(
+        &self,
+        _resource: &Resource,
+        _config: &ResourceConfig,
+    ) -> Option<bool> {
+        None
+    }
+
+    async fn stop(&self, _resource: &Resource) -> Result<()> {
+        Ok(())
     }
 
     async fn delete(&self, resource: &Resource) -> Result<()> {
         self.delete_cluster(resource).await
-    }
-
-    fn as_any(&self) -> &dyn ::std::any::Any {
-        self
     }
 }

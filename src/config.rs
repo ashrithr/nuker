@@ -1,12 +1,15 @@
 //! Configuration Parser
-use crate::service::Service;
+use crate::client::Client;
 use clap::{App, Arg};
 use regex::Regex;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::{fs::File, io::Read, str::FromStr, time::Duration};
 use tracing::warn;
 
 const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
+
+pub type Config = HashMap<Client, ResourceConfig>;
 
 /// Cli Args
 #[derive(Debug, Clone)]
@@ -14,8 +17,8 @@ pub struct Args {
     pub config: String,
     pub profile: Option<String>,
     pub regions: Vec<String>,
-    pub targets: Option<Vec<Service>>,
-    pub exclude: Option<Vec<Service>>,
+    pub targets: Option<Vec<Client>>,
+    pub exclude: Option<Vec<Client>>,
     pub dry_run: bool,
     pub force: bool,
     pub verbose: u64,
@@ -26,27 +29,57 @@ pub struct Args {
 ///
 /// This struct is built from reading the configuration file
 #[derive(Debug, Deserialize, Clone)]
-pub struct Config {
-    pub ec2: Ec2Config,
-    pub ebs: EbsConfig,
-    pub elb: ElbConfig,
-    pub rds: RdsConfig,
-    pub aurora: AuroraConfig,
-    pub s3: S3Config,
-    pub emr: EmrConfig,
-    pub redshift: RedshiftConfig,
-    pub glue: GlueConfig,
-    pub sagemaker: SagemakerConfig,
-    pub es: EsConfig,
-    pub asg: AutoScalingConfig,
-    pub ecs: EcsConfig,
-    pub vpc: VpcConfig,
+pub struct ParsedConfig {
+    #[serde(default = "default_resource_config")]
+    pub ec2_instance: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ec2_sg: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ec2_eni: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ec2_address: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ebs_volume: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ebs_snapshot: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub elb_alb: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub elb_nlb: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub rds_instance: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub rds_cluster: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub s3_bucket: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub emr_cluster: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub rs_cluster: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub glue_endpoint: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub sagemaker_notebook: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub es_domain: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub asg: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ecs: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub vpc: ResourceConfig,
 }
 
 #[derive(Debug, Deserialize, Clone, Eq, PartialEq)]
 pub enum TargetState {
     Stopped,
     Deleted,
+}
+
+impl Default for TargetState {
+    fn default() -> Self {
+        TargetState::Deleted
+    }
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -76,7 +109,6 @@ pub struct TerminationProtection {
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct ManageStopped {
-    pub enabled: bool,
     #[serde(with = "humantime_serde")]
     pub older_than: Duration,
     #[serde(skip)]
@@ -84,185 +116,52 @@ pub struct ManageStopped {
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
-pub struct SecurityGroups {
-    pub enabled: bool,
-    pub source_cidr: Vec<String>,
-    pub from_port: u16,
-    pub to_port: u16,
-}
-
-#[derive(Debug, Deserialize, Clone, Default)]
-pub struct Eni {
-    pub cleanup: bool,
-}
-
-#[derive(Debug, Deserialize, Clone, Default)]
-pub struct Eip {
-    pub cleanup: bool,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct Ec2Config {
-    pub enabled: bool,
-    pub target_state: TargetState,
-    pub required_tags: Option<Vec<RequiredTags>>,
-    pub allowed_instance_types: Vec<String>,
-    pub ignore: Vec<String>,
-    pub idle_rules: Option<Vec<IdleRules>>,
-    pub termination_protection: TerminationProtection,
-    pub manage_stopped: ManageStopped,
-    pub security_groups: SecurityGroups,
-    pub eni: Eni,
-    pub eip: Eip,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct EbsConfig {
-    pub enabled: bool,
-    pub target_state: TargetState,
-    pub ignore: Vec<String>,
-    pub idle_rules: Option<Vec<IdleRules>>,
-    #[serde(with = "humantime_serde")]
-    pub older_than: Option<Duration>,
-}
-
-#[derive(Debug, Deserialize, Clone, Default)]
-pub struct Igw {
-    pub cleanup: bool,
-}
-
-#[derive(Debug, Deserialize, Clone, Default)]
-pub struct Vgw {
-    pub cleanup: bool,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct VpcConfig {
-    pub enabled: bool,
-    pub target_state: TargetState,
-    pub ignore: Vec<String>,
-    pub cleanup_empty: bool,
-    pub required_tags: Option<Vec<RequiredTags>>,
-    pub igw: Igw,
-    pub vgw: Vgw,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct EmrConfig {
-    pub enabled: bool,
-    pub target_state: TargetState,
-    pub required_tags: Option<Vec<RequiredTags>>,
-    pub allowed_instance_types: Vec<String>,
-    pub ignore: Vec<String>,
-    pub idle_rules: Option<Vec<IdleRules>>,
-    pub termination_protection: TerminationProtection,
-    pub security_groups: SecurityGroups,
-    #[serde(with = "humantime_serde")]
-    pub older_than: Duration,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct RdsConfig {
-    pub enabled: bool,
-    pub target_state: TargetState,
-    pub required_tags: Option<Vec<RequiredTags>>,
-    pub allowed_instance_types: Vec<String>,
-    pub manage_stopped: ManageStopped,
-    pub ignore: Vec<String>,
-    pub idle_rules: Option<Vec<IdleRules>>,
-    pub termination_protection: TerminationProtection,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct AuroraConfig {
-    pub enabled: bool,
-    pub target_state: TargetState,
-    pub required_tags: Option<Vec<RequiredTags>>,
-    pub allowed_instance_types: Vec<String>,
-    pub ignore: Vec<String>,
-    pub idle_rules: Option<Vec<IdleRules>>,
-    pub termination_protection: TerminationProtection,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct RedshiftConfig {
-    pub enabled: bool,
-    pub target_state: TargetState,
-    pub required_tags: Option<Vec<RequiredTags>>,
-    pub allowed_instance_types: Vec<String>,
-    pub ignore: Vec<String>,
-    pub idle_rules: Option<Vec<IdleRules>>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct S3Config {
-    pub enabled: bool,
-    pub target_state: TargetState,
-    pub check_dns_compliant_naming: Option<bool>,
-    pub required_naming_prefix: Option<String>,
+pub struct NamingPrefix {
+    pub pattern: String,
     #[serde(skip)]
-    pub required_naming_regex: Option<Regex>,
-    pub check_public_accessibility: Option<bool>,
-    pub ignore: Vec<String>,
+    pub regex: Option<Regex>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct GlueConfig {
-    pub enabled: bool,
+pub struct ResourceConfig {
+    #[serde(default)]
     pub target_state: TargetState,
+    #[serde(default)]
     pub required_tags: Option<Vec<RequiredTags>>,
-    pub ignore: Vec<String>,
-    #[serde(with = "humantime_serde")]
-    pub older_than: Duration,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct SagemakerConfig {
-    pub enabled: bool,
-    pub target_state: TargetState,
-    pub required_tags: Option<Vec<RequiredTags>>,
-    pub allowed_instance_types: Vec<String>,
-    pub ignore: Vec<String>,
-    #[serde(with = "humantime_serde")]
-    pub older_than: Duration,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct EsConfig {
-    pub enabled: bool,
-    pub target_state: TargetState,
-    pub required_tags: Option<Vec<RequiredTags>>,
-    pub allowed_instance_types: Vec<String>,
-    pub ignore: Vec<String>,
+    #[serde(default)]
+    pub allowed_types: Option<Vec<String>>,
+    #[serde(default)]
+    pub whitelist: Option<Vec<String>>,
+    #[serde(default)]
     pub idle_rules: Option<Vec<IdleRules>>,
+    #[serde(default)]
+    pub termination_protection: Option<TerminationProtection>,
+    #[serde(default)]
+    pub manage_stopped: Option<ManageStopped>,
+    #[serde(default)]
+    #[serde(with = "humantime_serde")]
+    pub max_run_time: Option<Duration>,
+    #[serde(default)]
+    pub disable_additional_rules: bool,
+    #[serde(default)]
+    pub naming_prefix: Option<NamingPrefix>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct ElbConfig {
-    pub enabled: bool,
-    pub target_state: TargetState,
-    pub required_tags: Option<Vec<RequiredTags>>,
-    pub ignore: Vec<String>,
-    pub alb_idle_rules: Option<Vec<IdleRules>>,
-    pub nlb_idle_rules: Option<Vec<IdleRules>>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct AutoScalingConfig {
-    pub enabled: bool,
-    pub target_state: TargetState,
-    pub required_tags: Option<Vec<RequiredTags>>,
-    pub ignore: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct EcsConfig {
-    pub enabled: bool,
-    pub target_state: TargetState,
-    pub allowed_instance_types: Vec<String>,
-    pub required_tags: Option<Vec<RequiredTags>>,
-    pub ignore: Vec<String>,
-    pub idle_rules: Option<Vec<IdleRules>>,
+impl Default for ResourceConfig {
+    fn default() -> Self {
+        ResourceConfig {
+            target_state: TargetState::Deleted,
+            required_tags: None,
+            allowed_types: None,
+            whitelist: None,
+            idle_rules: None,
+            termination_protection: Some(TerminationProtection { ignore: true }),
+            manage_stopped: None,
+            max_run_time: None,
+            disable_additional_rules: false,
+            naming_prefix: None,
+        }
+    }
 }
 
 /// Parse the command line arguments for nuker executable
@@ -345,7 +244,7 @@ pub fn parse_args() -> Args {
         .get_matches();
 
     if let Some(ref _matches) = args.subcommand_matches("resource-types") {
-        for r in crate::service::Service::iter() {
+        for r in Client::iter() {
             print!("{} ", r.name());
         }
         ::std::process::exit(0);
@@ -379,22 +278,22 @@ pub fn parse_args() -> Args {
         vec![]
     };
 
-    let targets: Option<Vec<Service>> = if args.is_present("target") {
+    let targets: Option<Vec<Client>> = if args.is_present("target") {
         Some(
             args.values_of("target")
                 .unwrap()
-                .map(|t| Service::from_str(t).unwrap())
+                .map(|t| Client::from_str(t).unwrap())
                 .collect(),
         )
     } else {
         None
     };
 
-    let exclude: Option<Vec<Service>> = if args.is_present("exclude") {
+    let exclude: Option<Vec<Client>> = if args.is_present("exclude") {
         Some(
             args.values_of("exclude")
                 .unwrap()
-                .map(|e| Service::from_str(e).unwrap())
+                .map(|e| Client::from_str(e).unwrap())
                 .collect(),
         )
     } else {
@@ -427,67 +326,87 @@ pub fn parse_config_file(filename: &str) -> Config {
 }
 
 pub fn parse_config(buffer: &str) -> Config {
-    let mut config: Config = toml::from_str(buffer).expect("could not parse toml configuration");
+    let mut config: ParsedConfig =
+        toml::from_str(buffer).expect("could not parse toml configuration");
+    let mut config_map: HashMap<Client, ResourceConfig> = HashMap::new();
 
     // Compile all regex expressions up front
-    if config.ec2.required_tags.is_some() {
-        for rt in config.ec2.required_tags.as_mut().unwrap() {
+    if config.ec2_instance.required_tags.is_some() {
+        for rt in config.ec2_instance.required_tags.as_mut().unwrap() {
             if rt.pattern.is_some() {
                 rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
         }
     }
 
-    if config.ec2.manage_stopped.enabled {
-        config.ec2.manage_stopped.dt_extract_regex = compile_regex(r"^.*\((?P<datetime>.*)\)$");
+    if let Some(manage_stopped) = &mut config.ec2_instance.manage_stopped {
+        manage_stopped.dt_extract_regex = compile_regex(r"^.*\((?P<datetime>.*)\)$");
     }
 
-    if config.rds.required_tags.is_some() {
-        for rt in config.rds.required_tags.as_mut().unwrap() {
+    if config.rds_instance.required_tags.is_some() {
+        for rt in config.rds_instance.required_tags.as_mut().unwrap() {
             if rt.pattern.is_some() {
                 rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
         }
     }
 
-    if config.aurora.required_tags.is_some() {
-        for rt in config.aurora.required_tags.as_mut().unwrap() {
+    if config.rds_cluster.required_tags.is_some() {
+        for rt in config.rds_cluster.required_tags.as_mut().unwrap() {
             if rt.pattern.is_some() {
                 rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
         }
     }
 
-    if config.redshift.required_tags.is_some() {
-        for rt in config.redshift.required_tags.as_mut().unwrap() {
+    if config.rs_cluster.required_tags.is_some() {
+        for rt in config.rs_cluster.required_tags.as_mut().unwrap() {
             if rt.pattern.is_some() {
                 rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
         }
     }
 
-    if config.emr.required_tags.is_some() {
-        for rt in config.emr.required_tags.as_mut().unwrap() {
+    if config.emr_cluster.required_tags.is_some() {
+        for rt in config.emr_cluster.required_tags.as_mut().unwrap() {
             if rt.pattern.is_some() {
                 rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
         }
     }
 
-    if config.glue.required_tags.is_some() {
-        for rt in config.glue.required_tags.as_mut().unwrap() {
+    if config.glue_endpoint.required_tags.is_some() {
+        for rt in config.glue_endpoint.required_tags.as_mut().unwrap() {
             if rt.pattern.is_some() {
                 rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
             }
         }
     }
 
-    if config.s3.enabled && config.s3.required_naming_prefix.is_some() {
-        config.s3.required_naming_regex =
-            compile_regex(&config.s3.required_naming_prefix.as_ref().unwrap());
+    if let Some(ref mut np) = config.s3_bucket.naming_prefix {
+        np.regex = compile_regex(&np.pattern.as_str());
     }
 
-    config
+    config_map.insert(Client::Asg, config.asg);
+    config_map.insert(Client::Ec2Instance, config.ec2_instance);
+    config_map.insert(Client::Ec2Sg, config.ec2_sg);
+    config_map.insert(Client::Ec2Eni, config.ec2_eni);
+    config_map.insert(Client::Ec2Address, config.ec2_address);
+    config_map.insert(Client::EbsVolume, config.ebs_volume);
+    config_map.insert(Client::EbsSnapshot, config.ebs_snapshot);
+    config_map.insert(Client::RdsInstance, config.rds_instance);
+    config_map.insert(Client::RdsCluster, config.rds_cluster);
+    config_map.insert(Client::EcsCluster, config.ecs);
+    config_map.insert(Client::ElbAlb, config.elb_alb);
+    config_map.insert(Client::ElbNlb, config.elb_nlb);
+    config_map.insert(Client::EmrCluster, config.emr_cluster);
+    config_map.insert(Client::EsDomain, config.es_domain);
+    config_map.insert(Client::GlueEndpoint, config.glue_endpoint);
+    config_map.insert(Client::RsCluster, config.rs_cluster);
+    config_map.insert(Client::SagemakerNotebook, config.sagemaker_notebook);
+    config_map.insert(Client::S3Bucket, config.s3_bucket);
+
+    config_map
 }
 
 fn compile_regex(pattern: &str) -> Option<Regex> {
@@ -498,4 +417,8 @@ fn compile_regex(pattern: &str) -> Option<Regex> {
             None
         }
     }
+}
+
+fn default_resource_config() -> ResourceConfig {
+    ResourceConfig::default()
 }

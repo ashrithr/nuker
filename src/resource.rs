@@ -1,221 +1,47 @@
-use crate::{config::TargetState, service::*};
+use crate::{client::*, config::TargetState, StdResult};
 use colored::*;
 use rusoto_core::Region;
 use std::fmt;
+use std::str::FromStr;
+use tracing::warn;
 
-#[derive(Debug, Clone)]
-pub enum ResourceType {
-    Ec2Instance,
-    Ec2Interface,
-    Ec2Address,
-    Ec2Sg,
-    EbsVolume,
-    EbsSnapshot,
-    RDS,
-    Aurora,
-    S3Bucket,
-    Redshift,
-    EmrCluster,
-    GlueDevEndpoint,
-    SagemakerNotebook,
-    EsDomain,
-    ElbAlb,
-    ElbNlb,
-    Asg,
-    EcsCluster,
-    Vpc,
-    VpcIgw,
-    VpcSubnet,
-    VpcRt,
-    VpcNacl,
-    VpcPeerConn,
-    VpcEndpoint,
-    VpcNatGw,
-    VpcVpnGw,
-    Root, // for tracking DAG dependencies
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum ResourceState {
+    Available,
+    Deleted,
+    Failed,
+    Pending,
+    Rebooting,
+    Running,
+    ShuttingDown,
+    Starting,
+    Stopped,
+    Stopping,
+    Unknown,
 }
 
-impl ResourceType {
-    pub fn name(&self) -> &str {
-        match *self {
-            ResourceType::Ec2Instance
-            | ResourceType::Ec2Interface
-            | ResourceType::Ec2Address
-            | ResourceType::Ec2Sg => EC2_TYPE,
-            ResourceType::EbsVolume | ResourceType::EbsSnapshot => EBS_TYPE,
-            ResourceType::RDS => RDS_TYPE,
-            ResourceType::Aurora => AURORA_TYPE,
-            ResourceType::S3Bucket => S3_TYPE,
-            ResourceType::Redshift => REDSHIFT_TYPE,
-            ResourceType::EmrCluster => EMR_TYPE,
-            ResourceType::GlueDevEndpoint => GLUE_TYPE,
-            ResourceType::SagemakerNotebook => SAGEMAKER_TYPE,
-            ResourceType::EsDomain => ES_TYPE,
-            ResourceType::ElbAlb => ELB_TYPE,
-            ResourceType::ElbNlb => ELB_TYPE,
-            ResourceType::Asg => ASG_TYPE,
-            ResourceType::EcsCluster => ECS_TYPE,
-            ResourceType::Vpc
-            | ResourceType::VpcIgw
-            | ResourceType::VpcSubnet
-            | ResourceType::VpcRt
-            | ResourceType::VpcNacl
-            | ResourceType::VpcPeerConn
-            | ResourceType::VpcEndpoint
-            | ResourceType::VpcNatGw
-            | ResourceType::VpcVpnGw => VPC_TYPE,
-            ResourceType::Root => "root",
-        }
-    }
+impl FromStr for ResourceState {
+    type Err = ();
 
-    pub fn is_ec2(&self) -> bool {
-        match *self {
-            ResourceType::Ec2Instance
-            | ResourceType::Ec2Interface
-            | ResourceType::Ec2Address
-            | ResourceType::Ec2Sg => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_instance(&self) -> bool {
-        match *self {
-            ResourceType::Ec2Instance => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_volume(&self) -> bool {
-        match *self {
-            ResourceType::EbsVolume => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_snapshot(&self) -> bool {
-        match *self {
-            ResourceType::EbsSnapshot => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_ebs(&self) -> bool {
-        match *self {
-            ResourceType::EbsVolume | ResourceType::EbsSnapshot => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_eni(&self) -> bool {
-        match *self {
-            ResourceType::Ec2Interface => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_eip(&self) -> bool {
-        match *self {
-            ResourceType::Ec2Address => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_rds(&self) -> bool {
-        match *self {
-            ResourceType::RDS => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_aurora(&self) -> bool {
-        match *self {
-            ResourceType::Aurora => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_s3(&self) -> bool {
-        match *self {
-            ResourceType::S3Bucket => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_redshift(&self) -> bool {
-        match *self {
-            ResourceType::Redshift => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_emr(&self) -> bool {
-        match *self {
-            ResourceType::EmrCluster => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_glue(&self) -> bool {
-        match *self {
-            ResourceType::GlueDevEndpoint => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_sagemaker(&self) -> bool {
-        match *self {
-            ResourceType::SagemakerNotebook => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_es(&self) -> bool {
-        match *self {
-            ResourceType::EsDomain => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_elb(&self) -> bool {
-        match *self {
-            ResourceType::ElbAlb | ResourceType::ElbNlb => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_asg(&self) -> bool {
-        match *self {
-            ResourceType::Asg => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_ecs(&self) -> bool {
-        match *self {
-            ResourceType::EcsCluster => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_vpc(&self) -> bool {
-        match *self {
-            ResourceType::Vpc
-            | ResourceType::VpcIgw
-            | ResourceType::VpcSubnet
-            | ResourceType::VpcRt
-            | ResourceType::VpcNacl
-            | ResourceType::VpcPeerConn
-            | ResourceType::VpcEndpoint
-            | ResourceType::VpcNatGw
-            | ResourceType::VpcVpnGw => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_root(&self) -> bool {
-        match *self {
-            ResourceType::Root => true,
-            _ => false,
+    fn from_str(s: &str) -> StdResult<ResourceState, ()> {
+        let v: &str = &s.to_lowercase();
+        match v {
+            "available" => Ok(ResourceState::Available),
+            "pending" => Ok(ResourceState::Pending),
+            "rebooting" => Ok(ResourceState::Rebooting),
+            "running" | "in-use" | "associated" | "completed" | "active" | "waiting" | "ready"
+            | "inservice" => Ok(ResourceState::Running),
+            "shutting-down" => Ok(ResourceState::ShuttingDown),
+            "starting" | "provisioning" => Ok(ResourceState::Starting),
+            "stopped" => Ok(ResourceState::Stopped),
+            "stopping" | "deprovisioning" => Ok(ResourceState::Stopping),
+            "terminated" | "deleting" | "inactive" | "terminated_with_errors" => {
+                Ok(ResourceState::Deleted)
+            }
+            s => {
+                warn!("Failed parsing the resource-state: '{}'", s);
+                Ok(ResourceState::Unknown)
+            }
         }
     }
 }
@@ -253,16 +79,57 @@ impl EnforcementState {
     }
 }
 
+/// Logical abstraction to represent an AWS resource
 #[derive(Debug, Clone)]
 pub struct Resource {
+    /// ID of the resource
     pub id: String,
+    /// Amazon Resource Name of the resource
     pub arn: Option<String>,
-    pub resource_type: ResourceType,
+    /// Type of the resource that is being generated - client mapping
+    pub type_: Client,
+    /// AWS Region in which the resource exists
     pub region: Region,
+    /// Tags that are associated with a Resource
     pub tags: Option<Vec<NTag>>,
-    pub state: Option<String>,
+    /// Specifies the state of the Resource, for instance if its running,
+    /// stopped, terminated, etc.
+    pub state: Option<ResourceState>,
+    /// Specifies the time at which the Resource is created
+    pub start_time: Option<String>,
+    /// Specifies the state to enforce, whether to skip it, stop it, or delete
+    /// it.
     pub enforcement_state: EnforcementState,
+    /// Type of the resource or the underlying resources, for instance size of
+    /// the instance, db, notebook, cluster, etc.
+    pub resource_type: Option<Vec<String>>,
+    /// Specifies if there are any dependencies that are associated with the
+    /// Resource, these dependencies will be tracked as a DAG and cleaned up
+    /// in order
     pub dependencies: Option<Vec<Resource>>,
+    /// Specifies if termination protection is enabled on the resource
+    pub termination_protection: Option<bool>,
+}
+
+impl Default for Resource {
+    fn default() -> Self {
+        Resource {
+            id: "root".to_string(),
+            arn: None,
+            type_: ClientType::DefaultClient,
+            region: Region::Custom {
+                name: "".to_string(),
+                endpoint: "".to_string(),
+            },
+            tags: None,
+            state: None,
+            start_time: None,
+            enforcement_state: EnforcementState::Skip,
+            resource_type: None,
+            dependencies: None,
+            termination_protection: None,
+        }
+    }
 }
 
 impl fmt::Display for Resource {
@@ -271,9 +138,13 @@ impl fmt::Display for Resource {
             f,
             "[{}] - {} - {}",
             self.region.name().bold(),
-            self.resource_type.name(),
+            self.type_.name(),
             self.id.bold()
         )?;
+
+        if self.arn.is_some() {
+            write!(f, " ({})", self.arn.as_ref().unwrap())?;
+        }
 
         if self.tags.is_some() && !self.tags.as_ref().unwrap().is_empty() {
             write!(f, " - {{")?;
