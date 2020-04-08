@@ -105,8 +105,12 @@ impl CwClient {
                         "Idle Rules DataPoints: {:?}",
                         metrics
                     );
-                    result =
-                        self.filter_metrics(metrics, idle_rule.minimum.unwrap_or_default() as f64);
+                    result = self.filter_metrics(
+                        metrics,
+                        idle_rule.minimum.unwrap_or_default() as f64,
+                        idle_rule.duration,
+                        idle_rule.granularity,
+                    );
                 } else {
                     warn!(resource = resource_id, idle_rule = ?idle_rule, "Invalid Metric.");
                     result = true;
@@ -226,10 +230,27 @@ impl CwClient {
         result.is_some() && result.unwrap().len() > 0
     }
 
-    fn filter_metrics(&self, metrics: Vec<Datapoint>, minimum: f64) -> bool {
-        metrics
-            .iter()
-            .any(|metric| metric.maximum.unwrap_or_default() > minimum)
+    fn filter_metrics(
+        &self,
+        metrics: Vec<Datapoint>,
+        minimum: f64,
+        min_duration: Duration,
+        granularity: Duration,
+    ) -> bool {
+        let min_metrics_count = (min_duration.as_secs() / granularity.as_secs()) as usize;
+        if metrics.len() >= min_metrics_count {
+            metrics
+                .iter()
+                .any(|metric| metric.maximum.unwrap_or_default() > minimum)
+        } else {
+            trace!(
+                "# of datapoints retrieved ({}) are less than minimum ({}) to determine if the \
+                resource is idle.",
+                metrics.len(),
+                min_metrics_count
+            );
+            false
+        }
     }
 
     fn get_start_time_from_duration(
@@ -328,6 +349,11 @@ mod tests {
                 unit: Some("Percent".to_string()),
                 ..Default::default()
             },
+            Datapoint {
+                maximum: Some(1.5678123),
+                unit: Some("Percent".to_string()),
+                ..Default::default()
+            },
         ]
     }
 
@@ -336,8 +362,29 @@ mod tests {
         let cw_client = &create_client();
         for _ in cw_client.ec2_idle_rules.as_ref().unwrap() {
             assert_eq!(
-                cw_client.filter_metrics(get_metrics_for_min_utilization(), 10.0),
+                cw_client.filter_metrics(
+                    get_metrics_for_min_utilization(),
+                    10.0,
+                    Duration::from_secs(100),
+                    Duration::from_secs(10)
+                ),
                 true
+            )
+        }
+    }
+
+    #[test]
+    fn check_metrics_filter_by_min_num_of_metrics_required() {
+        let cw_client = &create_client();
+        for _ in cw_client.ec2_idle_rules.as_ref().unwrap() {
+            assert_eq!(
+                cw_client.filter_metrics(
+                    get_metrics_for_min_utilization(),
+                    10.0,
+                    Duration::from_secs(1000),
+                    Duration::from_secs(10)
+                ),
+                false
             )
         }
     }
@@ -347,7 +394,12 @@ mod tests {
         let cw_client = &create_client();
         for _ in cw_client.ec2_idle_rules.as_ref().unwrap() {
             assert_eq!(
-                cw_client.filter_metrics(get_metrics_for_min_utilization(), 20.0),
+                cw_client.filter_metrics(
+                    get_metrics_for_min_utilization(),
+                    20.0,
+                    Duration::from_secs(100),
+                    Duration::from_secs(10)
+                ),
                 false
             )
         }
