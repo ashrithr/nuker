@@ -67,7 +67,23 @@ pub struct ParsedConfig {
     #[serde(default = "default_resource_config")]
     pub ecs: ResourceConfig,
     #[serde(default = "default_resource_config")]
-    pub vpc: ResourceConfig,
+    pub ec2_vpc: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ec2_igw: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ec2_nat_gw: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ec2_network_acl: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ec2_peering_connection: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ec2_rt: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ec2_subnet: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ec2_vpc_endpoint: ResourceConfig,
+    #[serde(default = "default_resource_config")]
+    pub ec2_vpn_gw: ResourceConfig,
 }
 
 #[derive(Debug, Deserialize, Clone, Eq, PartialEq)]
@@ -393,6 +409,7 @@ pub fn parse_config(buffer: &str) -> Config {
     config_map.insert(Client::Ec2Eni, config.ec2_eni);
     config_map.insert(Client::Ec2Address, config.ec2_address);
     config_map.insert(Client::EbsVolume, config.ebs_volume);
+    config_map.insert(Client::Ec2Vpc, config.ec2_vpc);
     config_map.insert(Client::EbsSnapshot, config.ebs_snapshot);
     config_map.insert(Client::RdsInstance, config.rds_instance);
     config_map.insert(Client::RdsCluster, config.rds_cluster);
@@ -405,6 +422,14 @@ pub fn parse_config(buffer: &str) -> Config {
     config_map.insert(Client::RsCluster, config.rs_cluster);
     config_map.insert(Client::SagemakerNotebook, config.sagemaker_notebook);
     config_map.insert(Client::S3Bucket, config.s3_bucket);
+    config_map.insert(Client::Ec2Igw, config.ec2_igw);
+    config_map.insert(Client::Ec2Subnet, config.ec2_subnet);
+    config_map.insert(Client::Ec2RouteTable, config.ec2_rt);
+    config_map.insert(Client::Ec2NetworkACL, config.ec2_network_acl);
+    config_map.insert(Client::Ec2NatGW, config.ec2_nat_gw);
+    config_map.insert(Client::Ec2VpnGW, config.ec2_vpn_gw);
+    config_map.insert(Client::Ec2VpcEndpoint, config.ec2_vpc_endpoint);
+    config_map.insert(Client::Ec2PeeringConnection, config.ec2_peering_connection);
 
     config_map
 }

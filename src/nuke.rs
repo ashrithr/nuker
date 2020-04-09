@@ -97,7 +97,7 @@ impl Nuker {
 
         for mut client in clients {
             handles.push(tokio::spawn(async move {
-                let region = client.region.name().to_string();
+                let region = client.client_details.region.name().to_string();
                 client
                     .locate_resources()
                     .instrument(tracing::trace_span!("nuker", region = region.as_str()))

@@ -100,16 +100,18 @@ impl CwClient {
                         .datapoints
                         .unwrap_or_default();
 
-                    trace!(
-                        resource = resource_id,
-                        "Idle Rules DataPoints: {:?}",
-                        metrics
-                    );
                     result = self.filter_metrics(
-                        metrics,
+                        &metrics,
                         idle_rule.minimum.unwrap_or_default() as f64,
                         idle_rule.duration,
                         idle_rule.granularity,
+                    );
+
+                    trace!(
+                        resource = resource_id,
+                        result = result,
+                        "Idle Rules DataPoints: {:?}",
+                        metrics
                     );
                 } else {
                     warn!(resource = resource_id, idle_rule = ?idle_rule, "Invalid Metric.");
@@ -232,7 +234,7 @@ impl CwClient {
 
     fn filter_metrics(
         &self,
-        metrics: Vec<Datapoint>,
+        metrics: &[Datapoint],
         minimum: f64,
         min_duration: Duration,
         granularity: Duration,
@@ -363,7 +365,7 @@ mod tests {
         for _ in cw_client.ec2_idle_rules.as_ref().unwrap() {
             assert_eq!(
                 cw_client.filter_metrics(
-                    get_metrics_for_min_utilization(),
+                    &get_metrics_for_min_utilization(),
                     10.0,
                     Duration::from_secs(100),
                     Duration::from_secs(10)
@@ -379,7 +381,7 @@ mod tests {
         for _ in cw_client.ec2_idle_rules.as_ref().unwrap() {
             assert_eq!(
                 cw_client.filter_metrics(
-                    get_metrics_for_min_utilization(),
+                    &get_metrics_for_min_utilization(),
                     10.0,
                     Duration::from_secs(1000),
                     Duration::from_secs(10)
@@ -395,7 +397,7 @@ mod tests {
         for _ in cw_client.ec2_idle_rules.as_ref().unwrap() {
             assert_eq!(
                 cw_client.filter_metrics(
-                    get_metrics_for_min_utilization(),
+                    &get_metrics_for_min_utilization(),
                     20.0,
                     Duration::from_secs(100),
                     Duration::from_secs(10)

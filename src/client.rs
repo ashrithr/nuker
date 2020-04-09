@@ -16,26 +16,34 @@ use std::{
 };
 use tracing::{debug, error, trace};
 
+pub const ASG_TYPE: &str = "asg";
+pub const DEFAULT_TYPE: &str = "default";
+pub const EBS_SNAP_TYPE: &str = "ebs_snapshot";
+pub const EBS_VOL_TYPE: &str = "ebs_volume";
+pub const EC2_ADDRESS_TYPE: &str = "ec2_address";
+pub const EC2_ENI_TYPE: &str = "ec2_eni";
 pub const EC2_INSTANCE_TYPE: &str = "ec2_instance";
 pub const EC2_SG_TYPE: &str = "ec2_sg";
-pub const EC2_ENI_TYPE: &str = "ec2_eni";
-pub const EC2_ADDRESS_TYPE: &str = "ec2_address";
-pub const EBS_VOL_TYPE: &str = "ebs_volume";
-pub const EBS_SNAP_TYPE: &str = "ebs_snapshot";
-pub const RDS_INSTANCE_TYPE: &str = "rds";
-pub const RDS_CLUSTER_TYPE: &str = "rds_aurora";
-pub const S3_BUCKET_TYPE: &str = "s3_bucket";
-pub const EMR_TYPE: &str = "emr_cluster";
-pub const GLUE_ENDPOINT_TYPE: &str = "glue_endpoint";
-pub const SAGEMAKER_NOTEBOOK_TYPE: &str = "sagemaker_notebook";
-pub const REDSHIFT_CLUSTER_TYPE: &str = "rs_cluster";
-pub const ES_TYPE: &str = "es_domain";
+pub const EC2_VPC_TYPE: &str = "ec2_vpc";
+pub const EC2_IGW_TYPE: &str = "ec2_igw";
+pub const EC2_SUBNET_TYPE: &str = "ec2_subnet";
+pub const EC2_RT_TYPE: &str = "ec2_rt";
+pub const EC2_NACL_TYPE: &str = "ec2_network_acl";
+pub const EC2_NATGW_TYPE: &str = "ec2_nat_gw";
+pub const EC2_VPNGW_TYPE: &str = "ec2_vpn_gw";
+pub const EC2_VPC_ENDPOINT_TYPE: &str = "ec2_vpc_endpoint";
+pub const EC2_PEERING_CONNECTION: &str = "ec2_peering_connection";
+pub const ECS_TYPE: &str = "ecs";
 pub const ELB_ALB_TYPE: &str = "elb_alb";
 pub const ELB_NLB_TYPE: &str = "elb_nlb";
-pub const ASG_TYPE: &str = "asg";
-pub const ECS_TYPE: &str = "ecs";
-pub const VPC_TYPE: &str = "vpc";
-pub const DEFAULT_TYPE: &str = "default";
+pub const EMR_TYPE: &str = "emr_cluster";
+pub const ES_TYPE: &str = "es_domain";
+pub const GLUE_ENDPOINT_TYPE: &str = "glue_endpoint";
+pub const RDS_CLUSTER_TYPE: &str = "rds_aurora";
+pub const RDS_INSTANCE_TYPE: &str = "rds";
+pub const REDSHIFT_CLUSTER_TYPE: &str = "rs_cluster";
+pub const S3_BUCKET_TYPE: &str = "s3_bucket";
+pub const SAGEMAKER_NOTEBOOK_TYPE: &str = "sagemaker_notebook";
 
 pub type ClientType = Client;
 
@@ -49,6 +57,15 @@ pub enum Client {
     Ec2Eni,
     Ec2Instance,
     Ec2Sg,
+    Ec2Vpc,
+    Ec2Igw,
+    Ec2Subnet,
+    Ec2RouteTable,
+    Ec2NetworkACL,
+    Ec2NatGW,
+    Ec2VpnGW,
+    Ec2VpcEndpoint,
+    Ec2PeeringConnection,
     EcsCluster,
     ElbAlb,
     ElbNlb,
@@ -60,7 +77,6 @@ pub enum Client {
     RsCluster,
     S3Bucket,
     SagemakerNotebook,
-    Vpc,
 }
 
 impl Client {
@@ -100,25 +116,33 @@ impl FromStr for Client {
     fn from_str(s: &str) -> StdResult<Client, ParseClientError> {
         let v: &str = &s.to_lowercase();
         match v {
-            RDS_CLUSTER_TYPE => Ok(Client::RdsCluster),
-            EBS_VOL_TYPE => Ok(Client::EbsVolume),
+            ASG_TYPE => Ok(Client::Asg),
             EBS_SNAP_TYPE => Ok(Client::EbsSnapshot),
+            EBS_VOL_TYPE => Ok(Client::EbsVolume),
+            EC2_ADDRESS_TYPE => Ok(Client::Ec2Address),
+            EC2_ENI_TYPE => Ok(Client::Ec2Eni),
             EC2_INSTANCE_TYPE => Ok(Client::Ec2Instance),
             EC2_SG_TYPE => Ok(Client::Ec2Sg),
-            EC2_ENI_TYPE => Ok(Client::Ec2Eni),
-            EC2_ADDRESS_TYPE => Ok(Client::Ec2Address),
+            EC2_VPC_TYPE => Ok(Client::Ec2Vpc),
+            EC2_IGW_TYPE => Ok(Client::Ec2Igw),
+            EC2_SUBNET_TYPE => Ok(Client::Ec2Subnet),
+            EC2_RT_TYPE => Ok(Client::Ec2RouteTable),
+            EC2_NACL_TYPE => Ok(Client::Ec2NetworkACL),
+            EC2_NATGW_TYPE => Ok(Client::Ec2NatGW),
+            EC2_VPNGW_TYPE => Ok(Client::Ec2VpnGW),
+            EC2_VPC_ENDPOINT_TYPE => Ok(Client::Ec2VpcEndpoint),
+            EC2_PEERING_CONNECTION => Ok(Client::Ec2PeeringConnection),
+            ECS_TYPE => Ok(Client::EcsCluster),
             ELB_ALB_TYPE => Ok(Client::ElbAlb),
             ELB_NLB_TYPE => Ok(Client::ElbNlb),
             EMR_TYPE => Ok(Client::EmrCluster),
             ES_TYPE => Ok(Client::EsDomain),
             GLUE_ENDPOINT_TYPE => Ok(Client::GlueEndpoint),
+            RDS_CLUSTER_TYPE => Ok(Client::RdsCluster),
             RDS_INSTANCE_TYPE => Ok(Client::RdsInstance),
             REDSHIFT_CLUSTER_TYPE => Ok(Client::RsCluster),
             S3_BUCKET_TYPE => Ok(Client::S3Bucket),
             SAGEMAKER_NOTEBOOK_TYPE => Ok(Client::SagemakerNotebook),
-            ASG_TYPE => Ok(Client::Asg),
-            ECS_TYPE => Ok(Client::EcsCluster),
-            VPC_TYPE => Ok(Client::Vpc),
             s => Err(ParseClientError::new(s)),
         }
     }
@@ -127,50 +151,66 @@ impl FromStr for Client {
 impl Client {
     pub fn name(&self) -> &str {
         match *self {
-            Client::RdsCluster => RDS_CLUSTER_TYPE,
-            Client::EbsVolume => EBS_VOL_TYPE,
+            Client::Asg => ASG_TYPE,
+            Client::DefaultClient => DEFAULT_TYPE,
             Client::EbsSnapshot => EBS_SNAP_TYPE,
+            Client::EbsVolume => EBS_VOL_TYPE,
+            Client::Ec2Address => EC2_ADDRESS_TYPE,
+            Client::Ec2Eni => EC2_ENI_TYPE,
             Client::Ec2Instance => EC2_INSTANCE_TYPE,
             Client::Ec2Sg => EC2_SG_TYPE,
-            Client::Ec2Eni => EC2_ENI_TYPE,
-            Client::Ec2Address => EC2_ADDRESS_TYPE,
+            Client::Ec2Vpc => EC2_VPC_TYPE,
+            Client::Ec2Igw => EC2_IGW_TYPE,
+            Client::Ec2Subnet => EC2_SUBNET_TYPE,
+            Client::Ec2RouteTable => EC2_RT_TYPE,
+            Client::Ec2NetworkACL => EC2_NACL_TYPE,
+            Client::Ec2NatGW => EC2_NATGW_TYPE,
+            Client::Ec2VpnGW => EC2_VPNGW_TYPE,
+            Client::Ec2VpcEndpoint => EC2_VPC_ENDPOINT_TYPE,
+            Client::Ec2PeeringConnection => EC2_PEERING_CONNECTION,
+            Client::EcsCluster => ECS_TYPE,
             Client::ElbAlb => ELB_ALB_TYPE,
             Client::ElbNlb => ELB_NLB_TYPE,
             Client::EmrCluster => EMR_TYPE,
             Client::EsDomain => ES_TYPE,
             Client::GlueEndpoint => GLUE_ENDPOINT_TYPE,
+            Client::RdsCluster => RDS_CLUSTER_TYPE,
             Client::RdsInstance => RDS_INSTANCE_TYPE,
             Client::RsCluster => REDSHIFT_CLUSTER_TYPE,
             Client::S3Bucket => S3_BUCKET_TYPE,
             Client::SagemakerNotebook => SAGEMAKER_NOTEBOOK_TYPE,
-            Client::Asg => ASG_TYPE,
-            Client::EcsCluster => ECS_TYPE,
-            Client::Vpc => VPC_TYPE,
-            Client::DefaultClient => DEFAULT_TYPE,
         }
     }
 
     pub fn iter() -> impl Iterator<Item = Client> {
         [
-            Client::RdsCluster,
-            Client::EbsVolume,
+            Client::Asg,
             Client::EbsSnapshot,
-            Client::Ec2Instance,
-            Client::Ec2Sg,
-            Client::Ec2Eni,
+            Client::EbsVolume,
             Client::Ec2Address,
+            Client::Ec2Eni,
+            Client::Ec2Igw,
+            Client::Ec2Instance,
+            Client::Ec2NatGW,
+            Client::Ec2NetworkACL,
+            Client::Ec2PeeringConnection,
+            Client::Ec2RouteTable,
+            Client::Ec2Sg,
+            Client::Ec2Subnet,
+            Client::Ec2Vpc,
+            Client::Ec2VpcEndpoint,
+            Client::Ec2VpnGW,
+            Client::EcsCluster,
             Client::ElbAlb,
             Client::ElbNlb,
             Client::EmrCluster,
             Client::EsDomain,
             Client::GlueEndpoint,
+            Client::RdsCluster,
             Client::RdsInstance,
             Client::RsCluster,
             Client::S3Bucket,
             Client::SagemakerNotebook,
-            Client::Asg,
-            Client::EcsCluster,
-            Client::Vpc,
         ]
         .iter()
         .copied()
@@ -196,10 +236,13 @@ pub trait NukerClient: Send + Sync + DynClone {
     ) {
         if let Ok(resources) = self.scan().await {
             for mut resource in resources {
-                resource.dependencies = self.dependencies(&resource).await;
-                resource.enforcement_state = self
+                let enforcement_state = self
                     .filter_resource(&resource, &config, cw_client.clone())
                     .await;
+                if enforcement_state == EnforcementState::Delete {
+                    resource.dependencies = self.dependencies(&resource).await;
+                }
+                resource.enforcement_state = enforcement_state;
 
                 if let Err(err) = tx.send(Event::Resource(resource)).await {
                     error!(err = ?err, "Failed to publish event to the queue");
@@ -241,7 +284,7 @@ pub trait NukerClient: Send + Sync + DynClone {
             config.allowed_types.as_deref(),
             resource.resource_type.as_ref(),
         ) {
-            type_.iter().all(|t_| allowed.contains(&t_))
+            !type_.iter().all(|t_| allowed.contains(&t_))
         } else {
             false
         }
@@ -284,43 +327,38 @@ pub trait NukerClient: Send + Sync + DynClone {
     async fn filter_by_idle_rules(
         &self,
         resource: &Resource,
-        config: &ResourceConfig,
         cw_client: Arc<Box<CwClient>>,
     ) -> bool {
-        if let Some(ref _rules) = config.idle_rules {
-            match resource.type_ {
-                Client::Ec2Instance => cw_client.filter_instance(resource.id.as_str()).await,
-                Client::EbsVolume => cw_client.filter_volume(resource.id.as_str()).await,
-                Client::RdsInstance => cw_client.filter_db_instance(resource.id.as_str()).await,
-                Client::RdsCluster => cw_client.filter_db_cluster(resource.id.as_str()).await,
-                Client::RsCluster => cw_client.filter_rs_cluster(resource.id.as_str()).await,
-                Client::EsDomain => cw_client.filter_es_domain(resource.id.as_str()).await,
-                Client::ElbAlb => {
-                    let dimension_val = format!(
-                        "app/{}/{}",
-                        resource.id.as_str(),
-                        resource.arn.as_deref().unwrap().split('/').last().unwrap()
-                    );
-                    cw_client
-                        .filter_alb_load_balancer(dimension_val.as_str())
-                        .await
-                }
-                Client::ElbNlb => {
-                    let dimension_val = format!(
-                        "app/{}/{}",
-                        resource.id.as_str(),
-                        resource.arn.as_deref().unwrap().split('/').last().unwrap()
-                    );
-                    cw_client
-                        .filter_nlb_load_balancer(dimension_val.as_str())
-                        .await
-                }
-                Client::EcsCluster => cw_client.filter_ecs_cluster(resource.id.as_str()).await,
-                Client::EmrCluster => cw_client.filter_emr_cluster(resource.id.as_str()).await,
-                _ => false,
+        match resource.type_ {
+            Client::Ec2Instance => cw_client.filter_instance(resource.id.as_str()).await,
+            Client::EbsVolume => cw_client.filter_volume(resource.id.as_str()).await,
+            Client::RdsInstance => cw_client.filter_db_instance(resource.id.as_str()).await,
+            Client::RdsCluster => cw_client.filter_db_cluster(resource.id.as_str()).await,
+            Client::RsCluster => cw_client.filter_rs_cluster(resource.id.as_str()).await,
+            Client::EsDomain => cw_client.filter_es_domain(resource.id.as_str()).await,
+            Client::ElbAlb => {
+                let dimension_val = format!(
+                    "app/{}/{}",
+                    resource.id.as_str(),
+                    resource.arn.as_deref().unwrap().split('/').last().unwrap()
+                );
+                cw_client
+                    .filter_alb_load_balancer(dimension_val.as_str())
+                    .await
             }
-        } else {
-            false
+            Client::ElbNlb => {
+                let dimension_val = format!(
+                    "app/{}/{}",
+                    resource.id.as_str(),
+                    resource.arn.as_deref().unwrap().split('/').last().unwrap()
+                );
+                cw_client
+                    .filter_nlb_load_balancer(dimension_val.as_str())
+                    .await
+            }
+            Client::EcsCluster => cw_client.filter_ecs_cluster(resource.id.as_str()).await,
+            Client::EmrCluster => cw_client.filter_emr_cluster(resource.id.as_str()).await,
+            _ => false,
         }
     }
 
@@ -338,61 +376,66 @@ pub trait NukerClient: Send + Sync + DynClone {
         config: &ResourceConfig,
         cw_client: Arc<Box<CwClient>>,
     ) -> EnforcementState {
-        if self.filter_by_whitelist(resource, config) {
-            // Skip a resource if its in the whitelist
-            debug!(resource = resource.id.as_str(), "Resource whitelisted");
-            EnforcementState::SkipConfig
-        } else if self.filter_by_state(resource) {
-            // Skip resource if its state is stopped
-            EnforcementState::SkipStopped
-        } else if self.filter_by_tags(resource, config) {
-            // Enforce provided required tags
-            debug!(
-                resource = resource.id.as_str(),
-                "Resource tags does not match."
-            );
-            EnforcementState::from_target_state(&config.target_state)
-        } else if self.filter_by_allowed_types(resource, config) {
-            // Enforce allowed types
-            debug!(
-                resource = resource.id.as_str(),
-                "Resource is not in list of allowed types."
-            );
-            EnforcementState::from_target_state(&config.target_state)
-        } else if self.filter_by_runtime(resource, config) {
-            // Enforce max runtime for a resource if max_run_time is provided
-            debug!(
-                resource = resource.id.as_str(),
-                "Resource exceeded max runtime."
-            );
-            EnforcementState::from_target_state(&config.target_state)
-        } else if self.filter_by_idle_rules(resource, config, cw_client).await {
-            // Enforce Idle rules
-            debug!(resource = resource.id.as_str(), "Resource is idle.");
-            EnforcementState::from_target_state(&config.target_state)
-        } else if self.filter_by_naming_prefix(resource, config) {
-            debug!(
-                resource = resource.id.as_str(),
-                "Resource naming prefix not met."
-            );
-            EnforcementState::from_target_state(&config.target_state)
-        } else {
-            if let Some(additional_filters) = self.additional_filters(resource, config).await.take()
-            {
-                if additional_filters {
-                    {
-                        // Apply any additional filters that are implemented by
-                        // Resource clients.
-                        debug!(
-                            resource = resource.id.as_str(),
-                            "Resource does not meet additional filters."
-                        );
-                        return EnforcementState::from_target_state(&config.target_state);
+        if resource.enforcement_state == EnforcementState::SkipUnknownState {
+            if self.filter_by_whitelist(resource, config) {
+                // Skip a resource if its in the whitelist
+                debug!(resource = resource.id.as_str(), "Resource whitelisted");
+                EnforcementState::SkipConfig
+            } else if self.filter_by_state(resource) {
+                // Skip resource if its state is stopped
+                EnforcementState::SkipStopped
+            } else if self.filter_by_tags(resource, config) {
+                // Enforce provided required tags
+                debug!(
+                    resource = resource.id.as_str(),
+                    "Resource tags does not match."
+                );
+                EnforcementState::from_target_state(&config.target_state)
+            } else if self.filter_by_allowed_types(resource, config) {
+                // Enforce allowed types
+                debug!(
+                    resource = resource.id.as_str(),
+                    "Resource is not in list of allowed types."
+                );
+                EnforcementState::from_target_state(&config.target_state)
+            } else if self.filter_by_runtime(resource, config) {
+                // Enforce max runtime for a resource if max_run_time is provided
+                debug!(
+                    resource = resource.id.as_str(),
+                    "Resource exceeded max runtime."
+                );
+                EnforcementState::from_target_state(&config.target_state)
+            } else if self.filter_by_idle_rules(resource, cw_client).await {
+                // Enforce Idle rules
+                debug!(resource = resource.id.as_str(), "Resource is idle.");
+                EnforcementState::from_target_state(&config.target_state)
+            } else if self.filter_by_naming_prefix(resource, config) {
+                debug!(
+                    resource = resource.id.as_str(),
+                    "Resource naming prefix not met."
+                );
+                EnforcementState::from_target_state(&config.target_state)
+            } else {
+                if let Some(additional_filters) =
+                    self.additional_filters(resource, config).await.take()
+                {
+                    if additional_filters {
+                        {
+                            // Apply any additional filters that are implemented by
+                            // Resource clients.
+                            debug!(
+                                resource = resource.id.as_str(),
+                                "Resource does not meet additional filters."
+                            );
+                            return EnforcementState::from_target_state(&config.target_state);
+                        }
                     }
                 }
-            }
 
-            EnforcementState::Skip
+                EnforcementState::Skip
+            }
+        } else {
+            resource.enforcement_state
         }
     }
 

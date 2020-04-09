@@ -22,21 +22,21 @@ allowed_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
 
     # Identify any EC2 instances that appear to be idle based on the following
     # Cloudwatch rules.
-    [[ec2.idle_rules]]
+    [[ec2_instance.idle_rules]]
     namespace = "AWS/EC2"
     metric = "CPUUtilization"
     minimum = 5
     duration = "1 day"
     granularity = "1 hour"
 
-    [[ec2.idle_rules]]
+    [[ec2_instance.idle_rules]]
     namespace = "AWS/EC2"
     metric = "NetworkIn"
     minimum = 5000000 # 5MB
     duration = "1 day"
     granularity = "1 hour"
 
-    [[ec2.idle_rules]]
+    [[ec2_instance.idle_rules]]
     namespace = "AWS/EC2"
     metric = "NetworkOut"
     minimum = 5000000 # 5MB
@@ -46,17 +46,36 @@ allowed_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
     # Defines whether to acknowledge the terminate protection, if 'ignore' is
     # set to 'true' then the termination protection is disabled before
     # attempting to delete the instances.
-    [ec2.termination_protection]
+    [ec2_instance.termination_protection]
     ignore = true
 
     # Defines whether to cleanup stopped instances after specified duration
-    [ec2.manage_stopped]
+    [ec2_instance.manage_stopped]
     older_than = "7 days"
 
 [s3_bucket]
 
     [s3_bucket.naming_prefix]
     pattern = '^cw-(us-[a-z]*-[0-9]{1})-([0-9]{12})-(.*)$'
+
+[ec2_vpc]
+    # Defines required tags on each VPC.
+    [[ec2_vpc.required_tags]]
+    name = "Name"
+    pattern = '^vpc-(ue1|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+
+    [[ec2_vpc.required_tags]]
+    name = "Owner:Name"
+
+    [[ec2_vpc.required_tags]]
+    name = "Owner:Email"
+    pattern = '^(.*)@(.*).com$'
+
+    [[ec2_vpc.required_tags]]
+    name = "Purpose"
+
+    [[ec2_vpc.required_tags]]
+    name = "Environment"
 
 # [ebs]
 # # Specifies whether to clean up Volumes that are detached and not being used

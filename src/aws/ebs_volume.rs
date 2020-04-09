@@ -12,6 +12,9 @@ use rusoto_ec2::{
 use std::str::FromStr;
 use tracing::{debug, trace};
 
+static ROOT_VOLUME_MOUNTS: &'static [&'static str] = &["/dev/sda1", "/dev/xvda"];
+const GP2_TYPE: &str = "gp2";
+
 #[derive(Clone)]
 pub struct EbsVolumeClient {
     client: Ec2Client,
@@ -36,6 +39,19 @@ impl EbsVolumeClient {
         let mut resources: Vec<Resource> = Vec::new();
 
         for volume in &mut volumes {
+            let vol_id = volume.volume_id.as_deref().unwrap();
+            let is_root_vol = if let Some(ref attachments) = volume.attachments {
+                attachments.iter().any(|at| {
+                    ROOT_VOLUME_MOUNTS.contains(&at.device.as_deref().unwrap_or_default())
+                })
+            } else {
+                false
+            };
+
+            if is_root_vol {
+                debug!(resource = vol_id, "Skipping root volume.");
+            }
+
             let arn = format!(
                 "arn:aws:ec2:{}:{}:volume/{}",
                 self.region.name(),
@@ -52,7 +68,11 @@ impl EbsVolumeClient {
                 state: ResourceState::from_str(volume.state.take().unwrap_or_default().as_str())
                     .ok(),
                 start_time: volume.create_time.take(),
-                enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_state: if is_root_vol {
+                    EnforcementState::Skip
+                } else {
+                    EnforcementState::SkipUnknownState
+                },
                 resource_type: volume.volume_type.take().map(|t| vec![t]),
                 dependencies: None,
                 termination_protection: None,
@@ -153,7 +173,7 @@ impl NukerClient for EbsVolumeClient {
         resource: &Resource,
         _config: &ResourceConfig,
     ) -> Option<bool> {
-        if resource.resource_type == Some(vec!["gp2".to_string()]) {
+        if resource.resource_type == Some(vec![GP2_TYPE.to_string()]) {
             debug!(resource = resource.id.as_str(), "volume type violation.");
             Some(true)
         } else if resource.state == Some(ResourceState::Available) {
