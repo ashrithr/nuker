@@ -51,7 +51,7 @@ impl Dag {
     /// Add a given Resource to the DAG
     pub fn add_node_to_dag(&mut self, mut r: Resource) {
         let resource_id = r.id.clone();
-        let resource_deps = std::mem::replace(&mut r.dependencies, None);
+        let resource_dependencies = r.dependencies.take();
 
         let r_index = if self.id_map.contains_key(&r.id) {
             *self.id_map.get(&r.id).unwrap()
@@ -63,8 +63,8 @@ impl Dag {
 
         self.graph.add_edge(self.root_node, r_index, Relation::Root);
 
-        if let Some(deps) = resource_deps {
-            for dep in deps {
+        if let Some(dependencies) = resource_dependencies {
+            for dep in dependencies {
                 let dep_id = dep.id.clone();
                 let dep_index = if self.id_map.contains_key(&dep.id) {
                     *self.id_map.get(&dep.id).unwrap()

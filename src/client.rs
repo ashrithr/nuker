@@ -239,7 +239,9 @@ pub trait NukerClient: Send + Sync + DynClone {
                 let enforcement_state = self
                     .filter_resource(&resource, &config, cw_client.clone())
                     .await;
-                if enforcement_state == EnforcementState::Delete {
+                if enforcement_state == EnforcementState::Delete
+                    || enforcement_state == EnforcementState::DeleteDependent
+                {
                     resource.dependencies = self.dependencies(&resource).await;
                 }
                 resource.enforcement_state = enforcement_state;
@@ -442,7 +444,9 @@ pub trait NukerClient: Send + Sync + DynClone {
     async fn cleanup(&self, resource: &Resource) -> Result<()> {
         match resource.enforcement_state {
             EnforcementState::Stop => self.stop(resource).await?,
-            EnforcementState::Delete => self.delete(resource).await?,
+            EnforcementState::Delete | EnforcementState::DeleteDependent => {
+                self.delete(resource).await?
+            }
             _ => {}
         }
 

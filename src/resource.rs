@@ -50,6 +50,7 @@ impl FromStr for ResourceState {
 pub enum EnforcementState {
     Stop,
     Delete,
+    DeleteDependent,
     Skip,
     SkipConfig,
     SkipStopped,
@@ -61,6 +62,7 @@ impl EnforcementState {
         match *self {
             EnforcementState::Stop => "would be stopped".blue().bold(),
             EnforcementState::Delete => "would be removed".blue().bold(),
+            EnforcementState::DeleteDependent => "would be removed (dependent)".blue().bold(),
             EnforcementState::Skip => "skipped because of rules".yellow().bold(),
             EnforcementState::SkipConfig => "skipped because of config".yellow().bold(),
             EnforcementState::SkipStopped => "skipped as resource is not running".yellow().bold(),
