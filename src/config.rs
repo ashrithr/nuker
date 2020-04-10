@@ -65,7 +65,7 @@ pub struct ParsedConfig {
     #[serde(default = "default_resource_config")]
     pub asg: ResourceConfig,
     #[serde(default = "default_resource_config")]
-    pub ecs: ResourceConfig,
+    pub ecs_cluster: ResourceConfig,
     #[serde(default = "default_resource_config")]
     pub ec2_vpc: ResourceConfig,
     #[serde(default = "default_resource_config")]
@@ -413,7 +413,7 @@ pub fn parse_config(buffer: &str) -> Config {
     config_map.insert(Client::EbsSnapshot, config.ebs_snapshot);
     config_map.insert(Client::RdsInstance, config.rds_instance);
     config_map.insert(Client::RdsCluster, config.rds_cluster);
-    config_map.insert(Client::EcsCluster, config.ecs);
+    config_map.insert(Client::EcsCluster, config.ecs_cluster);
     config_map.insert(Client::ElbAlb, config.elb_alb);
     config_map.insert(Client::ElbNlb, config.elb_nlb);
     config_map.insert(Client::EmrCluster, config.emr_cluster);
