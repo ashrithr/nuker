@@ -1,15 +1,16 @@
 use crate::aws::ClientDetails;
 use crate::client::{ClientType, NukerClient};
 use crate::config::ResourceConfig;
-use crate::resource::{EnforcementState, NTag, Resource};
+use crate::resource::{EnforcementState, NTag, Resource, ResourceState};
 use crate::Result;
 use crate::{handle_future, handle_future_with_return};
 use async_trait::async_trait;
 use rusoto_core::Region;
 use rusoto_ec2::{
-    DeleteSecurityGroupRequest, DescribeSecurityGroupsRequest, Ec2, Ec2Client, Filter,
-    RevokeSecurityGroupIngressRequest, SecurityGroup, Tag,
+    DeleteSecurityGroupRequest, DescribeNetworkInterfacesRequest, DescribeSecurityGroupsRequest,
+    Ec2, Ec2Client, Filter, RevokeSecurityGroupIngressRequest, SecurityGroup, Tag,
 };
+use std::str::FromStr;
 use tracing::{debug, trace};
 
 #[derive(Clone)]
@@ -159,38 +160,49 @@ impl Ec2SgClient {
         Some(true)
     }
 
-    // async fn get_dependencies(&self, resource: &Resource) -> Result<Vec<Resource>> {
-    //     let mut dependencies: Vec<Resource> = Vec::new();
-    //     let mut deps_map: HashMap<String, HashSet<String>> = HashMap::new();
-    //     let rid = resource.id.clone();
+    async fn get_dependencies(&self, resource: &Resource) -> Result<Vec<Resource>> {
+        let mut resources = Vec::new();
 
-    //     // Find all the dependent security groups
-    //     if let Some(mut sgs) = self.get_sgs().await.ok() {
-    //         for sg in &mut sgs {
-    //             let group_name = sg.group_name.take().unwrap();
-    //             let group_id = sg.group_id.take().unwrap();
+        let req = self
+            .client
+            .describe_network_interfaces(DescribeNetworkInterfacesRequest {
+                filters: Some(vec![Filter {
+                    name: Some("group-id".to_string()),
+                    values: Some(vec![resource.id.to_string()]),
+                }]),
+                ..Default::default()
+            });
 
-    //             if !deps_map.contains_key(&group_id) {
-    //                 deps_map.insert(group_id.clone(), HashSet::new());
-    //             }
+        if let Ok(result) = handle_future_with_return!(req) {
+            if let Some(enis) = result.network_interfaces {
+                for eni in enis {
+                    let arn = format!(
+                        "arn:aws:ec2:{}:{}:network-interface/{}",
+                        self.region.name(),
+                        self.account_num,
+                        eni.network_interface_id.as_ref().unwrap(),
+                    );
 
-    //             for rule in sg.ip_permissions.take().unwrap() {
-    //                 if let Some(grants) = rule.user_id_group_pairs {
-    //                     for grant in grants {
-    //                         if let Some(gid) = grant.group_id {
-    //                             if !deps_map.contains_key(&gid) {
-    //                                 deps_map.insert(gid.clone(), HashSet::default());
-    //                             }
-    //                             deps_map.get_mut(&gid).unwrap().insert(group_id.clone());
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
+                    resources.push(Resource {
+                        id: eni.network_interface_id.unwrap(),
+                        arn: Some(arn),
+                        type_: ClientType::Ec2Eni,
+                        region: self.region.clone(),
+                        tags: self.package_tags(eni.tag_set),
+                        state: ResourceState::from_str(eni.status.as_deref().unwrap_or_default())
+                            .ok(),
+                        start_time: None,
+                        enforcement_state: EnforcementState::DeleteDependent,
+                        resource_type: None,
+                        dependencies: None,
+                        termination_protection: None,
+                    });
+                }
+            }
+        }
 
-    //     unimplemented!()
-    // }
+        Ok(resources)
+    }
 
     async fn open_sg(&self, resource: &Resource) -> bool {
         if let Ok(mut sgs) = self
@@ -237,9 +249,8 @@ impl NukerClient for Ec2SgClient {
         Ok(self.package_resources(sgs).await?)
     }
 
-    async fn dependencies(&self, _resource: &Resource) -> Option<Vec<Resource>> {
-        // self.get_dependencies(resource).await.ok()
-        None
+    async fn dependencies(&self, resource: &Resource) -> Option<Vec<Resource>> {
+        self.get_dependencies(resource).await.ok()
     }
 
     async fn additional_filters(
