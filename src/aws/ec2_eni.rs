@@ -7,9 +7,9 @@ use crate::{handle_future, handle_future_with_return};
 use async_trait::async_trait;
 use rusoto_core::Region;
 use rusoto_ec2::{
-    DeleteNetworkInterfaceRequest, DescribeNetworkInterfaceAttributeRequest,
-    DescribeNetworkInterfacesRequest, DetachNetworkInterfaceRequest, Ec2, Ec2Client,
-    NetworkInterface, Tag,
+    DeleteNetworkInterfaceRequest, DescribeInstancesRequest,
+    DescribeNetworkInterfaceAttributeRequest, DescribeNetworkInterfacesRequest,
+    DetachNetworkInterfaceRequest, Ec2, Ec2Client, Filter, NetworkInterface, Tag,
 };
 use std::str::FromStr;
 use tracing::{debug, trace, warn};
@@ -34,7 +34,7 @@ impl Ec2EniClient {
         }
     }
 
-    async fn package_resources(&self, mut enis: Vec<NetworkInterface>) -> Result<Vec<Resource>> {
+    async fn _package_resources(&self, mut enis: Vec<NetworkInterface>) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
 
         for eni in &mut enis {
@@ -63,7 +63,7 @@ impl Ec2EniClient {
         Ok(resources)
     }
 
-    async fn get_enis(&self) -> Result<Vec<NetworkInterface>> {
+    async fn _get_enis(&self) -> Result<Vec<NetworkInterface>> {
         let mut next_token: Option<String> = None;
         let mut interfaces: Vec<NetworkInterface> = Vec::new();
 
@@ -153,18 +153,65 @@ impl Ec2EniClient {
                 .collect()
         })
     }
+
+    async fn get_dependencies(&self, resource: &Resource) -> Result<Vec<Resource>> {
+        let mut resources = Vec::new();
+
+        // Instances
+        let req = self.client.describe_instances(DescribeInstancesRequest {
+            filters: Some(vec![Filter {
+                name: Some("network-interface.network-interface-id".to_string()),
+                values: Some(vec![resource.id.to_string()]),
+            }]),
+            ..Default::default()
+        });
+
+        if let Ok(result) = handle_future_with_return!(req) {
+            if let Some(reservations) = result.reservations {
+                for reservation in reservations {
+                    if let Some(instances) = reservation.instances {
+                        for instance in instances {
+                            let arn = format!(
+                                "arn:aws:ec2:{}:{}:instance/{}",
+                                self.region.name(),
+                                self.account_num,
+                                instance.instance_id.as_ref().unwrap(),
+                            );
+
+                            resources.push(Resource {
+                                id: instance.instance_id.unwrap(),
+                                arn: Some(arn),
+                                type_: ClientType::Ec2Instance,
+                                region: self.region.clone(),
+                                tags: self.package_tags(instance.tags),
+                                state: None,
+                                start_time: None,
+                                enforcement_state: EnforcementState::DeleteDependent,
+                                resource_type: None,
+                                dependencies: None,
+                                termination_protection: Some(true),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(resources)
+    }
 }
 
 #[async_trait]
 impl NukerClient for Ec2EniClient {
     async fn scan(&self) -> Result<Vec<Resource>> {
         trace!("Initialized EC2 ENI resource scanner");
-        let enis = self.get_enis().await?;
-        Ok(self.package_resources(enis).await?)
+        // let enis = self.get_enis().await?;
+        // Ok(self.package_resources(enis).await?)
+        Ok(vec![])
     }
 
-    async fn dependencies(&self, _resource: &Resource) -> Option<Vec<Resource>> {
-        None
+    async fn dependencies(&self, resource: &Resource) -> Option<Vec<Resource>> {
+        self.get_dependencies(resource).await.ok()
     }
 
     async fn additional_filters(
