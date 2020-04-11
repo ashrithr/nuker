@@ -195,7 +195,7 @@ impl Ec2SgClient {
                         enforcement_state: EnforcementState::DeleteDependent,
                         resource_type: None,
                         dependencies: None,
-                        termination_protection: None,
+                        termination_protection: Some(true),
                     });
                 }
             }

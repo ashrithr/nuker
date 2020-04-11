@@ -7,11 +7,11 @@ use crate::{handle_future, handle_future_with_return};
 use async_trait::async_trait;
 use rusoto_core::Region;
 use rusoto_ec2::{
-    DeleteVpcRequest, DescribeInstancesRequest, DescribeInternetGatewaysRequest,
-    DescribeNatGatewaysRequest, DescribeNetworkAclsRequest, DescribeNetworkInterfacesRequest,
-    DescribeRouteTablesRequest, DescribeSecurityGroupsRequest, DescribeSubnetsRequest,
-    DescribeVpcEndpointsRequest, DescribeVpcPeeringConnectionsRequest, DescribeVpcsRequest,
-    DescribeVpnGatewaysRequest, Ec2, Ec2Client, Filter, Tag, Vpc,
+    DeleteVpcRequest, DescribeInternetGatewaysRequest, DescribeNatGatewaysRequest,
+    DescribeNetworkAclsRequest, DescribeNetworkInterfacesRequest, DescribeRouteTablesRequest,
+    DescribeSecurityGroupsRequest, DescribeSubnetsRequest, DescribeVpcEndpointsRequest,
+    DescribeVpcPeeringConnectionsRequest, DescribeVpcsRequest, DescribeVpnGatewaysRequest, Ec2,
+    Ec2Client, Filter, Tag, Vpc,
 };
 use std::str::FromStr;
 use tracing::{debug, trace};
@@ -445,51 +445,6 @@ impl Ec2VpcClient {
                                 dependencies: None,
                                 termination_protection: None,
                             });
-                        }
-                    }
-                }
-            }
-            Err(_) => {}
-        }
-
-        // Instances
-        match self
-            .client
-            .describe_instances(DescribeInstancesRequest {
-                filters: Some(vec![Filter {
-                    name: Some("vpc-id".to_string()),
-                    values: Some(vec![vpc_id.to_string()]),
-                }]),
-                ..Default::default()
-            })
-            .await
-        {
-            Ok(result) => {
-                if let Some(reservations) = result.reservations {
-                    for reservation in reservations {
-                        if let Some(instances) = reservation.instances {
-                            for instance in instances {
-                                let arn = format!(
-                                    "arn:aws:ec2:{}:{}:instance/{}",
-                                    self.region.name(),
-                                    self.account_num,
-                                    instance.instance_id.as_ref().unwrap(),
-                                );
-
-                                resources.push(Resource {
-                                    id: instance.instance_id.unwrap(),
-                                    arn: Some(arn),
-                                    type_: ClientType::Ec2Instance,
-                                    region: self.region.clone(),
-                                    tags: self.package_tags(instance.tags),
-                                    state: None,
-                                    start_time: None,
-                                    enforcement_state: EnforcementState::DeleteDependent,
-                                    resource_type: None,
-                                    dependencies: None,
-                                    termination_protection: Some(true),
-                                });
-                            }
                         }
                     }
                 }

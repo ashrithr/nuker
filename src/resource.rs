@@ -144,9 +144,9 @@ impl fmt::Display for Resource {
             self.id.bold()
         )?;
 
-        if self.arn.is_some() {
-            write!(f, " ({})", self.arn.as_ref().unwrap())?;
-        }
+        // if self.arn.is_some() {
+        //     write!(f, " ({})", self.arn.as_ref().unwrap())?;
+        // }
 
         if self.tags.is_some() && !self.tags.as_ref().unwrap().is_empty() {
             write!(f, " - {{")?;

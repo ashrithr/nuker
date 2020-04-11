@@ -239,6 +239,7 @@ pub trait NukerClient: Send + Sync + DynClone {
                 let enforcement_state = self
                     .filter_resource(&resource, &config, cw_client.clone())
                     .await;
+
                 if enforcement_state == EnforcementState::Delete
                     || enforcement_state == EnforcementState::DeleteDependent
                 {
