@@ -115,7 +115,7 @@ impl CwClient {
                     );
                 } else {
                     warn!(resource = resource_id, idle_rule = ?idle_rule, "Invalid Metric.");
-                    result = true;
+                    result = false;
                 }
             }
         }

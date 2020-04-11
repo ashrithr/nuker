@@ -91,7 +91,7 @@
 
 [ec2_instance]
 allowed_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
-    "t3.micro", "t3.small", "t3.medium", "t3.large", "t3.xlarge", "t2.micro"]
+    "t3.micro", "t3.small", "t3.medium", "t3.large", "t3.xlarge", "t2.micro", "t2.nano"]
 
     [[ec2_instance.required_tags]]
     name = "Name"

@@ -49,6 +49,7 @@ use crate::{
     client::NukerClient,
     config::Config,
     graph::{is_dag, Dag},
+    resource::EnforcementState,
     Error, Result,
 };
 use rusoto_core::{Client as RClient, HttpClient, Region};
@@ -144,8 +145,24 @@ impl AwsNuker {
 
         while let Some(r) = self.rx.recv().await {
             match r {
-                Event::Resource(r) => {
-                    self.dag.add_node_to_dag(r);
+                Event::Resource(resource) => {
+                    self.dag.add_node_to_dag(resource.clone());
+
+                    if resource.enforcement_state == EnforcementState::Delete
+                        || resource.enforcement_state == EnforcementState::DeleteDependent
+                    {
+                        if let Some(deps) = resource.dependencies {
+                            for mut dep in deps {
+                                dep.dependencies = self
+                                    .clients
+                                    .get(&dep.type_)
+                                    .unwrap()
+                                    .dependencies(&dep)
+                                    .await;
+                                self.dag.add_node_to_dag(dep);
+                            }
+                        }
+                    }
                 }
                 Event::Shutdown(_et) => {
                     done = done + 1;
@@ -176,7 +193,6 @@ impl AwsNuker {
 
         for r in self.dag.order_by_dependencies()? {
             println!("{}", r);
-            trace!("{:?}", r);
         }
 
         Ok(())

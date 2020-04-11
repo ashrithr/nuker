@@ -13,28 +13,20 @@ use std::collections::HashMap;
 #[derive(Debug, Copy, Clone)]
 pub enum Relation {
     Depends,
-    Root,
 }
 
 pub struct Dag {
     pub graph: Graph<Resource, Relation>,
-    pub id_map: HashMap<String, NodeIndex<u32>>,
-    pub root_node: NodeIndex<u32>,
+    id_map: HashMap<String, NodeIndex<u32>>,
 }
 
 impl Dag {
     /// Create a Dag with "root" node
     pub fn new() -> Self {
-        let mut graph: Graph<Resource, Relation> = Graph::new();
+        let graph: Graph<Resource, Relation> = Graph::new();
         let id_map: HashMap<String, NodeIndex<u32>> = HashMap::new();
 
-        let root_node = graph.add_node(Resource::default());
-
-        Dag {
-            graph,
-            id_map,
-            root_node,
-        }
+        Dag { graph, id_map }
     }
 
     pub fn get_dot(&self) -> Option<String> {
@@ -53,29 +45,34 @@ impl Dag {
         let resource_id = r.id.clone();
         let resource_dependencies = r.dependencies.take();
 
-        let r_index = if self.id_map.contains_key(&r.id) {
+        let root_index = if self.id_map.contains_key(&r.id) {
             *self.id_map.get(&r.id).unwrap()
         } else {
             let rid = self.graph.add_node(r);
-            self.id_map.insert(resource_id, rid);
+            self.id_map.insert(resource_id.clone(), rid);
             rid
         };
-
-        self.graph.add_edge(self.root_node, r_index, Relation::Root);
 
         if let Some(dependencies) = resource_dependencies {
             for dep in dependencies {
                 let dep_id = dep.id.clone();
                 let dep_index = if self.id_map.contains_key(&dep.id) {
-                    *self.id_map.get(&dep.id).unwrap()
+                    let tid = *self.id_map.get(&dep.id).unwrap();
+
+                    if let Some(node) = self.graph.node_weight_mut(tid) {
+                        // Replace the existing resource with dependent's state
+                        node.state = dep.state;
+                    }
+
+                    tid
                 } else {
                     let rid = self.graph.add_node(dep);
-                    self.id_map.insert(dep_id, rid);
-                    self.graph.add_edge(self.root_node, rid, Relation::Root);
+                    self.id_map.insert(dep_id.clone(), rid);
                     rid
                 };
 
-                self.graph.add_edge(dep_index, r_index, Relation::Depends);
+                self.graph
+                    .add_edge(dep_index, root_index, Relation::Depends);
             }
         }
     }
