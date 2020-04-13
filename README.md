@@ -4,71 +4,74 @@
 
 Cleans up AWS resources based on configurable Rules. This project is a WIP.
 
-## Supported Services
+## Supported Resources
 
-* EC2
-    - Clean up based on Tags
-    - Clean up based on Allowed Instance Types
-    - Clean up Idle Instances based on CloudWatch metrics
-    - Clean up based on open Security Group rules
-    - Clean up unassociated elastic IP addresses
-    - Clean up unused elastic network interfaces
-    - Clean up instances older than configured duration
-    - Ignore specified resource(s)
-* EBS
-    - Clean up unused volumes (not attached to any instance)
-    - Clean up snapshots that are older than configured duration
-    - Enforce use of gp2 volumes over io1
-    - Clean up Idle volumes based on CloudWatch metrics
-    - Ignore specified resource(s)
-* ELB V2
-    - Clean up based on Tags
-    - Clean up Idle Load Balancers based on CloudWatch metrics
-    - Ignore specified resource(s)    
-* ASG
-    - Clean up based on tags
-    - Clean up empty ASG (if no instances and load balancers are attached)
-    - Ignore specified resource(s)
-* RDS
-    - Clean up based on Tags
-    - Clean up based on Allowed Instance Types
-    - Clean up Idle Instances/Clusters based on CloudWatch metrics
-    - Clean up stopped database instances older than configured duration (not supported for Aurora Clusters as Aurora clusters cannot be deleted in stopped state)
-    - Ignore specified resource(s)
-* Redshift
-    - Clean up based on Tags
-    - Clean up based on Allowed Instance Types
-    - Clean up Idle Clusters based on CloudWatch metrics
-    - Ignore specified resource(s)    
-* S3
-    - Clean up based on bucket naming prefix
-    - Clean up publicly exposed buckets (Blocked)
-    - Enforce DNS compliant naming
-    - Ignore specified resource(s)
-* EMR
-    - Clean up based on Tags
-    - Clean up based on allowed Instance types
-    - Clean up Idle Instances based on CloudWatch metrics
-    - Clean up based on open Security Group rules
-    - Enforce using cluster for specified duration
-    - Ignore specified resource(s)
-* Glue
-    - Clean up Glue Dev Endpoints based on Tags
-    - Enforce using Glue Dev Endpoints for specified duration
-    - Ignore specified resource(s)
-* Sagemaker
-    - Clean up Sagemaker Notebooks based on Tags
-    - Enforce using Sagemaker Notebooks for specified duration
-    - Ignore specified resource(s)
-* ElasticSearch
-    - Clean up ES Domains based on Tags
-    - Clean up based on allowed Instance Types
-    - Clean up Idle Domains based on CloudWatch metrics
-    - Ignore specified resource(s)
-* ECS
-    - Clean up Clusters based on Tags
-    - Clean up Idle Clusters based on CloudWatch metrics
-    - Ignore specified resource(s)
+The following table illustrates supported resource types and rules that are
+supported for marking the resources to cleanup.
+
+* required-tags - cleanup resources based on the specified tags
+* approved instance types - ensures that the resources provisioned are not using
+resource types that are not approved.
+* idle-rules - identifies if a resource is idle or not based on the configured
+cloudwatch metrics.
+* Manage Stopped - if enabled, cleans up resource if the resource is stopped for
+a more than specified duration.
+* Max Runtime - ensures that the resource provisioned is only running for approved
+amount of time.
+
+In addition to the specified rules above, each resource can have their own
+additional rules, which are defined below.
+
+| resource type | required-tags | approved-types | idle-rules | max-run-time | manage-stopped | additional-rules |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: |
+| ec2-instance | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |:heavy_check_mark: | - |
+| ec2-address | :heavy_check_mark: | :x: | :x: | :x: | :x: | [rules](#ec2-address-rules) |
+| ec2-eni | :heavy_check_mark: | :x: | :x: | :x: | :x: | [rules](#ec2-eni-rules) |
+| ec2-sg | :heavy_check_mark: | :x: | :x: | :x: | :x: | [rules](#ec2-sg-rules) |
+| ec2-vpc | :heavy_check_mark: | :x: | :x: | :x: | :x: | - |
+| asg | :heavy_check_mark: | :x: | :x: | :x: | :x: | [rules](#asg-rules) |
+| ebs-volume | :heavy_check_mark: | :heavy_check_mark: | :x: | :x: | :x: | [rules](#ebs-volume-rules) |
+| ebs-snapshot | :heavy_check_mark: | :x: | :x: | :heavy_check_mark: | :x: | - |
+| ecs-cluster | :heavy_check_mark: | :heavy_check_mark: | :x: | :x: | :x: | - |
+| elb-alb | :heavy_check_mark: | :x: | :heavy_check_mark: | :x: | :x: | - |
+| elb-nlb | :heavy_check_mark: | :x: | :heavy_check_mark: | :x: | :x: | - |
+| emr-cluster | :heavy_exclamation_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x: | - |
+| es-domain | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x: | - |
+| glue-endpoint | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x: | - |
+| rds-cluster | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | - |
+| rds-instance | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | - |
+| s3-bucket| :heavy_check_mark: | :x: | :x: | :x: | :x: | [rules](#s3-bucket-rules) |
+| sagemaker-notebook | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x: | - |
+
+### Additional Rules
+
+#### ec2-address rules
+
+- Unassociated - Removes an EIP that is unassociated
+
+#### ec2-eni rules
+
+- Unassociated - Removes an ENI that is unassociated
+
+#### ec2-sg rules
+
+- Unsecured - Removes an Security Group and the resources that are using it, if
+open to the world rules (0.0.0.0/0 or ::/0) are associated with it.
+
+#### asg rules
+
+- Unassociated - Removes an Auto Scaling Group that has no instances associated,
+or no ELB's associated with it.
+
+#### ebs-volume rules
+
+- Unassociated - Removes a Volume that is unassociated
+
+#### s3-bucket rules
+
+- Bucket Naming Prefix - Ensures bucket naming convention is followed
+- Publicly Accessability - Ensures bucket is not publicly accessible
+- DNS Compliant Naming - Ensures bucket naming convention to be DNS compliant
 
 ## Configuration
 
@@ -79,6 +82,11 @@ Make a copy of the sample configuration and make changes as needed based on the 
 ```
 cp examples/config/sample.toml config.toml
 ```
+
+### Whitelisting Resources
+
+Each resource type supports the ability to whitelist resources from the config
+file. Refer to sample configuration file for examples.
 
 ## Build and Running
 

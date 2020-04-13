@@ -13,7 +13,7 @@ use std::str::FromStr;
 use tracing::{debug, trace};
 
 static ROOT_VOLUME_MOUNTS: &'static [&'static str] = &["/dev/sda1", "/dev/xvda"];
-const GP2_TYPE: &str = "gp2";
+// const GP2_TYPE: &str = "gp2";
 
 #[derive(Clone)]
 pub struct EbsVolumeClient {
@@ -173,10 +173,7 @@ impl NukerClient for EbsVolumeClient {
         resource: &Resource,
         _config: &ResourceConfig,
     ) -> Option<bool> {
-        if resource.resource_type == Some(vec![GP2_TYPE.to_string()]) {
-            debug!(resource = resource.id.as_str(), "volume type violation.");
-            Some(true)
-        } else if resource.state == Some(ResourceState::Available) {
+        if resource.state == Some(ResourceState::Available) {
             debug!(resource = resource.id.as_str(), "volume state violation.");
             Some(true)
         } else {

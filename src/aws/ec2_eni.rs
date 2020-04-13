@@ -34,7 +34,7 @@ impl Ec2EniClient {
         }
     }
 
-    async fn _package_resources(&self, mut enis: Vec<NetworkInterface>) -> Result<Vec<Resource>> {
+    async fn package_resources(&self, mut enis: Vec<NetworkInterface>) -> Result<Vec<Resource>> {
         let mut resources: Vec<Resource> = Vec::new();
 
         for eni in &mut enis {
@@ -63,7 +63,7 @@ impl Ec2EniClient {
         Ok(resources)
     }
 
-    async fn _get_enis(&self) -> Result<Vec<NetworkInterface>> {
+    async fn get_enis(&self) -> Result<Vec<NetworkInterface>> {
         let mut next_token: Option<String> = None;
         let mut interfaces: Vec<NetworkInterface> = Vec::new();
 
@@ -205,9 +205,8 @@ impl Ec2EniClient {
 impl NukerClient for Ec2EniClient {
     async fn scan(&self) -> Result<Vec<Resource>> {
         trace!("Initialized EC2 ENI resource scanner");
-        // let enis = self.get_enis().await?;
-        // Ok(self.package_resources(enis).await?)
-        Ok(vec![])
+        let enis = self.get_enis().await?;
+        Ok(self.package_resources(enis).await?)
     }
 
     async fn dependencies(&self, resource: &Resource) -> Option<Vec<Resource>> {

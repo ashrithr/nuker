@@ -156,6 +156,8 @@ allowed_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
     name = "Environment"
 
 [ebs_volume]
+allowed_types = ["gp2", "standard"]
+
     [[ebs_volume.idle_rules]]
     namespace = "AWS/EBS"
     metric = "VolumeReadOps"
