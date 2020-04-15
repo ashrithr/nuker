@@ -32,7 +32,8 @@ additional rules, which are defined below.
 | asg | :heavy_check_mark: | :x: | :x: | :x: | :x: | [rules](#asg-rules) |
 | ebs-volume | :heavy_check_mark: | :heavy_check_mark: | :x: | :x: | :x: | [rules](#ebs-volume-rules) |
 | ebs-snapshot | :heavy_check_mark: | :x: | :x: | :heavy_check_mark: | :x: | - |
-| ecs-cluster | :heavy_check_mark: | :heavy_check_mark: | :x: | :x: | :x: | - |
+| ecs-cluster | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x: | :x: | - |
+| eks-cluster | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x: | :x: | - |
 | elb-alb | :heavy_check_mark: | :x: | :heavy_check_mark: | :x: | :x: | - |
 | elb-nlb | :heavy_check_mark: | :x: | :heavy_check_mark: | :x: | :x: | - |
 | emr-cluster | :heavy_exclamation_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x: | - |

@@ -20,6 +20,7 @@ pub struct CwClient {
     pub emr_idle_rules: Option<Vec<IdleRules>>,
     pub es_idle_rules: Option<Vec<IdleRules>>,
     pub ecs_idle_rules: Option<Vec<IdleRules>>,
+    pub eks_idle_rules: Option<Vec<IdleRules>>,
 }
 
 impl CwClient {
@@ -70,6 +71,7 @@ impl CwClient {
             ClientType::EmrCluster => &self.emr_idle_rules,
             ClientType::EsDomain => &self.es_idle_rules,
             ClientType::EcsCluster => &self.ecs_idle_rules,
+            ClientType::EksCluster => &self.eks_idle_rules,
             _ => &None,
         };
 
@@ -173,6 +175,11 @@ impl CwClient {
 
     pub async fn filter_ecs_cluster(&self, cluster_name: &str) -> bool {
         self.filter_resource(cluster_name, "ClusterName", ClientType::EcsCluster)
+            .await
+    }
+
+    pub async fn filter_eks_cluster(&self, cluster_name: &str) -> bool {
+        self.filter_resource(cluster_name, "ClusterName", ClientType::EksCluster)
             .await
     }
 
@@ -301,6 +308,7 @@ mod tests {
             emr_idle_rules: None,
             es_idle_rules: None,
             ecs_idle_rules: None,
+            eks_idle_rules: None,
         }
     }
 

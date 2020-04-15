@@ -16,6 +16,7 @@ mod ec2_vpc;
 mod ec2_vpc_endpoint;
 mod ec2_vpn_gw;
 mod ecs_cluster;
+mod eks_cluster;
 mod elb_alb;
 mod elb_nlb;
 mod emr_cluster;
@@ -39,8 +40,8 @@ use crate::{
         ec2_network_acl::Ec2NetworkAclClient, ec2_peer_conn::Ec2PeerConnClient,
         ec2_rt::Ec2RtClient, ec2_sg::Ec2SgClient, ec2_subnet::Ec2SubnetClient,
         ec2_vpc::Ec2VpcClient, ec2_vpc_endpoint::Ec2VpcEndpointClient, ec2_vpn_gw::Ec2VpnGWClient,
-        ecs_cluster::EcsClusterClient, elb_alb::ElbAlbClient, elb_nlb::ElbNlbClient,
-        emr_cluster::EmrClusterClient, es_domain::EsDomainClient,
+        ecs_cluster::EcsClusterClient, eks_cluster::EksClusterClient, elb_alb::ElbAlbClient,
+        elb_nlb::ElbNlbClient, emr_cluster::EmrClusterClient, es_domain::EsDomainClient,
         glue_endpoint::GlueEndpointClient, rds_cluster::RdsClusterClient,
         rds_instance::RdsInstanceClient, rs_cluster::RsClusterClient, s3_bucket::S3BucketClient,
         sagemaker_notebook::SagemakerNotebookClient, sts::StsService,
@@ -151,6 +152,7 @@ impl AwsNuker {
                     if resource.enforcement_state == EnforcementState::Delete
                         || resource.enforcement_state == EnforcementState::DeleteDependent
                     {
+                        // FIXME: This is redundant
                         if let Some(deps) = resource.dependencies {
                             for mut dep in deps {
                                 dep.dependencies = self
@@ -287,6 +289,9 @@ fn create_client(rt: &Client, cd: &ClientDetails, c: &Config, dr: bool) -> Box<d
         Client::EcsCluster => {
             Box::new(EcsClusterClient::new(cd, c.get(&rt).unwrap(), dr)) as Box<dyn NukerClient>
         }
+        Client::EksCluster => {
+            Box::new(EksClusterClient::new(cd, c.get(&rt).unwrap(), dr)) as Box<dyn NukerClient>
+        }
         Client::ElbAlb => {
             Box::new(ElbAlbClient::new(cd, c.get(&rt).unwrap(), dr)) as Box<dyn NukerClient>
         }
@@ -337,24 +342,48 @@ fn create_cw_client(
 
     Ok(Arc::new(Box::new(CwClient {
         client: cw_client,
-        ec2_idle_rules: std::mem::replace(
-            &mut config.get_mut(&Client::Ec2Instance).unwrap().idle_rules,
-            None,
-        ),
-        ebs_idle_rules: None,
-        elb_alb_idle_rules: None,
-        elb_nlb_idle_rules: None,
-        rds_idle_rules: std::mem::replace(
-            &mut config.get_mut(&Client::RdsInstance).unwrap().idle_rules,
-            None,
-        ),
-        aurora_idle_rules: std::mem::replace(
-            &mut config.get_mut(&Client::RdsCluster).unwrap().idle_rules,
-            None,
-        ),
-        redshift_idle_rules: None,
-        emr_idle_rules: None,
-        es_idle_rules: None,
-        ecs_idle_rules: None,
+        ec2_idle_rules: config
+            .get_mut(&Client::Ec2Instance)
+            .unwrap()
+            .idle_rules
+            .take(),
+        ebs_idle_rules: config
+            .get_mut(&Client::EbsVolume)
+            .unwrap()
+            .idle_rules
+            .take(),
+        elb_alb_idle_rules: config.get_mut(&Client::ElbAlb).unwrap().idle_rules.take(),
+        elb_nlb_idle_rules: config.get_mut(&Client::ElbNlb).unwrap().idle_rules.take(),
+        rds_idle_rules: config
+            .get_mut(&Client::RdsInstance)
+            .unwrap()
+            .idle_rules
+            .take(),
+        aurora_idle_rules: config
+            .get_mut(&Client::RdsCluster)
+            .unwrap()
+            .idle_rules
+            .take(),
+        redshift_idle_rules: config
+            .get_mut(&Client::RsCluster)
+            .unwrap()
+            .idle_rules
+            .take(),
+        emr_idle_rules: config
+            .get_mut(&Client::EmrCluster)
+            .unwrap()
+            .idle_rules
+            .take(),
+        es_idle_rules: config.get_mut(&Client::EsDomain).unwrap().idle_rules.take(),
+        ecs_idle_rules: config
+            .get_mut(&Client::EcsCluster)
+            .unwrap()
+            .idle_rules
+            .take(),
+        eks_idle_rules: config
+            .get_mut(&Client::EksCluster)
+            .unwrap()
+            .idle_rules
+            .take(),
     })))
 }

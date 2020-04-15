@@ -67,6 +67,8 @@ pub struct ParsedConfig {
     #[serde(default = "default_resource_config")]
     pub ecs_cluster: ResourceConfig,
     #[serde(default = "default_resource_config")]
+    pub eks_cluster: ResourceConfig,
+    #[serde(default = "default_resource_config")]
     pub ec2_vpc: ResourceConfig,
     #[serde(default = "default_resource_config")]
     pub ec2_igw: ResourceConfig,
@@ -342,66 +344,8 @@ pub fn parse_config_file(filename: &str) -> Config {
 }
 
 pub fn parse_config(buffer: &str) -> Config {
-    let mut config: ParsedConfig =
-        toml::from_str(buffer).expect("could not parse toml configuration");
+    let config: ParsedConfig = toml::from_str(buffer).expect("could not parse toml configuration");
     let mut config_map: HashMap<Client, ResourceConfig> = HashMap::new();
-
-    // Compile all regex expressions up front
-    if config.ec2_instance.required_tags.is_some() {
-        for rt in config.ec2_instance.required_tags.as_mut().unwrap() {
-            if rt.pattern.is_some() {
-                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
-            }
-        }
-    }
-
-    if let Some(manage_stopped) = &mut config.ec2_instance.manage_stopped {
-        manage_stopped.dt_extract_regex = compile_regex(r"^.*\((?P<datetime>.*)\)$");
-    }
-
-    if config.rds_instance.required_tags.is_some() {
-        for rt in config.rds_instance.required_tags.as_mut().unwrap() {
-            if rt.pattern.is_some() {
-                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
-            }
-        }
-    }
-
-    if config.rds_cluster.required_tags.is_some() {
-        for rt in config.rds_cluster.required_tags.as_mut().unwrap() {
-            if rt.pattern.is_some() {
-                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
-            }
-        }
-    }
-
-    if config.rs_cluster.required_tags.is_some() {
-        for rt in config.rs_cluster.required_tags.as_mut().unwrap() {
-            if rt.pattern.is_some() {
-                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
-            }
-        }
-    }
-
-    if config.emr_cluster.required_tags.is_some() {
-        for rt in config.emr_cluster.required_tags.as_mut().unwrap() {
-            if rt.pattern.is_some() {
-                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
-            }
-        }
-    }
-
-    if config.glue_endpoint.required_tags.is_some() {
-        for rt in config.glue_endpoint.required_tags.as_mut().unwrap() {
-            if rt.pattern.is_some() {
-                rt.regex = compile_regex(rt.pattern.as_ref().unwrap());
-            }
-        }
-    }
-
-    if let Some(ref mut np) = config.s3_bucket.naming_prefix {
-        np.regex = compile_regex(&np.pattern.as_str());
-    }
 
     config_map.insert(Client::Asg, config.asg);
     config_map.insert(Client::Ec2Instance, config.ec2_instance);
@@ -430,6 +374,26 @@ pub fn parse_config(buffer: &str) -> Config {
     config_map.insert(Client::Ec2VpnGW, config.ec2_vpn_gw);
     config_map.insert(Client::Ec2VpcEndpoint, config.ec2_vpc_endpoint);
     config_map.insert(Client::Ec2PeeringConnection, config.ec2_peering_connection);
+    config_map.insert(Client::EksCluster, config.eks_cluster);
+
+    // Compile all regex expressions up front
+    for (_client, r_config) in &mut config_map {
+        if let Some(req_tags) = r_config.required_tags.as_mut() {
+            for rt in req_tags {
+                if let Some(pattern) = rt.pattern.as_mut() {
+                    rt.regex = compile_regex(pattern.as_str());
+                }
+            }
+        }
+
+        if let Some(naming_prefix) = r_config.naming_prefix.as_mut() {
+            naming_prefix.regex = compile_regex(naming_prefix.pattern.as_str());
+        }
+
+        // if let Some(manage_stopped) = &mut config.ec2_instance.manage_stopped {
+        //     manage_stopped.dt_extract_regex = compile_regex(r"^.*\((?P<datetime>.*)\)$");
+        // }
+    }
 
     config_map
 }
