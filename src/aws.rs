@@ -342,24 +342,48 @@ fn create_cw_client(
 
     Ok(Arc::new(Box::new(CwClient {
         client: cw_client,
-        ec2_idle_rules: std::mem::replace(
-            &mut config.get_mut(&Client::Ec2Instance).unwrap().idle_rules,
-            None,
-        ),
-        ebs_idle_rules: None,
-        elb_alb_idle_rules: None,
-        elb_nlb_idle_rules: None,
-        rds_idle_rules: std::mem::replace(
-            &mut config.get_mut(&Client::RdsInstance).unwrap().idle_rules,
-            None,
-        ),
-        aurora_idle_rules: std::mem::replace(
-            &mut config.get_mut(&Client::RdsCluster).unwrap().idle_rules,
-            None,
-        ),
-        redshift_idle_rules: None,
-        emr_idle_rules: None,
-        es_idle_rules: None,
-        ecs_idle_rules: None,
+        ec2_idle_rules: config
+            .get_mut(&Client::Ec2Instance)
+            .unwrap()
+            .idle_rules
+            .take(),
+        ebs_idle_rules: config
+            .get_mut(&Client::EbsVolume)
+            .unwrap()
+            .idle_rules
+            .take(),
+        elb_alb_idle_rules: config.get_mut(&Client::ElbAlb).unwrap().idle_rules.take(),
+        elb_nlb_idle_rules: config.get_mut(&Client::ElbNlb).unwrap().idle_rules.take(),
+        rds_idle_rules: config
+            .get_mut(&Client::RdsInstance)
+            .unwrap()
+            .idle_rules
+            .take(),
+        aurora_idle_rules: config
+            .get_mut(&Client::RdsCluster)
+            .unwrap()
+            .idle_rules
+            .take(),
+        redshift_idle_rules: config
+            .get_mut(&Client::RsCluster)
+            .unwrap()
+            .idle_rules
+            .take(),
+        emr_idle_rules: config
+            .get_mut(&Client::EmrCluster)
+            .unwrap()
+            .idle_rules
+            .take(),
+        es_idle_rules: config.get_mut(&Client::EsDomain).unwrap().idle_rules.take(),
+        ecs_idle_rules: config
+            .get_mut(&Client::EcsCluster)
+            .unwrap()
+            .idle_rules
+            .take(),
+        eks_idle_rules: config
+            .get_mut(&Client::EksCluster)
+            .unwrap()
+            .idle_rules
+            .take(),
     })))
 }
