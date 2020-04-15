@@ -33,7 +33,8 @@ pub const EC2_NATGW_TYPE: &str = "ec2_nat_gw";
 pub const EC2_VPNGW_TYPE: &str = "ec2_vpn_gw";
 pub const EC2_VPC_ENDPOINT_TYPE: &str = "ec2_vpc_endpoint";
 pub const EC2_PEERING_CONNECTION: &str = "ec2_peering_connection";
-pub const ECS_TYPE: &str = "ecs";
+pub const ECS_TYPE: &str = "ecs_cluster";
+pub const EKS_TYPE: &str = "eks_cluster";
 pub const ELB_ALB_TYPE: &str = "elb_alb";
 pub const ELB_NLB_TYPE: &str = "elb_nlb";
 pub const EMR_TYPE: &str = "emr_cluster";
@@ -67,6 +68,7 @@ pub enum Client {
     Ec2VpcEndpoint,
     Ec2PeeringConnection,
     EcsCluster,
+    EksCluster,
     ElbAlb,
     ElbNlb,
     EmrCluster,
@@ -133,6 +135,7 @@ impl FromStr for Client {
             EC2_VPC_ENDPOINT_TYPE => Ok(Client::Ec2VpcEndpoint),
             EC2_PEERING_CONNECTION => Ok(Client::Ec2PeeringConnection),
             ECS_TYPE => Ok(Client::EcsCluster),
+            EKS_TYPE => Ok(Client::EksCluster),
             ELB_ALB_TYPE => Ok(Client::ElbAlb),
             ELB_NLB_TYPE => Ok(Client::ElbNlb),
             EMR_TYPE => Ok(Client::EmrCluster),
@@ -169,6 +172,7 @@ impl Client {
             Client::Ec2VpcEndpoint => EC2_VPC_ENDPOINT_TYPE,
             Client::Ec2PeeringConnection => EC2_PEERING_CONNECTION,
             Client::EcsCluster => ECS_TYPE,
+            Client::EksCluster => EKS_TYPE,
             Client::ElbAlb => ELB_ALB_TYPE,
             Client::ElbNlb => ELB_NLB_TYPE,
             Client::EmrCluster => EMR_TYPE,
@@ -201,6 +205,7 @@ impl Client {
             Client::Ec2VpcEndpoint,
             Client::Ec2VpnGW,
             Client::EcsCluster,
+            Client::EksCluster,
             Client::ElbAlb,
             Client::ElbNlb,
             Client::EmrCluster,

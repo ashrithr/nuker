@@ -16,6 +16,7 @@ mod ec2_vpc;
 mod ec2_vpc_endpoint;
 mod ec2_vpn_gw;
 mod ecs_cluster;
+mod eks_cluster;
 mod elb_alb;
 mod elb_nlb;
 mod emr_cluster;
@@ -39,8 +40,8 @@ use crate::{
         ec2_network_acl::Ec2NetworkAclClient, ec2_peer_conn::Ec2PeerConnClient,
         ec2_rt::Ec2RtClient, ec2_sg::Ec2SgClient, ec2_subnet::Ec2SubnetClient,
         ec2_vpc::Ec2VpcClient, ec2_vpc_endpoint::Ec2VpcEndpointClient, ec2_vpn_gw::Ec2VpnGWClient,
-        ecs_cluster::EcsClusterClient, elb_alb::ElbAlbClient, elb_nlb::ElbNlbClient,
-        emr_cluster::EmrClusterClient, es_domain::EsDomainClient,
+        ecs_cluster::EcsClusterClient, eks_cluster::EksClusterClient, elb_alb::ElbAlbClient,
+        elb_nlb::ElbNlbClient, emr_cluster::EmrClusterClient, es_domain::EsDomainClient,
         glue_endpoint::GlueEndpointClient, rds_cluster::RdsClusterClient,
         rds_instance::RdsInstanceClient, rs_cluster::RsClusterClient, s3_bucket::S3BucketClient,
         sagemaker_notebook::SagemakerNotebookClient, sts::StsService,
@@ -151,6 +152,7 @@ impl AwsNuker {
                     if resource.enforcement_state == EnforcementState::Delete
                         || resource.enforcement_state == EnforcementState::DeleteDependent
                     {
+                        // FIXME: This is redundant
                         if let Some(deps) = resource.dependencies {
                             for mut dep in deps {
                                 dep.dependencies = self
@@ -286,6 +288,9 @@ fn create_client(rt: &Client, cd: &ClientDetails, c: &Config, dr: bool) -> Box<d
         }
         Client::EcsCluster => {
             Box::new(EcsClusterClient::new(cd, c.get(&rt).unwrap(), dr)) as Box<dyn NukerClient>
+        }
+        Client::EksCluster => {
+            Box::new(EksClusterClient::new(cd, c.get(&rt).unwrap(), dr)) as Box<dyn NukerClient>
         }
         Client::ElbAlb => {
             Box::new(ElbAlbClient::new(cd, c.get(&rt).unwrap(), dr)) as Box<dyn NukerClient>
