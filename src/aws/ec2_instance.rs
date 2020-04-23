@@ -38,6 +38,17 @@ impl Ec2InstanceClient {
         let mut resources: Vec<Resource> = Vec::new();
 
         for instance in instances {
+            // Skip EMR instances as they are enforced separately
+            if let Some(ref tags) = instance.tags {
+                for tag in tags {
+                    if tag.key == Some("aws:elasticmapreduce:job-flow-id".into())
+                        || tag.key == Some("aws:elasticmapreduce:instance-group-role".into())
+                    {
+                        continue;
+                    }
+                }
+            }
+
             let instance_id = instance.instance_id.unwrap();
             let arn = format!(
                 "arn:aws:ec2:{}:{}:instance/{}",

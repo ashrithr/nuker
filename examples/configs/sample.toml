@@ -140,7 +140,7 @@ allowed_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
 [ec2_vpc]
     [[ec2_vpc.required_tags]]
     name = "Name"
-    pattern = '^vpc-(ue1|ue2|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
+    pattern = '^vpc-(ue1|ue2|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-(d|t|s|p)-([a-z0-9\-]+)$'
 
     [[ec2_vpc.required_tags]]
     name = "Owner:Name"
