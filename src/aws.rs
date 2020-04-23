@@ -155,12 +155,30 @@ impl AwsNuker {
                         // FIXME: This is redundant
                         if let Some(deps) = resource.dependencies {
                             for mut dep in deps {
-                                dep.dependencies = self
-                                    .clients
-                                    .get(&dep.type_)
-                                    .unwrap()
-                                    .dependencies(&dep)
-                                    .await;
+                                if !self.clients.contains_key(&dep.type_) {
+                                    dep.dependencies = self
+                                        .clients
+                                        .entry(dep.type_)
+                                        // For handling clients required for dependent resources
+                                        .or_insert(create_client(
+                                            &resource.type_,
+                                            &self.client_details,
+                                            &self.config,
+                                            self.dry_run,
+                                        ))
+                                        .dependencies(&dep)
+                                        .await;
+
+                                    done = done + 1; // newly created client does not send Shutdown event
+                                } else {
+                                    dep.dependencies = self
+                                        .clients
+                                        .get(&dep.type_)
+                                        .unwrap()
+                                        .dependencies(&dep)
+                                        .await;
+                                }
+
                                 self.dag.add_node_to_dag(dep);
                             }
                         }
