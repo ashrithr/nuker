@@ -73,7 +73,7 @@ impl EsDomainClient {
             resources.push(Resource {
                 id: domain.domain_name,
                 arn: Some(domain.arn),
-                type_: ClientType::EmrCluster,
+                type_: ClientType::EsDomain,
                 region: self.region.clone(),
                 tags: self.package_tags(tags),
                 state: ResourceState::from_str(domain_state.unwrap_or_default().as_str()).ok(),

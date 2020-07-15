@@ -34,6 +34,7 @@ impl Ec2NatGWClient {
         if !self.dry_run {
             let req = self.client.delete_nat_gateway(DeleteNatGatewayRequest {
                 nat_gateway_id: resource.id.clone(),
+                ..Default::default()
             });
             handle_future!(req);
         }
