@@ -449,6 +449,8 @@ max_run_time = "8 hours"
     name = "Environment"
 
 [es_domain]
+allowed_types = ["t2.micro.elasticsearch", "t2.small.elasticsearch", "t2.medium.elasticsearch"]
+
     [[es_domain.required_tags]]
     name = "Name"
     pattern = '^es-(ue1|ue2|uw1|uw2|ew1|ec1|an1|an2|as1|as2|se1)-([1-2]{1})([a-c]{1})-(d|t|s|p)-([a-z0-9\-]+)$'
