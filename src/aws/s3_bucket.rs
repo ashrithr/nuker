@@ -270,7 +270,7 @@ impl S3BucketClient {
                             } else {
                                 debug!(
                                     resource = bucket,
-                                    deleted_count = r.deleted.unwrap().len(),
+                                    deleted_count = r.deleted.as_ref().unwrap().len(),
                                     "Successfully deleted objects"
                                 );
                             }
@@ -355,7 +355,7 @@ impl S3BucketClient {
                                 } else {
                                     debug!(
                                         resource = bucket,
-                                        deleted_count = r.deleted.unwrap().len(),
+                                        deleted_count = r.deleted.as_ref().unwrap().len(),
                                         "Deleted objects"
                                     );
                                 }
@@ -405,7 +405,7 @@ impl S3BucketClient {
                                 } else {
                                     debug!(
                                         resource = bucket,
-                                        deleted_count = r.deleted.unwrap().len(),
+                                        deleted_count = r.deleted.as_ref().unwrap().len(),
                                         "Deleted objects markers"
                                     );
                                 }
