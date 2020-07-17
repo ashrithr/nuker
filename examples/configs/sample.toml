@@ -41,21 +41,41 @@
 #
 # whitelist = ["i-1234567890"]
 #
-# * idle_rules - Specify any Cloudwatch metrics that has to be enforced on a
+# * metric_filters - Specify any Cloudwatch metrics that has to be enforced on a
 # resource. Based on the idle rule a resource can be determined if its idle or
 # not. Each idle rule has to specify:
-#   - namespace: Namespace is a container for CW metrics. The AWS namespaces
-#   typically use the following naming convention 'AWS/service'.
-#   - metric: A metric represents a name of the metric that needs to be queried
-#   for.
-#   - duration: Specifies for how long to query the metric values for
-#   - granularity: duration to aggregate the metric values
-#   - minimum: value to compare the fetched metric values against
+#   - name: The name of the metric that needs to be queried for.
+#   - duration: Specifies for how long to query the metric values for.
+#   - period: Specifies duration to aggregate the metric values.
+#   - value: The value to compare the fetched metric values against.
+#   - op: The comparison operator for comparing fetched values against provided
+#   value. Could be one of the following:
+#       1. le - less than or equal to
+#       2. ge - greater than or equal to
+#       3. lt - less than
+#       4. gt - greater than
+#   - statistic (optional): statistics are metric data aggregations over
+#   specified periods of time. Allowed values are:
+#       1. Minimum - The lowest value observed during the specified period.
+#       2. Maximum - The highest value observed during the specified period.
+#       3. Sum - All values submitted for the matching metric added together.
+#       Useful for determining total volume of a metric.
+#       4. Average (default) - The value of `Sum`/`SampleCount` during the
+#       specified period.
+#       5. SampleCount - The count (number) of data points used for statistical
+#       calculation.
+#   - dimensions (optional): If the metric contains multiple dimensions, you
+#   must include a value for each dimension. CloudWatch treats each unique
+#   combination of dimensions as a separate metric.
+# 
+# The following example will determines a resource as idle, if the
+# CPUUtilization metric values fetched for 1 days in an aggregate interval of
+# every hour are all less than or equal to 5.
 #
-# [[ec2_instance.idle_rules]]
-# namespace = "AWS/EC2"
+# [[resource_name.metric_filters]]
 # metric = "CPUUtilization"
-# minimum = 5
+# op = "le"
+# value = 5
 # duration = "1 day"
 # granularity = "1 hour"
 #
@@ -110,26 +130,29 @@ allowed_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
     [[ec2_instance.required_tags]]
     name = "Environment"
 
-    [[ec2_instance.idle_rules]]
-    namespace = "AWS/EC2"
-    metric = "CPUUtilization"
-    minimum = 5
+    [[ec2_instance.metric_filters]]
+    name = "CPUUtilization"
+    statistic = "Average"
+    value = 5
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
-    [[ec2_instance.idle_rules]]
-    namespace = "AWS/EC2"
-    metric = "NetworkIn"
-    minimum = 5000000 # 5MB
+    [[ec2_instance.metric_filters]]
+    name = "NetworkIn"
+    statistic = "Average"
+    value = 5000000 # 5MB
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
-    [[ec2_instance.idle_rules]]
-    namespace = "AWS/EC2"
-    metric = "NetworkOut"
-    minimum = 5000000 # 5MB
+    [[ec2_instance.metric_filters]]
+    name = "NetworkOut"
+    statistic = "Average"
+    value = 5000000 # 5MB
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
     [ec2_instance.termination_protection]
     ignore = true
@@ -158,19 +181,21 @@ allowed_types = ["a1.medium", "a1.large", "a1.xlarge", "t3.nano",
 [ebs_volume]
 allowed_types = ["gp2", "standard"]
 
-    [[ebs_volume.idle_rules]]
-    namespace = "AWS/EBS"
-    metric = "VolumeReadOps"
-    minimum = 1
+    [[ebs_volume.metric_filters]]
+    name = "VolumeReadOps"
+    statistic = "Average"
+    value = 1
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
-    [[ebs_volume.idle_rules]]
-    namespace = "AWS/EBS"
-    metric = "VolumeWriteOps"
-    minimum = 1
+    [[ebs_volume.metric_filters]]
+    name = "VolumeWriteOps"
+    statistic = "Average"
+    value = 1
     duration = "1 day"
-    granularity = "1 hour"    
+    period = "1 hour"
+    op = "le"    
 
 [ebs_snapshot]
 max_run_time = "7 days"
@@ -215,12 +240,13 @@ max_run_time = "7 days"
     [[elb_alb.required_tags]]
     name = "Environment"
 
-    [[elb_alb.idle_rules]]
-    namespace = "AWS/ApplicationELB"
-    metric = "RequestCount"
-    minimum = 1
+    [[elb_alb.metric_filters]]
+    name = "RequestCount"
+    statistic = "Average"
+    value = 1
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
 [elb_nlb]
     [[elb_nlb.required_tags]]
@@ -240,12 +266,13 @@ max_run_time = "7 days"
     [[elb_nlb.required_tags]]
     name = "Environment"
 
-    [[elb_nlb.idle_rules]]
-    namespace = "AWS/NetworkELB"
-    metric = "ProcessedBytes"
-    minimum = 1024
+    [[elb_nlb.metric_filters]]
+    name = "ProcessedBytes"
+    statistic = "Average"
+    value = 1024
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
 [rds_instance]
     [[rds_instance.required_tags]]
@@ -265,26 +292,29 @@ max_run_time = "7 days"
     [[rds_instance.required_tags]]
     name = "Environment"
 
-    [[rds_instance.idle_rules]]
-    namespace = "AWS/RDS"
-    metric = "DatabaseConnections"
-    minimum = 1
+    [[rds_instance.metric_filters]]
+    name = "DatabaseConnections"
+    statistic = "Average"
+    value = 1
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
-    [[rds_instance.idle_rules]]
-    namespace = "AWS/RDS"
-    metric = "ReadIOPS"
-    minimum = 20
+    [[rds_instance.metric_filters]]
+    name = "ReadIOPS"
+    statistic = "Average"
+    value = 20
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
-    [[rds_instance.idle_rules]]
-    namespace = "AWS/RDS"
-    metric = "WriteIOPS"
-    minimum = 20
+    [[rds_instance.metric_filters]]
+    name = "WriteIOPS"
+    statistic = "Average"
+    value = 20
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
     [rds_instance.manage_stopped]
     older_than = "7 days"
@@ -311,26 +341,29 @@ max_run_time = "7 days"
     [[rds_cluster.required_tags]]
     name = "Environment"
 
-    [[rds_cluster.idle_rules]]
-    namespace = "AWS/RDS"
-    metric = "DatabaseConnections"
-    minimum = 1
+    [[rds_cluster.metric_filters]]
+    name = "DatabaseConnections"
+    statistic = "Average"
+    value = 1
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
-    [[rds_cluster.idle_rules]]
-    namespace = "AWS/RDS"
-    metric = "ReadIOPS"
-    minimum = 20
+    [[rds_cluster.metric_filters]]
+    name = "ReadIOPS"
+    statistic = "Average"
+    value = 20
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
-    [[rds_cluster.idle_rules]]
-    namespace = "AWS/RDS"
-    metric = "WriteIOPS"
-    minimum = 20
+    [[rds_cluster.metric_filters]]
+    name = "WriteIOPS"
+    statistic = "Average"
+    value = 20
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
     [rds_cluster.termination_protection]
     ignore = true
@@ -353,26 +386,29 @@ max_run_time = "7 days"
     [[rs_cluster.required_tags]]
     name = "Environment"
 
-    [[rs_cluster.idle_rules]]
-    namespace = "AWS/Redshift"
-    metric = "DatabaseConnections"
-    minimum = 1
+    [[rs_cluster.metric_filters]]
+    name = "DatabaseConnections"
+    statistic = "Average"
+    value = 1
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
-    [[rs_cluster.idle_rules]]
-    namespace = "AWS/Redshift"
-    metric = "ReadIOPS"
-    minimum = 20
+    [[rs_cluster.metric_filters]]
+    name = "ReadIOPS"
+    statistic = "Average"
+    value = 20
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
-    [[rs_cluster.idle_rules]]
-    namespace = "AWS/Redshift"
-    metric = "WriteIOPS"
-    minimum = 20
+    [[rs_cluster.metric_filters]]
+    name = "WriteIOPS"
+    statistic = "Average"
+    value = 20
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
 [emr_cluster]
 allowed_types = ["m3.xlarge", "m4.large", "m4.xlarge", "m5.xlarge"]
@@ -395,12 +431,13 @@ max_run_time = "8 hours"
     [[emr_cluster.required_tags]]
     name = "Environment"
 
-    [[emr_cluster.idle_rules]]
-    namespace = "AWS/ElasticMapReduce"
-    metric = "IsIdle"
-    minimum = 1
+    [[emr_cluster.metric_filters]]
+    name = "AppsSubmitted"
+    statistic = "Average"
+    value = 1
     duration = "1 day"
-    granularity = "1 hour"
+    period = "12 hours"
+    op = "le"
 
     [emr_cluster.termination_protection]
     ignore = true
@@ -468,19 +505,13 @@ allowed_types = ["t2.micro.elasticsearch", "t2.small.elasticsearch", "t2.medium.
     [[es_domain.required_tags]]
     name = "Environment"
 
-    [[es_domain.idle_rules]]
-    namespace = "AWS/ES"
-    metric = "CPUUtilization"
-    minimum = 5
+    [[es_domain.metric_filters]]
+    name = "CPUUtilization"
+    statistic = "Average"
+    value = 5
     duration = "1 day"
-    granularity = "1 hour"
-
-    [[es_domain.idle_rules]]
-    namespace = "AWS/ES"
-    metric = "ElasticsearchRequests"
-    minimum = 1
-    duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
 [ecs_cluster]
     [[ecs_cluster.required_tags]]
@@ -500,19 +531,21 @@ allowed_types = ["t2.micro.elasticsearch", "t2.small.elasticsearch", "t2.medium.
     [[ecs_cluster.required_tags]]
     name = "Environment"
 
-    [[ecs_cluster.idle_rules]]
-    namespace = "AWS/ECS"
-    metric = "CPUReservation"
-    minimum = 5
+    [[ecs_cluster.metric_filters]]
+    name = "CPUReservation"
+    statistic = "Average"
+    value = 5
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
-    [[ecs_cluster.idle_rules]]
-    namespace = "AWS/ECS"
-    metric = "MemoryReservation"
-    minimum = 1
+    [[ecs_cluster.metric_filters]]
+    name = "MemoryReservation"
+    statistic = "Average"
+    value = 1
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
 [eks_cluster]
     [[eks_cluster.required_tags]]
@@ -532,16 +565,18 @@ allowed_types = ["t2.micro.elasticsearch", "t2.small.elasticsearch", "t2.medium.
     [[eks_cluster.required_tags]]
     name = "Environment"
 
-    [[eks_cluster.idle_rules]]
-    namespace = "AWS/EKS"
-    metric = "CPUReservation"
-    minimum = 5
+    [[eks_cluster.metric_filters]]
+    name = "CPUReservation"
+    statistic = "Average"
+    value = 5
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"
 
-    [[eks_cluster.idle_rules]]
-    namespace = "AWS/EKS"
-    metric = "MemoryReservation"
-    minimum = 1
+    [[eks_cluster.metric_filters]]
+    name = "MemoryReservation"
+    statistic = "Average"
+    value = 1
     duration = "1 day"
-    granularity = "1 hour"
+    period = "1 hour"
+    op = "le"

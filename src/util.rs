@@ -1,4 +1,4 @@
-use crate::{config::RequiredTags, resource::NTag};
+use crate::{config::RequiredTag, resource::NTag};
 use chrono::prelude::*;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -13,7 +13,7 @@ enum DtFormat<'a> {
 }
 
 /// Compares resource tags against required tags
-pub fn compare_tags(tags: Option<Vec<NTag>>, required_tags: &Vec<RequiredTags>) -> bool {
+pub fn compare_tags(tags: Option<Vec<NTag>>, required_tags: &Vec<RequiredTag>) -> bool {
     let mut tags_map = HashMap::new();
     if tags.is_some() {
         for tag in tags.unwrap() {

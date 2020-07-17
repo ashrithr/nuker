@@ -90,10 +90,11 @@ impl AwsNuker {
         let client = RClient::new_with(credentials_provider(&profile)?, HttpClient::new()?);
         let mut clients: HashMap<Client, Box<dyn NukerClient>> = HashMap::new();
         let sts_client = StsService::new(&client, &region)?;
-        let cw_client = create_cw_client(&profile, &region, &mut config)?;
+        let account_num = sts_client.get_account_number().await?;
+        let cw_client = create_cw_client(&profile, &region, &mut config, &account_num)?;
 
         let client_details = ClientDetails {
-            account_number: sts_client.get_account_number().await?,
+            account_number: account_num,
             region: region.clone(),
             client,
         };
@@ -351,6 +352,7 @@ fn create_cw_client(
     profile: &Option<String>,
     region: &Region,
     config: &mut Config,
+    account_num: &String,
 ) -> Result<Arc<Box<CwClient>>> {
     let cw_client: rusoto_cloudwatch::CloudWatchClient =
         rusoto_cloudwatch::CloudWatchClient::new_with_client(
@@ -360,48 +362,61 @@ fn create_cw_client(
 
     Ok(Arc::new(Box::new(CwClient {
         client: cw_client,
-        ec2_idle_rules: config
+        account_num: account_num.into(),
+        ec2_metric_filters: config
             .get_mut(&Client::Ec2Instance)
             .unwrap()
-            .idle_rules
+            .metric_filters
             .take(),
-        ebs_idle_rules: config
+        ebs_metric_filters: config
             .get_mut(&Client::EbsVolume)
             .unwrap()
-            .idle_rules
+            .metric_filters
             .take(),
-        elb_alb_idle_rules: config.get_mut(&Client::ElbAlb).unwrap().idle_rules.take(),
-        elb_nlb_idle_rules: config.get_mut(&Client::ElbNlb).unwrap().idle_rules.take(),
-        rds_idle_rules: config
+        elb_alb_metric_filters: config
+            .get_mut(&Client::ElbAlb)
+            .unwrap()
+            .metric_filters
+            .take(),
+        elb_nlb_metric_filters: config
+            .get_mut(&Client::ElbNlb)
+            .unwrap()
+            .metric_filters
+            .take(),
+        rds_metric_filters: config
             .get_mut(&Client::RdsInstance)
             .unwrap()
-            .idle_rules
+            .metric_filters
             .take(),
-        aurora_idle_rules: config
+        aurora_metric_filters: config
             .get_mut(&Client::RdsCluster)
             .unwrap()
-            .idle_rules
+            .metric_filters
             .take(),
-        redshift_idle_rules: config
+        redshift_metric_filters: config
             .get_mut(&Client::RsCluster)
             .unwrap()
-            .idle_rules
+            .metric_filters
             .take(),
-        emr_idle_rules: config
+        emr_metric_filters: config
             .get_mut(&Client::EmrCluster)
             .unwrap()
-            .idle_rules
+            .metric_filters
             .take(),
-        es_idle_rules: config.get_mut(&Client::EsDomain).unwrap().idle_rules.take(),
-        ecs_idle_rules: config
+        es_metric_filters: config
+            .get_mut(&Client::EsDomain)
+            .unwrap()
+            .metric_filters
+            .take(),
+        ecs_metric_filters: config
             .get_mut(&Client::EcsCluster)
             .unwrap()
-            .idle_rules
+            .metric_filters
             .take(),
-        eks_idle_rules: config
+        eks_metric_filters: config
             .get_mut(&Client::EksCluster)
             .unwrap()
-            .idle_rules
+            .metric_filters
             .take(),
     })))
 }

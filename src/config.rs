@@ -4,7 +4,7 @@ use clap::{App, Arg};
 use regex::Regex;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::{fs::File, io::Read, str::FromStr, time::Duration};
+use std::{fmt, fs::File, io::Read, str::FromStr, time::Duration};
 use tracing::warn;
 
 const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
@@ -101,23 +101,66 @@ impl Default for TargetState {
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
-pub struct RequiredTags {
+pub struct RequiredTag {
     pub name: String,
     pub pattern: Option<String>,
     #[serde(skip)]
     pub regex: Option<Regex>,
 }
 
+#[derive(Debug, Deserialize, Copy, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum FilterOp {
+    Lt,
+    Gt,
+    Le,
+    Ge,
+}
+
+impl Default for FilterOp {
+    fn default() -> Self {
+        FilterOp::Lt
+    }
+}
+
+#[derive(Debug, Deserialize, Copy, Clone)]
+pub enum MetricStatistic {
+    SampleCount,
+    Average,
+    Sum,
+    Minimum,
+    Maximum,
+}
+
+impl Default for MetricStatistic {
+    fn default() -> Self {
+        MetricStatistic::Average
+    }
+}
+
+impl fmt::Display for MetricStatistic {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 #[derive(Debug, Deserialize, Clone, Default)]
-pub struct IdleRules {
-    pub namespace: String,
-    pub metric: String,
-    pub minimum: Option<f32>,
+pub struct MetricFilter {
+    pub name: String,
+    pub statistic: MetricStatistic,
     #[serde(with = "humantime_serde")]
     pub duration: Duration,
     #[serde(with = "humantime_serde")]
-    pub granularity: Duration,
-    pub connections: Option<u64>,
+    pub period: Duration,
+    pub op: FilterOp,
+    pub dimensions: Option<Vec<MetricDimension>>,
+    pub value: f32,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct MetricDimension {
+    pub name: String,
+    pub value: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -145,13 +188,13 @@ pub struct ResourceConfig {
     #[serde(default)]
     pub target_state: TargetState,
     #[serde(default)]
-    pub required_tags: Option<Vec<RequiredTags>>,
+    pub required_tags: Option<Vec<RequiredTag>>,
     #[serde(default)]
     pub allowed_types: Option<Vec<String>>,
     #[serde(default)]
     pub whitelist: Option<Vec<String>>,
     #[serde(default)]
-    pub idle_rules: Option<Vec<IdleRules>>,
+    pub metric_filters: Option<Vec<MetricFilter>>,
     #[serde(default)]
     pub termination_protection: Option<TerminationProtection>,
     #[serde(default)]
@@ -172,7 +215,7 @@ impl Default for ResourceConfig {
             required_tags: None,
             allowed_types: None,
             whitelist: None,
-            idle_rules: None,
+            metric_filters: None,
             termination_protection: Some(TerminationProtection { ignore: true }),
             manage_stopped: None,
             max_run_time: None,
