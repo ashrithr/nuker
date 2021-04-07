@@ -22,8 +22,7 @@ async fn main() -> Result<(), failure::Error> {
 
 fn setup_tracing(verbose: u64) {
     use tracing::Level;
-    use tracing_subscriber::fmt::time::ChronoUtc;
-    use tracing_subscriber::FmtSubscriber;
+    use tracing_subscriber::{fmt::time::ChronoUtc, EnvFilter, FmtSubscriber};
 
     let level = match verbose {
         0 => Level::ERROR,
@@ -33,10 +32,13 @@ fn setup_tracing(verbose: u64) {
         _ => Level::TRACE,
     };
 
+    let env_filter = EnvFilter::new("nuker=trace").add_directive("hyper=error".parse().unwrap());
+
     let subscriber = FmtSubscriber::builder()
         .with_max_level(level)
         .with_timer(ChronoUtc::with_format("%s".into()))
         .with_target(true)
+        .with_env_filter(env_filter)
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("Setting default subscriber failed");

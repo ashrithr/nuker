@@ -1,55 +1,55 @@
 [package]
-name = "nuker"
-version = "0.11.7"
 authors = ["ashrithr <ashrith@me.com>"]
 edition = "2018"
+name = "nuker"
+version = "0.11.8"
 
 [dependencies]
 # AWS SDK
-rusoto_ce = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_cloudwatch = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_core = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_credential = "0.44.0"
-rusoto_ec2 = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_iam = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_rds = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_s3 = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_redshift = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_emr = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_glue = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_sts = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_sagemaker = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_es = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_elbv2 = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_autoscaling = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_ecs = { version = "0.44.0", default_features = false, features = ["rustls"] }
-rusoto_eks = { version = "0.44.0", default_features = false, features = ["rustls"] }
+rusoto_autoscaling = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_ce = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_cloudwatch = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_core = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_credential = "0.46.0"
+rusoto_ec2 = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_ecs = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_eks = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_elbv2 = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_emr = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_es = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_glue = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_iam = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_rds = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_redshift = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_s3 = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_sagemaker = {version = "0.46.0", default_features = false, features = ["rustls"]}
+rusoto_sts = {version = "0.46.0", default_features = false, features = ["rustls"]}
 # Core
 async-trait = "0.1"
-tokio = { version = "0.2.13", features = ["macros", "rt-threaded", "sync"] }
 futures = "0.3"
 petgraph = "0.5.0"
+tokio = {version = "1.4.0", features = ["macros", "rt-multi-thread", "sync"]}
 # Error Handling
 failure = "0.1.7"
 serde-xml-rs = "0.4.0"
 # Logging
 chrono = "0.4"
-colored = "1.9"
+colored = "2.0.0"
 tracing = "0.1"
-tracing-subscriber = "0.2.3"
 tracing-futures = "0.2.3"
+tracing-subscriber = "0.2.3"
 # Parsing Cli
 clap = "2.33"
 # Parsing Config
 humantime = "2.0.0"
 humantime-serde = "1.0.0"
-serde = { version = "1.0", features = ["derive"] }
+regex = "1"
+serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 toml = "0.5"
-regex = "1"
 # Util
 dyn-clone = "1.0"
 
 [dev-dependencies]
-env_logger = "0.7.1"
-rusoto_mock = { version = "0.44.0", default_features = false, features = ["rustls"] }
+env_logger = "0.8.1"
+rusoto_mock = {version = "0.46.0", default_features = false, features = ["rustls"]}

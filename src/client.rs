@@ -1,12 +1,9 @@
 //! Represents a Nuker Client
-use crate::config::ResourceConfig;
-use crate::resource::{EnforcementState, Resource, ResourceState};
-use crate::CwClient;
-use crate::Event;
-use crate::NSender;
-use crate::Result;
-use crate::StdError;
-use crate::StdResult;
+use crate::{
+    config::ResourceConfig,
+    resource::{EnforcementState, Resource, ResourceState},
+    CwClient, Event, NSender, Result, StdError, StdResult,
+};
 use async_trait::async_trait;
 use dyn_clone::DynClone;
 use std::{
@@ -234,7 +231,7 @@ pub trait NukerClient: Send + Sync + DynClone {
     /// Publishes the resources to shared Channel
     async fn publish(
         &self,
-        mut tx: NSender<Event>,
+        tx: NSender<Event>,
         c: Client,
         config: ResourceConfig,
         cw_client: Arc<Box<CwClient>>,

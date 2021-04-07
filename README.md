@@ -48,37 +48,39 @@ additional rules, which are defined below.
 
 #### ec2-address rules
 
-- Unassociated - Removes an EIP that is unassociated
+- `Unassociated` - Removes an EIP that is unassociated
 
 #### ec2-eni rules
 
-- Unassociated - Removes an ENI that is unassociated
+- `Unassociated` - Removes an ENI that is unassociated
 
 #### ec2-sg rules
 
-- Unsecured - Removes an Security Group and the resources that are using it, if
-open to the world rules (0.0.0.0/0 or ::/0) are associated with it.
+- `Unsecured` - Removes an Security Group and the resources that are using it,
+if open to the world rules (0.0.0.0/0 or ::/0) are associated with it.
 
 #### asg rules
 
-- Unassociated - Removes an Auto Scaling Group that has no instances associated,
-or no ELB's associated with it.
+- `Unassociated` - Removes an Auto Scaling Group that has no instances
+associated, or no ELB(s) associated with it.
 
 #### ebs-volume rules
 
-- Unassociated - Removes a Volume that is unassociated
+- `Unassociated` - Removes a Volume that is unassociated
 
 #### s3-bucket rules
 
-- Bucket Naming Prefix - Ensures bucket naming convention is followed
-- Publicly Accessability - Ensures bucket is not publicly accessible
-- DNS Compliant Naming - Ensures bucket naming convention to be DNS compliant
+- `Bucket Naming Prefix` - Ensures bucket naming convention is followed
+- `Publicly Accessability` - Ensures bucket is not publicly accessible
+- `DNS Compliant Naming` - Ensures bucket naming convention to be DNS compliant
 
 ## Configuration
 
-nuker requires a configuration file to operate with, sample configuration is located for reference here: `examples/config/sample.toml`.
+nuker requires a configuration file to operate with, sample configuration is
+located for reference here: `examples/config/sample.toml`.
 
-Make a copy of the sample configuration and make changes as needed based on the comments provided in the sample configuration file.
+Make a copy of the sample configuration and make changes as needed based on the
+comments provided in the sample configuration file.
 
 ```
 cp examples/config/sample.toml config.toml
@@ -86,7 +88,7 @@ cp examples/config/sample.toml config.toml
 
 ### Whitelisting Resources
 
-Each resource type supports the ability to whitelist resources from the config
+Every resource type supports the ability to whitelist resources using the config
 file. Refer to sample configuration file for examples.
 
 ## Build and Running
