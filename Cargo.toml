@@ -6,6 +6,8 @@ version = "0.11.8"
 
 [dependencies]
 # AWS SDK
+hyper = "0.14"
+hyper-tls = "0.5.0"
 rusoto_autoscaling = {version = "0.46.0", default_features = false, features = ["rustls"]}
 rusoto_ce = {version = "0.46.0", default_features = false, features = ["rustls"]}
 rusoto_cloudwatch = {version = "0.46.0", default_features = false, features = ["rustls"]}

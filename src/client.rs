@@ -1,7 +1,7 @@
 //! Represents a Nuker Client
 use crate::{
     config::ResourceConfig,
-    resource::{EnforcementState, Resource, ResourceState},
+    resource::{EnforcementReason, EnforcementState, Resource, ResourceState},
     CwClient, Event, NSender, Result, StdError, StdResult,
 };
 use async_trait::async_trait;
@@ -239,7 +239,7 @@ pub trait NukerClient: Send + Sync + DynClone {
         if let Ok(resources) = self.scan().await {
             for mut resource in resources {
                 let enforcement_state = self
-                    .filter_resource(&resource, &config, cw_client.clone())
+                    .filter_resource(&mut resource, &config, cw_client.clone())
                     .await;
 
                 if enforcement_state == EnforcementState::Delete
@@ -377,7 +377,7 @@ pub trait NukerClient: Send + Sync + DynClone {
     /// Filters a provided resource by applying all the filters
     async fn filter_resource(
         &self,
-        resource: &Resource,
+        resource: &mut Resource,
         config: &ResourceConfig,
         cw_client: Arc<Box<CwClient>>,
     ) -> EnforcementState {
@@ -395,6 +395,7 @@ pub trait NukerClient: Send + Sync + DynClone {
                     resource = resource.id.as_str(),
                     "Resource tags does not match."
                 );
+                resource.enforcement_reason = Some(EnforcementReason::TagRule);
                 EnforcementState::from_target_state(&config.target_state)
             } else if self.filter_by_allowed_types(resource, config) {
                 // Enforce allowed types
@@ -402,6 +403,7 @@ pub trait NukerClient: Send + Sync + DynClone {
                     resource = resource.id.as_str(),
                     "Resource is not in list of allowed types."
                 );
+                resource.enforcement_reason = Some(EnforcementReason::AllowedTypeRule);
                 EnforcementState::from_target_state(&config.target_state)
             } else if self.filter_by_runtime(resource, config) {
                 // Enforce max runtime for a resource if max_run_time is provided
@@ -409,16 +411,19 @@ pub trait NukerClient: Send + Sync + DynClone {
                     resource = resource.id.as_str(),
                     "Resource exceeded max runtime."
                 );
+                resource.enforcement_reason = Some(EnforcementReason::Runtime);
                 EnforcementState::from_target_state(&config.target_state)
             } else if self.filter_by_idle_rules(resource, cw_client).await {
                 // Enforce Idle rules
                 debug!(resource = resource.id.as_str(), "Resource is idle.");
+                resource.enforcement_reason = Some(EnforcementReason::Idle);
                 EnforcementState::from_target_state(&config.target_state)
             } else if self.filter_by_naming_prefix(resource, config) {
                 debug!(
                     resource = resource.id.as_str(),
                     "Resource naming prefix not met."
                 );
+                resource.enforcement_reason = Some(EnforcementReason::NameRule);
                 EnforcementState::from_target_state(&config.target_state)
             } else {
                 if let Some(additional_filters) =
@@ -432,6 +437,7 @@ pub trait NukerClient: Send + Sync + DynClone {
                                 resource = resource.id.as_str(),
                                 "Resource does not meet additional filters."
                             );
+                            resource.enforcement_reason = Some(EnforcementReason::AdditionalRules);
                             return EnforcementState::from_target_state(&config.target_state);
                         }
                     }

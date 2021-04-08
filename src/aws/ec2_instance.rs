@@ -84,6 +84,7 @@ impl Ec2InstanceClient {
                 .ok(),
                 start_time: instance.launch_time,
                 enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_reason: None,
                 resource_type: instance.instance_type.map(|t| vec![t]),
                 dependencies: None,
                 termination_protection,

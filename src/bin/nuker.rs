@@ -32,7 +32,8 @@ fn setup_tracing(verbose: u64) {
         _ => Level::TRACE,
     };
 
-    let env_filter = EnvFilter::new("nuker=trace").add_directive("hyper=error".parse().unwrap());
+    let env_filter = EnvFilter::new(format!("nuker={}", level.to_string().to_lowercase()))
+        .add_directive("hyper=error".parse().unwrap());
 
     let subscriber = FmtSubscriber::builder()
         .with_max_level(level)

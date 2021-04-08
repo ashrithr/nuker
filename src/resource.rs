@@ -81,6 +81,31 @@ impl EnforcementState {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum EnforcementReason {
+    Idle,
+    Runtime,
+    TagRule,
+    AllowedTypeRule,
+    NameRule,
+    AdditionalRules,
+    Dependent,
+}
+
+impl EnforcementReason {
+    pub fn name(&self) -> &str {
+        match *self {
+            EnforcementReason::Idle => "idle",
+            EnforcementReason::Runtime => "runtime",
+            EnforcementReason::TagRule => "tag-not-compliant",
+            EnforcementReason::AllowedTypeRule => "type-not-compliant",
+            EnforcementReason::NameRule => "name-not-compliant",
+            EnforcementReason::AdditionalRules => "additional-rules",
+            EnforcementReason::Dependent => "dependent",
+        }
+    }
+}
+
 /// Logical abstraction to represent an AWS resource
 #[derive(Debug, Clone)]
 pub struct Resource {
@@ -102,6 +127,8 @@ pub struct Resource {
     /// Specifies the state to enforce, whether to skip it, stop it, or delete
     /// it.
     pub enforcement_state: EnforcementState,
+    ///Specifies the reason for enforcement
+    pub enforcement_reason: Option<EnforcementReason>,
     /// Type of the resource or the underlying resources, for instance size of
     /// the instance, db, notebook, cluster, etc.
     pub resource_type: Option<Vec<String>>,
@@ -127,6 +154,7 @@ impl Default for Resource {
             state: None,
             start_time: None,
             enforcement_state: EnforcementState::Skip,
+            enforcement_reason: None,
             resource_type: None,
             dependencies: None,
             termination_protection: None,
@@ -157,6 +185,10 @@ impl fmt::Display for Resource {
         }
 
         write!(f, " - {}", self.enforcement_state.name())?;
+
+        if self.enforcement_reason.is_some() {
+            write!(f, " ({})", self.enforcement_reason.as_ref().unwrap().name())?;
+        }
 
         Ok(())
     }

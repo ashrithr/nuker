@@ -60,6 +60,7 @@ impl S3BucketClient {
                 state: Some(ResourceState::Available),
                 start_time: None,
                 enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_reason: None,
                 resource_type: None,
                 dependencies: None,
                 termination_protection: None,

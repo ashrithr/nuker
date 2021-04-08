@@ -53,6 +53,7 @@ impl EbsSnapshotClient {
                     .ok(),
                 start_time: snapshot.start_time.take(),
                 enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_reason: None,
                 resource_type: None,
                 dependencies: None,
                 termination_protection: None,

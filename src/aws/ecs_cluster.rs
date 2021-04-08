@@ -50,6 +50,7 @@ impl EcsClusterClient {
                 state: ResourceState::from_str(cluster.status.as_ref().unwrap()).ok(),
                 start_time: None,
                 enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_reason: None,
                 resource_type,
                 dependencies: None,
                 termination_protection: None,

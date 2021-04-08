@@ -91,6 +91,7 @@ impl GlueEndpointClient {
                     endpoint.created_timestamp.unwrap_or(0f64) as i64
                 )),
                 enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_reason: None,
                 resource_type: endpoint.worker_type.map(|t| vec![t]),
                 dependencies: None,
                 termination_protection: None,

@@ -93,6 +93,7 @@ impl SagemakerNotebookClient {
                 start_time: Some(format!("{}", notebook.creation_time.unwrap_or(0f64) as i64)),
                 resource_type: notebook.instance_type.map(|t| vec![t]),
                 enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_reason: None,
                 dependencies: None,
                 termination_protection: None,
             })

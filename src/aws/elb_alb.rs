@@ -53,6 +53,7 @@ impl ElbAlbClient {
                     .ok(),
                 start_time: lb.created_time,
                 enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_reason: None,
                 resource_type: None,
                 dependencies: None,
                 termination_protection: None,

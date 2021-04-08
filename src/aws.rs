@@ -87,7 +87,10 @@ impl AwsNuker {
         excluded_clients: Vec<Client>,
         dry_run: bool,
     ) -> Result<AwsNuker> {
-        let client = RClient::new_with(credentials_provider(&profile)?, HttpClient::new()?);
+        let mut hyper_builder = hyper::Client::builder();
+        hyper_builder.pool_idle_timeout(Duration::from_secs(10));
+        let http_client = HttpClient::from_builder(hyper_builder, hyper_tls::HttpsConnector::new());
+        let client = RClient::new_with(credentials_provider(&profile)?, http_client);
         let mut clients: HashMap<Client, Box<dyn NukerClient>> = HashMap::new();
         let sts_client = StsService::new(&client, &region)?;
         let account_num = sts_client.get_account_number().await?;

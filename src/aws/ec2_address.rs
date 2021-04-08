@@ -51,6 +51,7 @@ impl Ec2AddressClient {
                 } else {
                     None
                 },
+                enforcement_reason: None,
                 start_time: None,
                 enforcement_state: EnforcementState::SkipUnknownState,
                 resource_type: None,
