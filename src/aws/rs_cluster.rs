@@ -65,6 +65,7 @@ impl RsClusterClient {
                 start_time: cluster.cluster_create_time,
                 resource_type: cluster.node_type.map(|t| vec![t]),
                 enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_reason: None,
                 dependencies: None,
                 termination_protection: None,
             });

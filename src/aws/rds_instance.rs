@@ -75,6 +75,7 @@ impl RdsInstanceClient {
                 ),
                 start_time: instance.instance_create_time.take(),
                 enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_reason: None,
                 dependencies: None,
                 termination_protection,
             });

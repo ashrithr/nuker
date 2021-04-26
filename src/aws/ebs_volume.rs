@@ -73,6 +73,7 @@ impl EbsVolumeClient {
                 } else {
                     EnforcementState::SkipUnknownState
                 },
+                enforcement_reason: None,
                 resource_type: volume.volume_type.take().map(|t| vec![t]),
                 dependencies: None,
                 termination_protection: None,

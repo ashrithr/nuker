@@ -70,6 +70,7 @@ impl RdsClusterClient {
                 state: Some(ResourceState::from_str(cluster.status.as_ref().unwrap()).unwrap()),
                 start_time: cluster.cluster_create_time.take(),
                 enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_reason: None,
                 dependencies: None,
                 termination_protection,
             });
@@ -128,6 +129,7 @@ impl RdsClusterClient {
                 ),
                 start_time: db_instance.instance_create_time,
                 enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_reason: None,
                 dependencies: None,
                 termination_protection: None,
             });

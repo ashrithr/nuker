@@ -63,6 +63,7 @@ impl EmrClusterClient {
                 .ok(),
                 start_time,
                 enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_reason: None,
                 resource_type: instance_types,
                 dependencies: None,
                 termination_protection: None,

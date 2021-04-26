@@ -1,7 +1,7 @@
 use crate::aws::ClientDetails;
 use crate::client::{ClientType, NukerClient};
 use crate::config::ResourceConfig;
-use crate::resource::{EnforcementState, NTag, Resource, ResourceState};
+use crate::resource::{EnforcementReason, EnforcementState, NTag, Resource, ResourceState};
 use crate::Result;
 use crate::{handle_future, handle_future_with_return};
 use async_trait::async_trait;
@@ -66,6 +66,7 @@ impl Ec2VpcClient {
                 state: ResourceState::from_str(vpc.state.as_deref().unwrap()).ok(),
                 start_time: None,
                 enforcement_state,
+                enforcement_reason: None,
                 resource_type: None,
                 dependencies: None,
                 termination_protection: None,
@@ -151,6 +152,7 @@ impl Ec2VpcClient {
                             state: None,
                             start_time: None,
                             enforcement_state: EnforcementState::DeleteDependent,
+                            enforcement_reason: Some(EnforcementReason::Dependent),
                             resource_type: None,
                             dependencies: None,
                             termination_protection: None,
@@ -192,6 +194,7 @@ impl Ec2VpcClient {
                             state: None,
                             start_time: None,
                             enforcement_state: EnforcementState::DeleteDependent,
+                            enforcement_reason: Some(EnforcementReason::Dependent),
                             resource_type: None,
                             dependencies: None,
                             termination_protection: None,
@@ -239,6 +242,7 @@ impl Ec2VpcClient {
                                 state: None,
                                 start_time: None,
                                 enforcement_state: EnforcementState::DeleteDependent,
+                                enforcement_reason: Some(EnforcementReason::Dependent),
                                 resource_type: None,
                                 dependencies: None,
                                 termination_protection: None,
@@ -282,6 +286,8 @@ impl Ec2VpcClient {
                                 state: None,
                                 start_time: None,
                                 enforcement_state: EnforcementState::DeleteDependent,
+                                enforcement_reason: Some(EnforcementReason::Dependent),
+
                                 resource_type: None,
                                 dependencies: None,
                                 termination_protection: None,
@@ -324,6 +330,7 @@ impl Ec2VpcClient {
                             state: None,
                             start_time: None,
                             enforcement_state: EnforcementState::DeleteDependent,
+                            enforcement_reason: Some(EnforcementReason::Dependent),
                             resource_type: None,
                             dependencies: None,
                             termination_protection: None,
@@ -365,6 +372,7 @@ impl Ec2VpcClient {
                             state: None,
                             start_time: None,
                             enforcement_state: EnforcementState::DeleteDependent,
+                            enforcement_reason: Some(EnforcementReason::Dependent),
                             resource_type: None,
                             dependencies: None,
                             termination_protection: None,
@@ -399,6 +407,7 @@ impl Ec2VpcClient {
                             state: None,
                             start_time: None,
                             enforcement_state: EnforcementState::DeleteDependent,
+                            enforcement_reason: Some(EnforcementReason::Dependent),
                             resource_type: None,
                             dependencies: None,
                             termination_protection: None,
@@ -441,6 +450,7 @@ impl Ec2VpcClient {
                                 state: None,
                                 start_time: None,
                                 enforcement_state: EnforcementState::DeleteDependent,
+                                enforcement_reason: Some(EnforcementReason::Dependent),
                                 resource_type: None,
                                 dependencies: None,
                                 termination_protection: None,
@@ -483,6 +493,7 @@ impl Ec2VpcClient {
                             state: None,
                             start_time: None,
                             enforcement_state: EnforcementState::DeleteDependent,
+                            enforcement_reason: Some(EnforcementReason::Dependent),
                             resource_type: None,
                             dependencies: None,
                             termination_protection: None,
@@ -524,6 +535,7 @@ impl Ec2VpcClient {
                             state: None,
                             start_time: None,
                             enforcement_state: EnforcementState::DeleteDependent,
+                            enforcement_reason: Some(EnforcementReason::Dependent),
                             resource_type: None,
                             dependencies: None,
                             termination_protection: None,

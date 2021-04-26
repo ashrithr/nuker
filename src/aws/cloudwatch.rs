@@ -1,5 +1,6 @@
 use crate::{
-    client::ClientType, config::FilterOp, config::MetricFilter, config::MetricStatistic,
+    client::ClientType,
+    config::{FilterOp, MetricFilter, MetricStatistic},
     handle_future_with_return,
 };
 use chrono::{DateTime, TimeZone, Utc};
@@ -335,7 +336,7 @@ impl CwClient {
                 dimensions: Some(dimension_filters.to_vec()),
                 metric_name: Some(metric_name.into()),
                 namespace: Some(namespace.into()),
-                next_token: None,
+                ..Default::default()
             })
             .await
             .map_err(|err| err.to_string())

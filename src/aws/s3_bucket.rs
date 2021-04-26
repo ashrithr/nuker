@@ -1,9 +1,11 @@
-use crate::aws::ClientDetails;
-use crate::client::{ClientType, NukerClient};
-use crate::config::ResourceConfig;
-use crate::handle_future_with_return;
-use crate::resource::{EnforcementState, NTag, Resource, ResourceState};
-use crate::{Error, Result};
+use crate::{
+    aws::ClientDetails,
+    client::{ClientType, NukerClient},
+    config::ResourceConfig,
+    handle_future_with_return,
+    resource::{EnforcementState, NTag, Resource, ResourceState},
+    Error, Result,
+};
 use async_trait::async_trait;
 use rusoto_core::Region;
 use rusoto_s3::{
@@ -58,6 +60,7 @@ impl S3BucketClient {
                 state: Some(ResourceState::Available),
                 start_time: None,
                 enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_reason: None,
                 resource_type: None,
                 dependencies: None,
                 termination_protection: None,
@@ -116,6 +119,7 @@ impl S3BucketClient {
                 .client
                 .get_bucket_location(GetBucketLocationRequest {
                     bucket: bucket.name.as_ref().unwrap().to_string(),
+                    ..Default::default()
                 })
                 .await
             {
@@ -158,6 +162,7 @@ impl S3BucketClient {
             .client
             .get_bucket_acl(GetBucketAclRequest {
                 bucket: bucket_id.to_string(),
+                ..Default::default()
             })
             .await
         {
@@ -183,6 +188,7 @@ impl S3BucketClient {
             .client
             .get_public_access_block(GetPublicAccessBlockRequest {
                 bucket: bucket_id.to_string(),
+                ..Default::default()
             })
             .await
         {
@@ -204,6 +210,7 @@ impl S3BucketClient {
             .client
             .get_bucket_policy_status(GetBucketPolicyStatusRequest {
                 bucket: bucket_id.to_string(),
+                ..Default::default()
             })
             .await
         {
@@ -439,6 +446,7 @@ impl S3BucketClient {
             .client
             .get_bucket_versioning(GetBucketVersioningRequest {
                 bucket: bucket.to_owned(),
+                ..Default::default()
             })
             .await
         {
@@ -489,6 +497,7 @@ impl S3BucketClient {
             .client
             .get_bucket_policy(GetBucketPolicyRequest {
                 bucket: bucket.to_string(),
+                ..Default::default()
             })
             .await
         {
@@ -498,6 +507,7 @@ impl S3BucketClient {
                         .client
                         .delete_bucket_policy(DeleteBucketPolicyRequest {
                             bucket: bucket.to_string(),
+                            ..Default::default()
                         })
                         .await
                     {
@@ -530,6 +540,7 @@ impl S3BucketClient {
                                 .client
                                 .delete_bucket(DeleteBucketRequest {
                                     bucket: bucket.to_owned(),
+                                    ..Default::default()
                                 })
                                 .await
                             {
@@ -552,6 +563,7 @@ impl S3BucketClient {
             .client
             .get_bucket_tagging(GetBucketTaggingRequest {
                 bucket: bucket.to_owned(),
+                ..Default::default()
             })
             .await;
 

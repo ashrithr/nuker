@@ -79,6 +79,7 @@ impl EsDomainClient {
                 state: ResourceState::from_str(domain_state.unwrap_or_default().as_str()).ok(),
                 start_time,
                 enforcement_state: EnforcementState::SkipUnknownState,
+                enforcement_reason: None,
                 resource_type: instance_type,
                 dependencies: None,
                 termination_protection: None,
